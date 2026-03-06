@@ -1,37 +1,54 @@
-# SAGE - Sistema de Automatización y Gestión de Espacios Académicos
+# SAGE - Sistema de Automatizacion y Gestion de Espacios Academicos
 
-Plataforma web para automatizar la organización de agendas y formularios de profesores universitarios.
+Plataforma web para automatizar la organizacion de agendas y formularios de profesores universitarios.
 
-## Descripción
+## Descripcion
 
-SAGE es una herramienta diseñada para simplificar y automatizar los procesos de planificación académica, permitiendo a los profesores universitarios gestionar sus horarios, formularios de disponibilidad y asignación de espacios de manera eficiente.
+SAGE es una herramienta diseñada para simplificar y automatizar los procesos de planificacion academica, permitiendo a los profesores universitarios gestionar sus horarios, formularios de disponibilidad y asignacion de espacios de manera eficiente.
 
 ### Funcionalidades principales
 
-- **Gestión de formularios** — Creación y distribución automática de formularios de disponibilidad y preferencias horarias
-- **Organización de agendas** — Visualización y gestión centralizada de horarios de profesores
-- **Automatización** — Generación automática de horarios basada en restricciones y preferencias
-- **Panel administrativo** — Dashboard para coordinadores y administradores académicos
+- **Gestion de formularios** — Creacion y distribucion automatica de formularios de disponibilidad y preferencias horarias
+- **Organizacion de agendas** — Visualizacion y gestion centralizada de horarios de profesores
+- **Automatizacion** — Generacion automatica de horarios basada en restricciones y preferencias
+- **Panel administrativo** — Dashboard para coordinadores y administradores academicos
 
 ## Tech Stack
 
 - **Framework:** Next.js 15 (App Router)
 - **Lenguaje:** TypeScript
 - **Estilos:** Tailwind CSS
-- **Base de datos:** Por definir
-- **Autenticación:** Por definir
+- **Base de datos:** PostgreSQL
+- **ORM:** Prisma
 
 ## Requisitos previos
 
 - Node.js 18+
-- npm, yarn o pnpm
+- npm
 
-## Instalación
+## Instalacion
 
 ```bash
 git clone https://github.com/luigy23/SAGE.git
 cd SAGE
 npm install
+```
+
+Copia el archivo de variables de entorno:
+
+```bash
+cp .env.example .env
+```
+
+Configura tu `DATABASE_URL` en `.env` y ejecuta las migraciones:
+
+```bash
+npx prisma migrate dev
+```
+
+Inicia el servidor de desarrollo:
+
+```bash
 npm run dev
 ```
 
@@ -42,11 +59,12 @@ Abre [http://localhost:3000](http://localhost:3000) en tu navegador.
 ```
 SAGE/
 ├── src/
-│   ├── app/          # Rutas y páginas (App Router)
+│   ├── app/          # Rutas y paginas (App Router)
 │   ├── components/   # Componentes reutilizables
-│   ├── lib/          # Utilidades y configuraciones
-│   └── types/        # Tipos TypeScript
-├── public/           # Archivos estáticos
+│   └── lib/          # Utilidades y configuraciones
+├── prisma/           # Schema y migraciones
+├── docs/             # Documentacion y formularios de referencia
+├── public/           # Archivos estaticos
 └── ...
 ```
 

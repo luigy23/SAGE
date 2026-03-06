@@ -1,0 +1,269 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum Modalidad {
+  TCP     // Tiempo Completo Planta
+  TCO     // Tiempo Completo Ocasional
+  MTP     // Medio Tiempo Planta
+  MTC     // Medio Tiempo Catedra
+  CATEDRA
+}
+
+enum EstadoFormulario {
+  BORRADOR
+  ENVIADO
+}
+
+// ==========================================
+// USUARIOS
+// ==========================================
+
+model Docente {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  password      String
+  nombre        String
+  cedula        String   @unique
+  facultad      String
+  programa      String   // Programa o Departamento
+  celular       String?
+  modalidad     Modalidad
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Cursos guardados para reutilizar entre semestres
+  cursosGuardados CursoGuardado[]
+
+  // Formularios
+  agendasSemestrales AgendaSemestral[]
+  monitoreos         Monitoreo[]
+
+  @@map("docentes")
+}
+
+// ==========================================
+// CURSOS REUTILIZABLES (perfil del docente)
+// ==========================================
+
+model CursoGuardado {
+  id              String   @id @default(cuid())
+  docenteId       String
+  numeroCurso     String
+  nombreCurso     String
+  subgrupo        String?
+  sede            String?
+  horasPresenciales Int?
+  creditos        Int?
+  semanas         Int?
+
+  docente Docente @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+
+  @@map("cursos_guardados")
+}
+
+// ==========================================
+// FO-19: AGENDA SEMESTRAL (Planificacion)
+// ==========================================
+
+model AgendaSemestral {
+  id          String            @id @default(cuid())
+  docenteId   String
+  periodo     String            // Ej: "2026-1"
+  fecha       DateTime
+  estado      EstadoFormulario  @default(BORRADOR)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  // Seccion 1: Docencia
+  cursos                CursoAgenda[]
+  otrasActividadesDocencia ActividadDocencia[]
+
+  // Secciones 2, 3, 4
+  actividadesInvestigacion   ActividadInvestigacion[]
+  actividadesProyeccionSocial ActividadProyeccionSocial[]
+  actividadesGestion         ActividadGestion[]
+
+  docente Docente @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+
+  // Un docente solo puede tener una agenda por periodo
+  @@unique([docenteId, periodo])
+  @@map("agendas_semestrales")
+}
+
+// Seccion 1.0 - Cursos asignados
+model CursoAgenda {
+  id                String @id @default(cuid())
+  agendaId          String
+  numeroCurso       String
+  nombreCurso       String
+  subgrupo          String?
+  sede              String?
+  horasPresenciales Int
+  creditos          Int
+  semanas           Int
+  dedicacionPeriodo Float   // Horas totales del semestre
+
+  // Seccion 1.1 - Horario semanal
+  horarios HorarioCurso[]
+
+  agenda AgendaSemestral @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+
+  @@map("cursos_agenda")
+}
+
+// Seccion 1.1 - Horario de clases
+model HorarioCurso {
+  id          String  @id @default(cuid())
+  cursoId     String
+  lunes       String? // Rango horario ej: "8:00-10:00"
+  martes      String?
+  miercoles   String?
+  jueves      String?
+  viernes     String?
+  sabado      String?
+  domingo     String?
+
+  curso CursoAgenda @relation(fields: [cursoId], references: [id], onDelete: Cascade)
+
+  @@map("horarios_curso")
+}
+
+// Seccion 1.2 - Otras actividades de docencia
+model ActividadDocencia {
+  id                String @id @default(cuid())
+  agendaId          String
+  nombre            String
+  descripcion       String?
+  dedicacionPeriodo Float
+
+  agenda AgendaSemestral @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+
+  @@map("actividades_docencia")
+}
+
+// Seccion 2 - Investigacion
+model ActividadInvestigacion {
+  id                String @id @default(cuid())
+  agendaId          String
+  nombre            String
+  descripcion       String?
+  dedicacionPeriodo Float
+
+  agenda AgendaSemestral @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+
+  @@map("actividades_investigacion")
+}
+
+// Seccion 3 - Proyeccion Social
+model ActividadProyeccionSocial {
+  id                String @id @default(cuid())
+  agendaId          String
+  nombre            String
+  descripcion       String?
+  dedicacionPeriodo Float
+
+  agenda AgendaSemestral @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+
+  @@map("actividades_proyeccion_social")
+}
+
+// Seccion 4 - Gestion Academico Administrativa
+model ActividadGestion {
+  id                String @id @default(cuid())
+  agendaId          String
+  nombre            String
+  descripcion       String?
+  dedicacionPeriodo Float
+
+  agenda AgendaSemestral @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+
+  @@map("actividades_gestion")
+}
+
+// ==========================================
+// FO-20: MONITOREO AGENDA ACADEMICA (Reporte)
+// ==========================================
+
+model Monitoreo {
+  id          String            @id @default(cuid())
+  docenteId   String
+  periodo     String
+  fecha       DateTime
+  estado      EstadoFormulario  @default(BORRADOR)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  // Secciones I, II, III, IV
+  actividadesBasicas         MonitoreoActividadBasica[]
+  actividadesComplementarias MonitoreoActividadComplementaria[]
+  actividadesAdministrativas MonitoreoActividadAdministrativa[]
+  actividadesDesarrollo      MonitoreoActividadDesarrollo[]
+
+  docente Docente @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+
+  // Un docente solo puede tener un monitoreo por periodo
+  @@unique([docenteId, periodo])
+  @@map("monitoreos")
+}
+
+// Seccion I - Actividades Academicas Basicas
+model MonitoreoActividadBasica {
+  id                 String  @id @default(cuid())
+  monitoreoId        String
+  actividadesDesarrolladas String
+  periodoEjecucion   String?
+  observaciones      String?
+
+  monitoreo Monitoreo @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
+
+  @@map("monitoreo_actividades_basicas")
+}
+
+// Seccion II - Actividades Academicas Complementarias
+model MonitoreoActividadComplementaria {
+  id                 String  @id @default(cuid())
+  monitoreoId        String
+  actividadesDesarrolladas String
+  periodoEjecucion   String?
+  observaciones      String?
+
+  monitoreo Monitoreo @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
+
+  @@map("monitoreo_actividades_complementarias")
+}
+
+// Seccion III - Actividades Administrativas
+model MonitoreoActividadAdministrativa {
+  id                 String  @id @default(cuid())
+  monitoreoId        String
+  actividadesDesarrolladas String
+  periodoEjecucion   String?
+  observaciones      String?
+
+  monitoreo Monitoreo @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
+
+  @@map("monitoreo_actividades_administrativas")
+}
+
+// Seccion IV - Actividades de Desarrollo Institucional
+model MonitoreoActividadDesarrollo {
+  id                 String  @id @default(cuid())
+  monitoreoId        String
+  actividadesDesarrolladas String
+  periodoEjecucion   String?
+  observaciones      String?
+
+  monitoreo Monitoreo @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
+
+  @@map("monitoreo_actividades_desarrollo")
+}
