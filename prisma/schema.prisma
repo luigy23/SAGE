@@ -37,7 +37,11 @@ model Docente {
   facultad      String
   programa      String   // Programa o Departamento
   celular       String?
+  sede          String?
   modalidad     Modalidad
+  doctorado           Boolean @default(false)
+  cargoAdministrativo Boolean @default(false)
+  proyectosActivos    Boolean @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

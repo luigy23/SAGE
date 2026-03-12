@@ -14,10 +14,20 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
   const facultad = formData.get("facultad") as string
   const programa = formData.get("programa") as string
   const celular = (formData.get("celular") as string) || undefined
+  const sede = formData.get("sede") as string
   const modalidad = formData.get("modalidad") as Modalidad
 
-  if (!email || !password || !nombre || !cedula || !facultad || !programa || !modalidad) {
+  // Booleanos desde checkboxes (envían "on" si están marcados, null si no)
+  const doctorado = formData.get("doctorado") === "on"
+  const cargoAdministrativo = formData.get("cargoAdministrativo") === "on"
+  const proyectosActivos = formData.get("proyectosActivos") === "on"
+
+  if (!email || !password || !nombre || !cedula || !facultad || !programa || !modalidad || !sede) {
     return { error: "Todos los campos obligatorios deben ser completados." }
+  }
+
+  if (password.length < 6) {
+    return { error: "La contraseña debe tener al menos 6 caracteres." }
   }
 
   const existing = await prisma.docente.findFirst({
@@ -27,7 +37,7 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
   })
 
   if (existing) {
-    return { error: "Ya existe un docente con ese email o cedula." }
+    return { error: "Ya existe un docente con ese email o cédula." }
   }
 
   const hashedPassword = await bcrypt.hash(password, 12)
@@ -41,7 +51,11 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
       facultad,
       programa,
       celular: celular || null,
+      sede,
       modalidad,
+      doctorado,
+      cargoAdministrativo,
+      proyectosActivos,
     },
   })
 
@@ -59,6 +73,6 @@ export async function loginAction(_prevState: unknown, formData: FormData) {
     if ((error as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) {
       throw error
     }
-    return { error: "Credenciales invalidas." }
+    return { error: "Credenciales inválidas." }
   }
 }
