@@ -30,34 +30,46 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
     return { error: "La contraseña debe tener al menos 6 caracteres." }
   }
 
-  const existing = await prisma.docente.findFirst({
-    where: {
-      OR: [{ email }, { cedula }],
-    },
-  })
+  try {
+    const existing = await prisma.docente.findFirst({
+      where: {
+        OR: [{ email }, { cedula }],
+      },
+    })
 
-  if (existing) {
-    return { error: "Ya existe un docente con ese email o cédula." }
+    if (existing) {
+      return { error: "Ya existe un docente con ese email o cédula." }
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10)
+
+    await prisma.docente.create({
+      data: {
+        email,
+        password: hashedPassword,
+        nombre,
+        cedula,
+        facultad,
+        programa,
+        celular: celular || null,
+        sede,
+        modalidad,
+        doctorado,
+        cargoAdministrativo,
+        proyectosActivos,
+      },
+    })
+  } catch (error: unknown) {
+    console.error("Register error:", error)
+    const code = (error as { code?: string })?.code
+    if (code === "ENETUNREACH" || code === "P1001" || code === "P1008") {
+      return { error: "No se pudo conectar a la base de datos. Verifica tu conexión de red e intenta de nuevo." }
+    }
+    if (code === "P2002") {
+      return { error: "Ya existe un docente con ese email o cédula." }
+    }
+    return { error: "Error inesperado al registrar. Intenta de nuevo." }
   }
-
-  const hashedPassword = await bcrypt.hash(password, 12)
-
-  await prisma.docente.create({
-    data: {
-      email,
-      password: hashedPassword,
-      nombre,
-      cedula,
-      facultad,
-      programa,
-      celular: celular || null,
-      sede,
-      modalidad,
-      doctorado,
-      cargoAdministrativo,
-      proyectosActivos,
-    },
-  })
 
   redirect("/auth/login?registered=true")
 }

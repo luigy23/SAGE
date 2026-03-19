@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import {
   Card,
   CardContent,
@@ -13,8 +14,10 @@ import { Calendar, ClipboardCheck, BookOpen, User } from "lucide-react"
 
 export default async function DashboardPage() {
   const session = await auth()
+  if (!session?.user?.id) redirect("/auth/login")
+
   const docente = await prisma.docente.findUnique({
-    where: { id: session!.user.id },
+    where: { id: session.user.id },
     include: {
       _count: {
         select: {

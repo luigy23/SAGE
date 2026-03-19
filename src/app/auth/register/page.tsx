@@ -60,13 +60,11 @@ const FACULTAD_PROGRAMAS: Record<string, string[]> = {
 const SEDES = ["Neiva", "Pitalito", "Garzón", "La Plata"]
 
 const MODALIDADES = [
-  { value: "PTC", label: "Planta Tiempo Completo" },
-  { value: "PMT", label: "Planta Medio Tiempo" },
-  { value: "OTC", label: "Ocasional Tiempo Completo" },
-  { value: "OMT", label: "Ocasional Medio Tiempo" },
-  { value: "CATEDRATICO", label: "Catedrático" },
-  { value: "VISITANTE", label: "Visitante" },
-  { value: "INVITADO", label: "Invitado" },
+  { value: "TCP", label: "Tiempo Completo Planta" },
+  { value: "TCO", label: "Tiempo Completo Ocasional" },
+  { value: "MTP", label: "Medio Tiempo Planta" },
+  { value: "MTC", label: "Medio Tiempo Cátedra" },
+  { value: "CATEDRA", label: "Cátedra" },
 ]
 
 const CARGOS_ADMINISTRATIVOS = [
