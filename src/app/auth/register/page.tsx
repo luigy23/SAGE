@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useState } from "react"
+import { useActionState, useState, useEffect } from "react"
 import Link from "next/link"
 import { registerAction } from "@/lib/actions/auth"
 import { Button } from "@/components/ui/button"
@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { SEDES } from "@/lib/constants"
 
 // =============================================
 // DICCIONARIO ESTRICTO: Facultad → Programa
@@ -56,8 +57,6 @@ const FACULTAD_PROGRAMAS: Record<string, string[]> = {
     "Comunicación Social",
   ],
 }
-
-const SEDES = ["Neiva", "Pitalito", "Garzón", "La Plata"]
 
 const MODALIDADES = [
   { value: "TCP", label: "Tiempo Completo Planta" },
@@ -105,14 +104,33 @@ function EyeOffIcon() {
 // =============================================
 export default function RegisterPage() {
   const [state, formAction, pending] = useActionState(registerAction, null)
+  const v = state?.values // Valores preservados del intento anterior
   const [selectedFacultad, setSelectedFacultad] = useState("")
   const [selectedPrograma, setSelectedPrograma] = useState("")
+  const [selectedSede, setSelectedSede] = useState("")
+  const [selectedModalidad, setSelectedModalidad] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const [hasDoctorado, setHasDoctorado] = useState(false)
   const [hasCargoAdministrativo, setHasCargoAdministrativo] = useState(false)
+  const [hasProyectosActivos, setHasProyectosActivos] = useState(false)
   const [selectedCargo, setSelectedCargo] = useState("")
+
+  // Restaurar valores de Select cuando el server action retorna error
+  useEffect(() => {
+    if (state?.values) {
+      const sv = state.values
+      if (sv.facultad) setSelectedFacultad(sv.facultad)
+      if (sv.programa) setSelectedPrograma(sv.programa)
+      if (sv.sede) setSelectedSede(sv.sede)
+      if (sv.modalidad) setSelectedModalidad(sv.modalidad)
+      setHasDoctorado(sv.doctorado)
+      setHasCargoAdministrativo(sv.cargoAdministrativo)
+      setHasProyectosActivos(sv.proyectosActivos)
+    }
+  }, [state])
 
   const isFormInvalid = pending || password !== confirmPassword || !password || (hasCargoAdministrativo && !selectedCargo)
 
@@ -162,6 +180,9 @@ export default function RegisterPage() {
                 name="nombre"
                 placeholder="Nombre completo"
                 required
+                defaultValue={v?.nombre ?? ""}
+                pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+"
+                title="Solo letras y espacios"
                 className={inputStyle}
               />
             </div>
@@ -172,6 +193,12 @@ export default function RegisterPage() {
                 name="cedula"
                 placeholder="Número de cédula"
                 required
+                inputMode="numeric"
+                pattern="\d{6,12}"
+                title="Solo números, entre 6 y 12 dígitos"
+                maxLength={12}
+                defaultValue={v?.cedula ?? ""}
+                onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "") }}
                 className={inputStyle}
               />
             </div>
@@ -187,6 +214,7 @@ export default function RegisterPage() {
                 type="email"
                 placeholder="correo@usco.edu.co"
                 required
+                defaultValue={v?.email ?? ""}
                 className={inputStyle}
               />
             </div>
@@ -196,8 +224,14 @@ export default function RegisterPage() {
                 id="celular"
                 name="celular"
                 type="tel"
-                placeholder="3XX XXX XXXX"
+                inputMode="numeric"
+                placeholder="3XXXXXXXXX"
                 required
+                pattern="\d{10}"
+                title="Debe ser un número de 10 dígitos"
+                maxLength={10}
+                defaultValue={v?.celular ?? ""}
+                onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "") }}
                 className={inputStyle}
               />
             </div>
@@ -270,7 +304,7 @@ export default function RegisterPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="sede" className={labelStyle}>Sede</Label>
-              <Select name="sede" required>
+              <Select name="sede" required value={selectedSede} onValueChange={setSelectedSede}>
                 <SelectTrigger id="sede" className={inputStyle}>
                   <SelectValue placeholder="Seleccionar sede" />
                 </SelectTrigger>
@@ -283,7 +317,7 @@ export default function RegisterPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="modalidad" className={labelStyle}>Modalidad de vinculación</Label>
-              <Select name="modalidad" required>
+              <Select name="modalidad" required value={selectedModalidad} onValueChange={setSelectedModalidad}>
                 <SelectTrigger id="modalidad" className={inputStyle}>
                   <SelectValue placeholder="Seleccionar modalidad" />
                 </SelectTrigger>
@@ -358,7 +392,7 @@ export default function RegisterPage() {
               htmlFor="doctorado"
               className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 cursor-pointer hover:bg-gray-50 transition-colors duration-200"
             >
-              <Checkbox id="doctorado" name="doctorado" />
+              <Checkbox id="doctorado" name="doctorado" checked={hasDoctorado} onCheckedChange={(checked: boolean) => setHasDoctorado(checked)} />
               <span className="text-sm text-gray-700">Doctorado</span>
             </label>
             <label
@@ -376,7 +410,7 @@ export default function RegisterPage() {
               htmlFor="proyectosActivos"
               className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 cursor-pointer hover:bg-gray-50 transition-colors duration-200"
             >
-              <Checkbox id="proyectosActivos" name="proyectosActivos" />
+              <Checkbox id="proyectosActivos" name="proyectosActivos" checked={hasProyectosActivos} onCheckedChange={(checked: boolean) => setHasProyectosActivos(checked)} />
               <span className="text-sm text-gray-700">Proyectos activos</span>
             </label>
           </div>

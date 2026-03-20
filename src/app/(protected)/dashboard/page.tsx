@@ -44,10 +44,10 @@ export default async function DashboardPage() {
             <CardTitle className="text-sm font-medium">
               Cursos Guardados
             </CardTitle>
-            <BookOpen className="h-4 w-4 text-muted-foreground" />
+            <BookOpen className="h-4 w-4 text-[#8F141B]" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-[#8F141B]">
               {docente?._count.cursosGuardados ?? 0}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -61,10 +61,10 @@ export default async function DashboardPage() {
             <CardTitle className="text-sm font-medium">
               Agendas Semestrales
             </CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <Calendar className="h-4 w-4 text-[#8F141B]" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-[#8F141B]">
               {docente?._count.agendasSemestrales ?? 0}
             </div>
             <p className="text-xs text-muted-foreground">Formularios FO-19</p>
@@ -74,10 +74,10 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Monitoreos</CardTitle>
-            <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+            <ClipboardCheck className="h-4 w-4 text-[#8F141B]" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-[#8F141B]">
               {docente?._count.monitoreos ?? 0}
             </div>
             <p className="text-xs text-muted-foreground">Formularios FO-20</p>
@@ -87,10 +87,10 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Modalidad</CardTitle>
-            <User className="h-4 w-4 text-muted-foreground" />
+            <User className="h-4 w-4 text-[#8F141B]" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{docente?.modalidad}</div>
+            <div className="text-2xl font-bold text-[#8F141B]">{docente?.modalidad}</div>
             <p className="text-xs text-muted-foreground">Tipo de vinculacion</p>
           </CardContent>
         </Card>
@@ -105,7 +105,7 @@ export default async function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button asChild variant="outline">
+            <Button asChild>
               <Link href="/perfil">Ir a mi perfil</Link>
             </Button>
           </CardContent>
@@ -119,7 +119,7 @@ export default async function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button asChild variant="outline">
+            <Button asChild>
               <Link href="/agenda">Ir a agenda</Link>
             </Button>
           </CardContent>
@@ -133,7 +133,7 @@ export default async function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button asChild variant="outline">
+            <Button asChild>
               <Link href="/monitoreo">Ir a monitoreo</Link>
             </Button>
           </CardContent>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useEffect, useRef } from "react"
+import { useActionState, useEffect, useRef, useState } from "react"
 import type { CursoAgenda } from "@/generated/prisma/client"
 import {
   createCursoAgendaAction,
@@ -9,6 +9,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { SEDES } from "@/lib/constants"
 
 type ActionResult = { error: string } | { success: boolean } | null
 
@@ -34,6 +42,7 @@ export function CursoAgendaForm({
   const formAction = curso ? updateAction : createAction
   const pending = curso ? updatePending : createPending
   const prevState = useRef(state)
+  const [sede, setSede] = useState(curso?.sede ?? "")
 
   useEffect(() => {
     if (state !== prevState.current && state && "success" in state && state.success) {
@@ -75,12 +84,20 @@ export function CursoAgendaForm({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="sede">Sede</Label>
-          <Input
-            id="sede"
-            name="sede"
-            defaultValue={curso?.sede ?? ""}
-          />
+          <Label>Sede</Label>
+          <input type="hidden" name="sede" value={sede} />
+          <Select value={sede} onValueChange={setSede}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Seleccionar sede" />
+            </SelectTrigger>
+            <SelectContent>
+              {SEDES.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-2">
           <Label htmlFor="horasPresenciales">Horas Presenciales</Label>

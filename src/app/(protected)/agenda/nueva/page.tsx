@@ -1,11 +1,18 @@
 "use client"
 
-import { useActionState, useEffect } from "react"
+import { useActionState, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createAgendaAction } from "@/lib/actions/agenda"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Card,
   CardContent,
@@ -14,9 +21,21 @@ import {
   CardDescription,
 } from "@/components/ui/card"
 
+function generatePeriodos() {
+  const currentYear = new Date().getFullYear()
+  const periodos: string[] = []
+  for (let year = currentYear - 1; year <= currentYear + 1; year++) {
+    periodos.push(`${year}-1`)
+    periodos.push(`${year}-2`)
+  }
+  return periodos
+}
+
 export default function NuevaAgendaPage() {
   const router = useRouter()
   const [state, formAction, pending] = useActionState(createAgendaAction, null)
+  const [periodo, setPeriodo] = useState("")
+  const periodos = useMemo(() => generatePeriodos(), [])
 
   useEffect(() => {
     if (state?.success && state.agendaId) {
@@ -38,14 +57,22 @@ export default function NuevaAgendaPage() {
         </CardHeader>
         <CardContent>
           <form action={formAction} className="space-y-4">
+            <input type="hidden" name="periodo" value={periodo} />
+
             <div className="space-y-2">
-              <Label htmlFor="periodo">Periodo Academico</Label>
-              <Input
-                id="periodo"
-                name="periodo"
-                placeholder="Ej: 2026-1"
-                required
-              />
+              <Label>Periodo Academico</Label>
+              <Select value={periodo} onValueChange={setPeriodo} required>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecciona un periodo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {periodos.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {p}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
@@ -58,7 +85,7 @@ export default function NuevaAgendaPage() {
             )}
 
             <div className="flex gap-3">
-              <Button type="submit" disabled={pending}>
+              <Button type="submit" disabled={pending || !periodo}>
                 {pending ? "Creando..." : "Crear Agenda"}
               </Button>
               <Button

@@ -37,7 +37,7 @@ export function AppSidebar({ user }: { user: { name: string; email: string } }) 
     <Sidebar>
       <SidebarHeader className="border-b px-6 py-4">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <span className="text-xl font-bold">SAGE</span>
+          <span className="text-xl font-bold text-[#8F141B]">SAGE</span>
         </Link>
         <p className="text-xs text-muted-foreground">
           Sistema de Agenda y Gestion Educativa
