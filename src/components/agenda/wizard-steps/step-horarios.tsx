@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useState } from "react"
+import { startTransition, useActionState, useState } from "react"
 import type { AgendaConRelaciones } from "@/lib/types/agenda"
 import { upsertHorarioAction } from "@/lib/actions/agenda"
 import { Button } from "@/components/ui/button"
@@ -119,7 +119,9 @@ function HorarioForm({
     for (const dia of DIAS) {
       formData.set(dia.key, values[dia.key] ?? "")
     }
-    formAction(formData)
+    startTransition(() => {
+      formAction(formData)
+    })
   }
 
   return (
