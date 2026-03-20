@@ -229,6 +229,57 @@ export async function importCursosFromGuardadosAction(
 }
 
 // ========================================
+// Guardar cursos de agenda al perfil
+// ========================================
+
+export async function saveCursosToProfileAction(agendaId: string) {
+  const user = await getAuthenticatedUser()
+  if (!user) return { error: "No autenticado." }
+
+  const agenda = await prisma.agendaSemestral.findUnique({
+    where: { id: agendaId },
+    include: { cursos: true },
+  })
+
+  if (!agenda || agenda.docenteId !== user.id) {
+    return { error: "Agenda no encontrada." }
+  }
+
+  if (agenda.cursos.length === 0) {
+    return { error: "No hay cursos para guardar." }
+  }
+
+  // Obtener cursos ya guardados para evitar duplicados por numeroCurso
+  const existentes = await prisma.cursoGuardado.findMany({
+    where: { docenteId: user.id },
+    select: { numeroCurso: true },
+  })
+  const existentesSet = new Set(existentes.map((c) => c.numeroCurso))
+
+  const nuevos = agenda.cursos.filter((c) => !existentesSet.has(c.numeroCurso))
+
+  if (nuevos.length === 0) {
+    return { error: "Todos los cursos ya estan guardados en tu perfil." }
+  }
+
+  await prisma.cursoGuardado.createMany({
+    data: nuevos.map((c) => ({
+      docenteId: user.id,
+      numeroCurso: c.numeroCurso,
+      nombreCurso: c.nombreCurso,
+      subgrupo: c.subgrupo,
+      sede: c.sede,
+      horasPresenciales: c.horasPresenciales,
+      creditos: c.creditos,
+      semanas: c.semanas,
+    })),
+  })
+
+  revalidatePath(`/agenda/${agendaId}`)
+  return { success: true, count: nuevos.length }
+}
+
+// ========================================
 // Horarios
 // ========================================
 

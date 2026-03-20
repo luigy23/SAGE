@@ -16,9 +16,7 @@ export default function AuthLayout({
         <div className="relative z-10 text-center space-y-6">
           <h1 className="text-5xl font-bold tracking-tight">SAGE</h1>
           <div className="w-16 h-1 bg-white/60 mx-auto rounded-full" />
-          <p className="text-lg text-white/80 font-light leading-relaxed">
-            Sistema de Acompañamiento y<br />Gestión Educativa
-          </p>
+  
           <p className="text-sm text-white/50 mt-8">
             Universidad Surcolombiana
           </p>

@@ -25,7 +25,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Plus, Pencil, Trash2 } from "lucide-react"
+import { Plus, Pencil, Trash2, AlertTriangle } from "lucide-react"
+import {
+  getAgendaLimits,
+  getAgendaTotals,
+} from "@/lib/validations/agenda-rules"
 
 interface ActividadData {
   id: string
@@ -69,6 +73,37 @@ export function StepActividades({
     (sum, a) => sum + a.dedicacionPeriodo,
     0
   )
+
+  const limits = getAgendaLimits(agenda.docente)
+  const totals = getAgendaTotals(agenda)
+
+  // Per-type warnings
+  const tipWarnings: string[] = []
+
+  if (tipo === "gestion" && !agenda.docente.cargoAdministrativo && totals.horasGestion > limits.maxGestion) {
+    tipWarnings.push(
+      `Las horas de gestión (${totals.horasGestion}h) exceden el 20% permitido (${limits.maxGestion}h). Art. 10.`
+    )
+  }
+
+  if (
+    (tipo === "investigacion" || tipo === "proyeccion") &&
+    agenda.docente.modalidad === "CATEDRA" &&
+    limits.maxInvProySocialCatedra !== null
+  ) {
+    const invProySocial = totals.horasInvestigacion + totals.horasProyeccionSocial
+    if (invProySocial > limits.maxInvProySocialCatedra) {
+      tipWarnings.push(
+        `Investigación + Proyección Social (${invProySocial}h) exceden el máximo para catedráticos (${limits.maxInvProySocialCatedra}h). Art. 3, Parágrafo 2.`
+      )
+    }
+  }
+
+  if (tipo === "investigacion" && agenda.docente.doctorado && totals.horasInvestigacion === 0 && actividades.length === 0) {
+    tipWarnings.push(
+      "Los docentes con doctorado deben participar en actividades de investigación. Art. 4, Parágrafo 3."
+    )
+  }
 
   return (
     <>
@@ -138,6 +173,20 @@ export function StepActividades({
                 </TableRow>
               </TableBody>
             </Table>
+          )}
+
+          {tipWarnings.length > 0 && (
+            <div className="mt-4 space-y-2">
+              {tipWarnings.map((w, i) => (
+                <div
+                  key={i}
+                  className="flex items-start gap-2 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-400"
+                >
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{w}</span>
+                </div>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>

@@ -175,20 +175,24 @@ export function StepHorarios({
         ) : (
           agenda.cursos.map((curso) => {
             const horario = curso.horarios[0] ?? {}
+            const h = horario as Record<string, string | null>
+            const horarioData = {
+              lunes: h.lunes ?? null,
+              martes: h.martes ?? null,
+              miercoles: h.miercoles ?? null,
+              jueves: h.jueves ?? null,
+              viernes: h.viernes ?? null,
+              sabado: h.sabado ?? null,
+              domingo: h.domingo ?? null,
+            }
+            // Use horario id (or "new") in key to force remount when data is loaded/saved
+            const horarioKey = `${curso.id}-${(horario as { id?: string }).id ?? "new"}`
             return (
               <HorarioForm
-                key={curso.id}
+                key={horarioKey}
                 cursoId={curso.id}
                 cursoLabel={`${curso.numeroCurso} — ${curso.nombreCurso}`}
-                horario={{
-                  lunes: (horario as Record<string, string | null>).lunes ?? null,
-                  martes: (horario as Record<string, string | null>).martes ?? null,
-                  miercoles: (horario as Record<string, string | null>).miercoles ?? null,
-                  jueves: (horario as Record<string, string | null>).jueves ?? null,
-                  viernes: (horario as Record<string, string | null>).viernes ?? null,
-                  sabado: (horario as Record<string, string | null>).sabado ?? null,
-                  domingo: (horario as Record<string, string | null>).domingo ?? null,
-                }}
+                horario={horarioData}
                 readOnly={readOnly}
               />
             )

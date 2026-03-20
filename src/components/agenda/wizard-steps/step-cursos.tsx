@@ -3,7 +3,10 @@
 import { useState } from "react"
 import type { CursoAgenda, CursoGuardado } from "@/generated/prisma/client"
 import type { AgendaConRelaciones } from "@/lib/types/agenda"
-import { deleteCursoAgendaAction } from "@/lib/actions/agenda"
+import {
+  deleteCursoAgendaAction,
+  saveCursosToProfileAction,
+} from "@/lib/actions/agenda"
 import { CursoAgendaForm } from "../curso-agenda-form"
 import { ImportCursosDialog } from "../import-cursos-dialog"
 import { Button } from "@/components/ui/button"
@@ -27,7 +30,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Plus, Pencil, Trash2, Download } from "lucide-react"
+import { Plus, Pencil, Trash2, Download, Save } from "lucide-react"
+import { AgendaValidationPanel } from "../agenda-validation-panel"
 
 export function StepCursos({
   agenda,
@@ -41,6 +45,8 @@ export function StepCursos({
   const [dialogOpen, setDialogOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [editingCurso, setEditingCurso] = useState<CursoAgenda | undefined>()
+  const [saving, setSaving] = useState(false)
+  const [saveMsg, setSaveMsg] = useState<string | null>(null)
 
   function handleCreate() {
     setEditingCurso(undefined)
@@ -57,6 +63,18 @@ export function StepCursos({
     await deleteCursoAgendaAction(id)
   }
 
+  async function handleSaveToProfile() {
+    setSaving(true)
+    setSaveMsg(null)
+    const result = await saveCursosToProfileAction(agenda.id)
+    setSaving(false)
+    if ("error" in result && result.error) {
+      setSaveMsg(result.error)
+    } else if ("count" in result) {
+      setSaveMsg(`${result.count} curso(s) guardado(s) en tu perfil.`)
+    }
+  }
+
   const subtotal = agenda.cursos.reduce(
     (sum, c) => sum + c.dedicacionPeriodo,
     0
@@ -64,6 +82,8 @@ export function StepCursos({
 
   return (
     <>
+      <AgendaValidationPanel agenda={agenda} compact />
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>1.0 Cursos Asignados</CardTitle>
@@ -154,6 +174,23 @@ export function StepCursos({
                   </TableRow>
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {agenda.cursos.length > 0 && (
+            <div className="mt-4 flex items-center gap-3">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSaveToProfile}
+                disabled={saving}
+              >
+                <Save className="mr-1 h-4 w-4" />
+                {saving ? "Guardando..." : "Guardar cursos en mi perfil"}
+              </Button>
+              {saveMsg && (
+                <span className="text-sm text-muted-foreground">{saveMsg}</span>
+              )}
             </div>
           )}
         </CardContent>
