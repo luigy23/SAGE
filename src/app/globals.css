@@ -124,3 +124,33 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ==========================================
+   Estilos de impresión para AgendaReadOnly
+   ========================================== */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12px !important;
+  }
+
+  /* Limpiar sombras y bordes decorativos */
+  .shadow-sm,
+  .shadow-md,
+  .shadow-lg {
+    box-shadow: none !important;
+  }
+
+  /* Las tarjetas se imprimen con borde fino */
+  [data-slot="card"] {
+    border: 1px solid #d1d5db !important;
+    background: white !important;
+    break-inside: avoid;
+  }
+
+  /* Evitar cortes de página dentro de secciones */
+  table {
+    break-inside: avoid;
+  }
+}

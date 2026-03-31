@@ -14,10 +14,14 @@ export default async function ProtectedLayout({
 
   return (
     <SidebarProvider>
-      <AppSidebar user={session.user} />
+      <div className="print:hidden">
+        <AppSidebar user={session.user} />
+      </div>
       <SidebarInset>
-        <AppHeader />
-        <main className="flex-1 p-6">{children}</main>
+        <div className="print:hidden">
+          <AppHeader />
+        </div>
+        <main className="flex-1 p-6 print:p-0">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   )

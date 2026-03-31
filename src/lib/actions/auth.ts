@@ -34,9 +34,10 @@ export async function registerAction(_prevState: RegisterState, formData: FormDa
   const sede = formData.get("sede") as string
   const modalidad = formData.get("modalidad") as Modalidad
 
-  const doctorado = formData.get("doctorado") === "on"
-  const cargoAdministrativo = formData.get("cargoAdministrativo") === "on"
-  const proyectosActivos = formData.get("proyectosActivos") === "on"
+  // Parsear checkboxes: los hidden inputs envían "true"/"false" como strings
+  const doctorado = formData.get("doctorado") === "true"
+  const cargoAdministrativo = formData.get("cargoAdministrativo") === "true"
+  const proyectosActivos = formData.get("proyectosActivos") === "true"
 
   // Valores para preservar el formulario en caso de error
   const values = { email, nombre, cedula, facultad, programa, celular, sede, modalidad: modalidad as string, doctorado, cargoAdministrativo, proyectosActivos }
