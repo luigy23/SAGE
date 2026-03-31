@@ -8,60 +8,116 @@ datasource db {
 }
 
 // ==========================================
-// ENUMS
+// ENUMS — Leyes inquebrantables del Acuerdo 048 de 2018
 // ==========================================
 
-enum Modalidad {
-  TCP     // Tiempo Completo Planta
-  TCO     // Tiempo Completo Ocasional
-  MTP     // Medio Tiempo Planta
-  MTC     // Medio Tiempo Catedra
-  CATEDRA
+/// Roles del sistema
+enum Rol {
+  ADMIN
+  DOCENTE
 }
 
+/// Art. 4 — Tipos de vinculación docente
+/// Cada modalidad tiene límites de carga distintos
+enum Modalidad {
+  PLANTA_TC    // Tiempo Completo Planta    → 880h en 22 sem (Art. 4a)
+  PLANTA_MT    // Medio Tiempo Planta       → 440h en 22 sem (Art. 4b)
+  OCASIONAL_TC // Tiempo Completo Ocasional → 40h/sem (Art. 4c)
+  OCASIONAL_MT // Medio Tiempo Ocasional    → 20h/sem (Art. 4c)
+  CATEDRA      // Catedrático               → hasta 16h/sem, 19h sedes (Art. 4d)
+  VISITANTE    // Visitante                 → según dedicación (Art. 4e)
+  INVITADO     // Invitado                  → hasta 100% (Art. 4f)
+}
+
+/// Sedes oficiales de la Universidad Surcolombiana
+enum Sede {
+  NEIVA
+  PITALITO
+  GARZON
+  LA_PLATA
+}
+
+/// Art. 3 Par. 4 — Clasificación del curso para fórmulas de tiempo
+/// TEORICO:           (horas * 2) + 1 × semanas
+/// TEORICO_PRACTICO:  (horas * 1.5) + 1 × semanas
+enum TipoCurso {
+  TEORICO
+  TEORICO_PRACTICO
+}
+
+/// Estados del ciclo de vida de un formulario
 enum EstadoFormulario {
   BORRADOR
   ENVIADO
+  APROBADO
+  RECHAZADO
 }
 
 // ==========================================
-// USUARIOS
+// CATÁLOGO MAESTRO — Inventario oficial de materias
+// Solo el Administrador gestiona este catálogo.
+// ==========================================
+
+model CursoMaestro {
+  id        String    @id @default(cuid())
+  codigo    String    @unique
+  nombre    String
+  creditos  Int
+  tipo      TipoCurso // Vital para fórmulas del Art. 3 Par. 4
+  estado    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relaciones
+  cursosAgenda    CursoAgenda[]
+  cursosGuardados CursoGuardado[]
+
+  @@map("cursos_maestro")
+}
+
+// ==========================================
+// ENTIDAD PRINCIPAL — Docente
 // ==========================================
 
 model Docente {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  password      String
-  nombre        String
-  cedula        String   @unique
-  facultad      String
-  programa      String   // Programa o Departamento
-  celular       String?
-  sede          String?
-  modalidad     Modalidad
-  doctorado           Boolean @default(false)
-  cargoAdministrativo Boolean @default(false)
-  proyectosActivos    Boolean @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id       String @id @default(cuid())
+  email    String @unique
+  password String
+  nombre   String
+  cedula   String @unique
 
-  // Cursos guardados para reutilizar entre semestres
-  cursosGuardados CursoGuardado[]
+  // Datos institucionales
+  rol       Rol       @default(DOCENTE)
+  sedeBase  Sede      // Sede contractual obligatoria
+  modalidad Modalidad // Determina límites de carga (Art. 4)
+  facultad  String
+  programa  String    // Programa o Departamento
+  celular   String?
 
-  // Formularios
+  // Flags derivados del Acuerdo 048
+  doctorado           Boolean @default(false) // Art. 4 Par. 3: vinculación a grupo de investigación
+  cargoAdministrativo Boolean @default(false) // Art. 10: gestión no puede exceder 20%
+  proyectosActivos    Boolean @default(false) // Art. 3 Par. 1: reduce mínimo de docencia
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones 1:N
   agendasSemestrales AgendaSemestral[]
   monitoreos         Monitoreo[]
+  cursosGuardados    CursoGuardado[]
 
   @@map("docentes")
 }
 
 // ==========================================
-// CURSOS REUTILIZABLES (perfil del docente)
+// CURSOS GUARDADOS — Caché para reutilizar entre semestres
 // ==========================================
 
 model CursoGuardado {
   id              String   @id @default(cuid())
   docenteId       String
+  cursoMaestroId  String?  // Relación opcional al catálogo maestro
   numeroCurso     String
   nombreCurso     String
   subgrupo        String?
@@ -70,204 +126,252 @@ model CursoGuardado {
   creditos        Int?
   semanas         Int?
 
-  docente Docente @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+  docente      Docente       @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+  cursoMaestro CursoMaestro? @relation(fields: [cursoMaestroId], references: [id], onDelete: SetNull)
 
   @@map("cursos_guardados")
 }
 
 // ==========================================
-// FO-19: AGENDA SEMESTRAL (Planificacion)
+// FO-19: AGENDA SEMESTRAL (Planificación)
+// Art. 6 — Procedimiento de elaboración
 // ==========================================
 
 model AgendaSemestral {
-  id          String            @id @default(cuid())
-  docenteId   String
-  periodo     String            // Ej: "2026-1"
-  fecha       DateTime
-  estado      EstadoFormulario  @default(BORRADOR)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id        String           @id @default(cuid())
+  docenteId String
+  periodo   String           // Ej: "2026-1"
+  estado    EstadoFormulario @default(BORRADOR)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
-  // Seccion 1: Docencia
-  cursos                CursoAgenda[]
-  otrasActividadesDocencia ActividadDocencia[]
+  // Sección 1: Docencia (Art. 7)
+  cursos                     CursoAgenda[]
+  otrasActividadesDocencia   ActividadDocencia[]
 
-  // Secciones 2, 3, 4
-  actividadesInvestigacion   ActividadInvestigacion[]
+  // Sección 2: Investigación (Art. 8)
+  actividadesInvestigacion ActividadInvestigacion[]
+
+  // Sección 3: Proyección Social (Art. 9)
   actividadesProyeccionSocial ActividadProyeccionSocial[]
-  actividadesGestion         ActividadGestion[]
 
-  docente Docente @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+  // Sección 4: Gestión Académico Administrativa (Art. 10)
+  actividadesGestion ActividadGestion[]
+
+  // Relaciones
+  docente   Docente    @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+  monitoreo Monitoreo? // 1:1 opcional → se crea al auditar (Art. 12)
 
   // Un docente solo puede tener una agenda por periodo
   @@unique([docenteId, periodo])
   @@map("agendas_semestrales")
 }
 
-// Seccion 1.0 - Cursos asignados
-model CursoAgenda {
-  id                String @id @default(cuid())
-  agendaId          String
-  numeroCurso       String
-  nombreCurso       String
-  subgrupo          String?
-  sede              String?
-  horasPresenciales Int
-  creditos          Int
-  semanas           Int
-  dedicacionPeriodo Float   // Horas totales del semestre
+// ——————————————————————————————————————————
+// Sección 1.0 — Cursos asignados en la agenda
+// ——————————————————————————————————————————
 
-  // Seccion 1.1 - Horario semanal
+model CursoAgenda {
+  id             String  @id @default(cuid())
+  agendaId       String
+  cursoMaestroId String? // Relación OPCIONAL al catálogo maestro
+
+  // Campos de fallback histórico (Art. 7)
+  numeroCurso         String
+  nombreCurso         String  // Copia de seguridad del nombre
+  subgrupo            String? // Art. 7: subgrupos pedagógicos
+  creditos            Int     // Fallback de créditos
+
+  // La sede DONDE se dicta este curso específico
+  sede String?
+
+  // Datos académicos
+  horasPresenciales Int
+  semanas           Int
+  dedicacionPeriodo Float // Horas totales del semestre para este curso
+
+  // Horario semanal
   horarios HorarioCurso[]
 
-  agenda AgendaSemestral @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+  // Relaciones
+  agenda       AgendaSemestral @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+  cursoMaestro CursoMaestro?   @relation(fields: [cursoMaestroId], references: [id], onDelete: SetNull)
+
+  // Reporte de auditoría 1:1 (Art. 12)
+  reporteDocencia ReporteDocencia?
 
   @@map("cursos_agenda")
 }
 
-// Seccion 1.1 - Horario de clases
+// Sección 1.1 — Horario semanal del curso
 model HorarioCurso {
-  id          String  @id @default(cuid())
-  cursoId     String
-  lunes       String? // Rango horario ej: "8:00-10:00"
-  martes      String?
-  miercoles   String?
-  jueves      String?
-  viernes     String?
-  sabado      String?
-  domingo     String?
+  id        String  @id @default(cuid())
+  cursoId   String
+  lunes     String? // Rango "HH:MM-HH:MM" (Art. 5: jornadas)
+  martes    String?
+  miercoles String?
+  jueves    String?
+  viernes   String?
+  sabado    String?
+  domingo   String?
 
   curso CursoAgenda @relation(fields: [cursoId], references: [id], onDelete: Cascade)
 
   @@map("horarios_curso")
 }
 
-// Seccion 1.2 - Otras actividades de docencia
-model ActividadDocencia {
-  id                String @id @default(cuid())
-  agendaId          String
-  nombre            String
-  descripcion       String?
-  dedicacionPeriodo Float
+// ——————————————————————————————————————————
+// Sección 2 — Investigación (Art. 8)
+// ——————————————————————————————————————————
 
-  agenda AgendaSemestral @relation(fields: [agendaId], references: [id], onDelete: Cascade)
-
-  @@map("actividades_docencia")
-}
-
-// Seccion 2 - Investigacion
 model ActividadInvestigacion {
-  id                String @id @default(cuid())
+  id                String  @id @default(cuid())
   agendaId          String
   nombre            String
   descripcion       String?
   dedicacionPeriodo Float
 
   agenda AgendaSemestral @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+
+  // Reporte de auditoría 1:1 (Art. 12)
+  reporteInvestigacion ReporteInvestigacion?
 
   @@map("actividades_investigacion")
 }
 
-// Seccion 3 - Proyeccion Social
+// ——————————————————————————————————————————
+// Sección 3 — Proyección Social (Art. 9)
+// ——————————————————————————————————————————
+
 model ActividadProyeccionSocial {
-  id                String @id @default(cuid())
+  id                String  @id @default(cuid())
   agendaId          String
   nombre            String
   descripcion       String?
   dedicacionPeriodo Float
 
   agenda AgendaSemestral @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+
+  // Reporte de auditoría 1:1 (Art. 12)
+  reporteProyeccion ReporteProyeccion?
 
   @@map("actividades_proyeccion_social")
 }
 
-// Seccion 4 - Gestion Academico Administrativa
+// ——————————————————————————————————————————
+// Sección 4 — Gestión Académico Administrativa (Art. 10)
+// No puede exceder el 20% del tiempo laboral del docente.
+// ——————————————————————————————————————————
+
 model ActividadGestion {
-  id                String @id @default(cuid())
+  id                String  @id @default(cuid())
   agendaId          String
   nombre            String
   descripcion       String?
   dedicacionPeriodo Float
 
   agenda AgendaSemestral @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+
+  // Reporte de auditoría 1:1 (Art. 12)
+  reporteGestion ReporteGestion?
 
   @@map("actividades_gestion")
 }
 
 // ==========================================
-// FO-20: MONITOREO AGENDA ACADEMICA (Reporte)
+// FO-20: MONITOREO AGENDA ACADÉMICA (Auditoría)
+// Art. 12 — Informe digital de cumplimiento
+// "Los docentes deberán entregar un informe digital
+//  del cumplimiento de su agenda, con copia digital
+//  de productos y resultados de sus planes de trabajo."
 // ==========================================
 
 model Monitoreo {
-  id          String            @id @default(cuid())
-  docenteId   String
-  periodo     String
-  fecha       DateTime
-  estado      EstadoFormulario  @default(BORRADOR)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id        String           @id @default(cuid())
+  docenteId String
+  periodo   String
+  estado    EstadoFormulario @default(BORRADOR)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
-  // Secciones I, II, III, IV
-  actividadesBasicas         MonitoreoActividadBasica[]
-  actividadesComplementarias MonitoreoActividadComplementaria[]
-  actividadesAdministrativas MonitoreoActividadAdministrativa[]
-  actividadesDesarrollo      MonitoreoActividadDesarrollo[]
+  // REGLA CRÍTICA: Relación 1:1 obligatoria con AgendaSemestral.
+  // No puede existir auditoría sin planificación previa.
+  agendaId String @unique
 
-  docente Docente @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+  // Reportes por sección — auditan lo prometido en la FO-19
+  reportesDocencia      ReporteDocencia[]
+  reportesInvestigacion ReporteInvestigacion[]
+  reportesProyeccion    ReporteProyeccion[]
+  reportesGestion       ReporteGestion[]
+
+  // Relaciones
+  docente Docente         @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+  agenda  AgendaSemestral @relation(fields: [agendaId], references: [id], onDelete: Cascade)
 
   // Un docente solo puede tener un monitoreo por periodo
   @@unique([docenteId, periodo])
   @@map("monitoreos")
 }
 
-// Seccion I - Actividades Academicas Basicas
-model MonitoreoActividadBasica {
-  id                 String  @id @default(cuid())
-  monitoreoId        String
-  actividadesDesarrolladas String
-  periodoEjecucion   String?
-  observaciones      String?
+// ——————————————————————————————————————————
+// Reportes de Auditoría (Art. 12)
+// REGLA: Cada reporte enlaza 1:1 (@unique) a la actividad
+// planeada correspondiente. No se pueden inventar actividades
+// nuevas en la auditoría que no estaban en la FO-19.
+// ——————————————————————————————————————————
 
-  monitoreo Monitoreo @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
+/// Audita un CursoAgenda específico de la FO-19
+model ReporteDocencia {
+  id                  String  @id @default(cuid())
+  monitoreoId         String
+  cursoAgendaId       String  @unique // 1:1 con CursoAgenda
+  horasEjecutadas     Float
+  productosEntregados String? // Art. 12: copia digital de productos
 
-  @@map("monitoreo_actividades_basicas")
+  monitoreo   Monitoreo   @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
+  cursoAgenda CursoAgenda @relation(fields: [cursoAgendaId], references: [id], onDelete: Cascade)
+
+  @@map("reportes_docencia")
 }
 
-// Seccion II - Actividades Academicas Complementarias
-model MonitoreoActividadComplementaria {
-  id                 String  @id @default(cuid())
-  monitoreoId        String
-  actividadesDesarrolladas String
-  periodoEjecucion   String?
-  observaciones      String?
+/// Audita una ActividadInvestigacion específica de la FO-19
+model ReporteInvestigacion {
+  id                       String  @id @default(cuid())
+  monitoreoId              String
+  actividadInvestigacionId String  @unique // 1:1 con ActividadInvestigacion
+  horasEjecutadas          Float
+  productosEntregados      String?
 
-  monitoreo Monitoreo @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
+  monitoreo              Monitoreo             @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
+  actividadInvestigacion ActividadInvestigacion @relation(fields: [actividadInvestigacionId], references: [id], onDelete: Cascade)
 
-  @@map("monitoreo_actividades_complementarias")
+  @@map("reportes_investigacion")
 }
 
-// Seccion III - Actividades Administrativas
-model MonitoreoActividadAdministrativa {
-  id                 String  @id @default(cuid())
-  monitoreoId        String
-  actividadesDesarrolladas String
-  periodoEjecucion   String?
-  observaciones      String?
+/// Audita una ActividadProyeccionSocial específica de la FO-19
+model ReporteProyeccion {
+  id                          String  @id @default(cuid())
+  monitoreoId                 String
+  actividadProyeccionSocialId String  @unique // 1:1 con ActividadProyeccionSocial
+  horasEjecutadas             Float
+  productosEntregados         String?
 
-  monitoreo Monitoreo @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
+  monitoreo                 Monitoreo                 @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
+  actividadProyeccionSocial ActividadProyeccionSocial @relation(fields: [actividadProyeccionSocialId], references: [id], onDelete: Cascade)
 
-  @@map("monitoreo_actividades_administrativas")
+  @@map("reportes_proyeccion")
 }
 
-// Seccion IV - Actividades de Desarrollo Institucional
-model MonitoreoActividadDesarrollo {
-  id                 String  @id @default(cuid())
-  monitoreoId        String
-  actividadesDesarrolladas String
-  periodoEjecucion   String?
-  observaciones      String?
+/// Audita una ActividadGestion específica de la FO-19
+model ReporteGestion {
+  id                  String  @id @default(cuid())
+  monitoreoId         String
+  actividadGestionId  String  @unique // 1:1 con ActividadGestion
+  horasEjecutadas     Float
+  productosEntregados String?
 
-  monitoreo Monitoreo @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
+  monitoreo        Monitoreo        @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
+  actividadGestion ActividadGestion @relation(fields: [actividadGestionId], references: [id], onDelete: Cascade)
 
-  @@map("monitoreo_actividades_desarrollo")
+  @@map("reportes_gestion")
 }
