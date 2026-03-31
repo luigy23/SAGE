@@ -125,16 +125,13 @@ export async function upsertAgendaCompletaAction(
         ? await tx.agendaSemestral.update({
             where: { id: existingAgenda.id },
             data: {
-              fecha: new Date(),
               estado: enviar ? "ENVIADO" : "BORRADOR",
-              updatedAt: new Date(),
             },
           })
         : await tx.agendaSemestral.create({
             data: {
               docenteId: docente.id,
               periodo,
-              fecha: new Date(),
               estado: enviar ? "ENVIADO" : "BORRADOR",
             },
           })

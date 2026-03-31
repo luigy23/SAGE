@@ -67,7 +67,7 @@ export function AgendaList({ agendas }: { agendas: AgendaSemestral[] }) {
               </CardHeader>
               <CardContent>
                 <p className="mb-4 text-sm text-muted-foreground">
-                  Fecha: {new Date(agenda.fecha).toLocaleDateString("es-CO")}
+                  Fecha: {new Date(agenda.createdAt).toLocaleDateString("es-CO")}
                 </p>
                 <div className="flex gap-2">
                   {agenda.estado === "BORRADOR" ? (

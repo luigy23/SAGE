@@ -104,17 +104,15 @@ export function StepIdentificacion({
                 className="disabled:opacity-70"
               />
             </div>
-            {docente.sede && (
-              <div className="space-y-2">
-                <Label htmlFor="step1-sede">Sede</Label>
-                <Input
-                  id="step1-sede"
-                  value={docente.sede}
-                  disabled
-                  className="disabled:opacity-70"
-                />
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="step1-sede">Sede Base</Label>
+              <Input
+                id="step1-sede"
+                value={docente.sedeBase}
+                disabled
+                className="disabled:opacity-70"
+              />
+            </div>
           </div>
         </CardContent>
       </Card>

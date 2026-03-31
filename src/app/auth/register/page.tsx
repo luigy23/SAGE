@@ -28,7 +28,6 @@ import { SEDES } from "@/lib/constants"
 const FACULTAD_PROGRAMAS: Record<string, string[]> = {
   "Ingeniería": [
     "Ingeniería de Software",
-    "Ingeniería de Sistemas",
     "Ingeniería Civil",
     "Ingeniería Agrícola",
     "Ingeniería Electrónica",

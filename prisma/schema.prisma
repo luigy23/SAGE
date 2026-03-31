@@ -221,6 +221,26 @@ model HorarioCurso {
 }
 
 // ——————————————————————————————————————————
+// Sección 1.2 — Otras Actividades de Docencia (Art. 7 / Art. 11)
+// Consejería Académica, Asesoría Práctica Profesional, Comités, etc.
+// ——————————————————————————————————————————
+
+model ActividadDocencia {
+  id                String  @id @default(cuid())
+  agendaId          String
+  nombre            String
+  descripcion       String?
+  dedicacionPeriodo Float
+
+  agenda AgendaSemestral @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+
+  // Reporte de auditoría 1:1 (Art. 12)
+  reporteActividadDocencia ReporteActividadDocencia?
+
+  @@map("actividades_docencia")
+}
+
+// ——————————————————————————————————————————
 // Sección 2 — Investigación (Art. 8)
 // ——————————————————————————————————————————
 
@@ -299,10 +319,11 @@ model Monitoreo {
   agendaId String @unique
 
   // Reportes por sección — auditan lo prometido en la FO-19
-  reportesDocencia      ReporteDocencia[]
-  reportesInvestigacion ReporteInvestigacion[]
-  reportesProyeccion    ReporteProyeccion[]
-  reportesGestion       ReporteGestion[]
+  reportesDocencia           ReporteDocencia[]
+  reportesActividadDocencia  ReporteActividadDocencia[]
+  reportesInvestigacion      ReporteInvestigacion[]
+  reportesProyeccion         ReporteProyeccion[]
+  reportesGestion            ReporteGestion[]
 
   // Relaciones
   docente Docente         @relation(fields: [docenteId], references: [id], onDelete: Cascade)
@@ -332,6 +353,20 @@ model ReporteDocencia {
   cursoAgenda CursoAgenda @relation(fields: [cursoAgendaId], references: [id], onDelete: Cascade)
 
   @@map("reportes_docencia")
+}
+
+/// Audita una ActividadDocencia específica de la FO-19 (Otras actividades de docencia)
+model ReporteActividadDocencia {
+  id                   String  @id @default(cuid())
+  monitoreoId          String
+  actividadDocenciaId  String  @unique // 1:1 estricta con ActividadDocencia
+  horasEjecutadas      Float
+  productosEntregados  String? // Art. 12: copia digital de productos
+
+  monitoreo          Monitoreo         @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
+  actividadDocencia  ActividadDocencia @relation(fields: [actividadDocenciaId], references: [id], onDelete: Cascade)
+
+  @@map("reportes_actividad_docencia")
 }
 
 /// Audita una ActividadInvestigacion específica de la FO-19

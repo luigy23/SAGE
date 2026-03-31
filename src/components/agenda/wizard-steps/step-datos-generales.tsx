@@ -26,8 +26,8 @@ export function StepDatosGenerales({
     { label: "Modalidad", value: docente.modalidad || "—" },
     { label: "Periodo", value: agenda.periodo },
     {
-      label: "Fecha",
-      value: new Date(agenda.fecha).toLocaleDateString("es-CO"),
+      label: "Fecha de Creación",
+      value: new Date(agenda.createdAt).toLocaleDateString("es-CO"),
     },
   ]
 
