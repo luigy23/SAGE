@@ -45,15 +45,10 @@ import {
   Check,
 } from "lucide-react"
 
-// ==========================================
-// Configuración de pasos dinámicos
-// ==========================================
-
 interface StepConfig {
   id: string
   label: string
   shortLabel: string
-  /** Nombres de los fields a validar con trigger() antes de avanzar */
   fieldsToValidate: (keyof AgendaWizardFormData)[]
 }
 
@@ -82,7 +77,6 @@ function buildSteps(cargoAdministrativo: boolean): StepConfig[] {
     },
   ]
 
-  // Paso 4 solo si tiene cargo administrativo
   if (cargoAdministrativo) {
     steps.push({
       id: "gestion",
@@ -101,10 +95,6 @@ function buildSteps(cargoAdministrativo: boolean): StepConfig[] {
 
   return steps
 }
-
-// ==========================================
-// Componente Stepper Horizontal
-// ==========================================
 
 function WizardStepper({
   steps,
@@ -164,21 +154,6 @@ function WizardStepper({
   )
 }
 
-// ==========================================
-// Orquestador del Wizard
-// ==========================================
-
-/**
- * AgendaWizardForm — Componente principal del formulario wizard.
- *
- * Responsabilidades:
- * 1. Inicializa useForm con zodResolver y los defaultValues
- * 2. Envuelve todo en <Form> (FormProvider) para que los hijos usen useFormContext
- * 3. Maneja el estado del paso actual (currentStep)
- * 4. Valida con trigger() los campos del paso antes de avanzar
- * 5. Renderiza el HorasStickyHeader, el Stepper, el contenido del paso, y la navegación
- * 6. Maneja "Guardar Borrador" y "Enviar Agenda"
- */
 export function AgendaWizardForm({
   docente,
   cursosGuardados,
@@ -195,19 +170,20 @@ export function AgendaWizardForm({
   const [isPending, startTransition] = useTransition()
   const [isSavingDraft, setIsSavingDraft] = useState(false)
 
-  // Calcular maxHoras según modalidad
   const { maxHoras, esEstricto } = useMemo(
     () => getMaxHoras(docente.modalidad),
     [docente.modalidad]
   )
 
-  // Generar schema Zod con la validación de horas
   const schema = useMemo(
-    () => createAgendaSchema(maxHoras, esEstricto),
-    [maxHoras, esEstricto]
+    () => createAgendaSchema(maxHoras, esEstricto, {
+      doctorado: docente.doctorado,
+      cargoAdministrativo: docente.cargoAdministrativo,
+      proyectosActivos: docente.proyectosActivos,
+    }),
+    [maxHoras, esEstricto, docente.doctorado, docente.cargoAdministrativo, docente.proyectosActivos]
   )
 
-  // Configurar pasos dinámicos
   const steps = useMemo(
     () => buildSteps(docente.cargoAdministrativo),
     [docente.cargoAdministrativo]
@@ -216,28 +192,21 @@ export function AgendaWizardForm({
   const isLastStep = currentStep === steps.length - 1
   const isFirstStep = currentStep === 0
 
-  // Inicializar React Hook Form
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const form = useForm<AgendaWizardFormData>({
     resolver: zodResolver(schema) as any,
     defaultValues: defaultValues || DEFAULT_FORM_VALUES,
-    mode: "onTouched", // Validar al perder foco + al submit
+    mode: "onTouched",
   })
 
-  // Observar datos para calcular total de horas (para el botón de envío)
   const watchedData = useWatch({ control: form.control })
   const totalHoras = calcularTotalHoras(watchedData as AgendaWizardFormData)
   const envioDisabled =
     (esEstricto && totalHoras > maxHoras) || isPending || isSavingDraft
 
-  // ==========================================
-  // Navegación entre pasos
-  // ==========================================
-
   async function handleNext() {
     const currentFields = steps[currentStep]?.fieldsToValidate || []
 
-    // Validar campos del paso actual antes de avanzar
     if (currentFields.length > 0) {
       const valid = await form.trigger(
         currentFields as (keyof AgendaWizardFormData)[]
@@ -256,16 +225,10 @@ export function AgendaWizardForm({
   }
 
   function handleStepClick(index: number) {
-    // Permitir ir a pasos anteriores sin validar, pero validar para adelante
     if (index <= currentStep) {
       setCurrentStep(index)
     }
-    // Para ir adelante, usar handleNext secuencialmente (más simple: solo dejamos ir atrás con click)
   }
-
-  // ==========================================
-  // Guardar borrador (sin validación estricta)
-  // ==========================================
 
   async function handleSaveDraft() {
     setIsSavingDraft(true)
@@ -288,12 +251,7 @@ export function AgendaWizardForm({
     })
   }
 
-  // ==========================================
-  // Enviar agenda (validación completa)
-  // ==========================================
-
   async function handleSubmitAgenda() {
-    // Trigger full validation
     const valid = await form.trigger()
     if (!valid) {
       toast.error("Hay errores en el formulario. Revise todos los pasos.")
@@ -317,10 +275,6 @@ export function AgendaWizardForm({
       }
     })
   }
-
-  // ==========================================
-  // Renderizar contenido del paso actual
-  // ==========================================
 
   function renderStepContent() {
     const stepId = steps[currentStep]?.id
@@ -357,36 +311,27 @@ export function AgendaWizardForm({
     }
   }
 
-  // ==========================================
-  // Render
-  // ==========================================
-
   return (
     <Form {...form}>
       <form
         onSubmit={(e) => e.preventDefault()}
         className="space-y-6"
       >
-        {/* Sticky Header con progreso de horas */}
         <HorasStickyHeader
           maxHoras={maxHoras}
           esEstricto={esEstricto}
           periodo={periodo}
         />
 
-        {/* Stepper horizontal */}
         <WizardStepper
           steps={steps}
           currentStep={currentStep}
           onStepClick={handleStepClick}
         />
 
-        {/* Contenido del paso actual */}
         <div className="min-h-[300px]">{renderStepContent()}</div>
 
-        {/* Navegación inferior */}
         <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
-          {/* Botón Atrás */}
           <Button
             type="button"
             variant="outline"
@@ -397,9 +342,7 @@ export function AgendaWizardForm({
             Anterior
           </Button>
 
-          {/* Botones centrales y derecha */}
           <div className="flex flex-col gap-2 sm:flex-row">
-            {/* Guardar borrador — siempre disponible */}
             <Button
               type="button"
               variant="secondary"
@@ -414,7 +357,6 @@ export function AgendaWizardForm({
               {isSavingDraft ? "Guardando..." : "Guardar Borrador"}
             </Button>
 
-            {/* Siguiente o Enviar */}
             {!isLastStep ? (
               <Button type="button" onClick={handleNext} disabled={isPending}>
                 Siguiente

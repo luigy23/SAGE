@@ -11,10 +11,6 @@ import {
 } from "@/lib/schemas/agenda-schema"
 import { getMaxHoras } from "@/lib/utils/periodo"
 
-// ========================================
-// Helpers
-// ========================================
-
 async function getAuthenticatedDocente() {
   const session = await auth()
   if (!session?.user?.id) return null
@@ -26,26 +22,10 @@ async function getAuthenticatedDocente() {
   return docente
 }
 
-// ========================================
-// upsertAgendaCompletaAction
-// ========================================
-
-/**
- * Server Action principal del wizard de Agenda Semestral.
- *
- * Flujo:
- * 1. Valida autenticación y obtiene el docente
- * 2. Valida datos contra el schema Zod (incluyendo maxHoras)
- * 3. Usa una transacción Prisma para:
- *    a) Crear o actualizar la AgendaSemestral
- *    b) Eliminar todos los hijos existentes (cursos, actividades, horarios)
- *    c) Crear los nuevos hijos con los datos del formulario
- * 4. Si enviar=true, cambia estado a ENVIADO
- */
 export async function upsertAgendaCompletaAction(
   payload: AgendaWizardPayload
 ): Promise<{ success: true; agendaId: string } | { error: string }> {
-  // 1. Autenticación
+  
   const docente = await getAuthenticatedDocente()
   if (!docente) {
     return { error: "No autenticado. Inicia sesión e intenta de nuevo." }
@@ -57,13 +37,20 @@ export async function upsertAgendaCompletaAction(
     return { error: "El periodo académico es obligatorio." }
   }
 
-  // 2. Validar con Zod
   const { maxHoras, esEstricto } = getMaxHoras(docente.modalidad)
-  const schema = createAgendaSchema(maxHoras, esEstricto)
+  
+  // NUEVO: Empaquetamos las banderas del docente
+  const flags = {
+    doctorado: docente.doctorado,
+    cargoAdministrativo: docente.cargoAdministrativo,
+    proyectosActivos: docente.proyectosActivos,
+  }
+
+  // Pasamos las banderas al validador
+  const schema = createAgendaSchema(maxHoras, esEstricto, flags)
   const parseResult = schema.safeParse(data)
 
   if (!parseResult.success) {
-    // Extraer el primer error legible
     const firstError = parseResult.error.issues[0]
     return {
       error: firstError?.message || "Error de validación en los datos del formulario.",
@@ -72,7 +59,6 @@ export async function upsertAgendaCompletaAction(
 
   const validData = parseResult.data as AgendaWizardFormData
 
-  // Validación adicional: si se va a enviar, verificar horas para modalidades estrictas
   if (enviar) {
     const totalHoras = calcularTotalHoras(validData)
     if (esEstricto && totalHoras > maxHoras) {
@@ -82,10 +68,8 @@ export async function upsertAgendaCompletaAction(
     }
   }
 
-  // 3. Transacción atómica
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // 3a. Buscar agenda existente
       const existingAgenda = await tx.agendaSemestral.findUnique({
         where: {
           docenteId_periodo: {
@@ -95,38 +79,22 @@ export async function upsertAgendaCompletaAction(
         },
       })
 
-      // Verificar que no se edita una agenda ya enviada
       if (existingAgenda && existingAgenda.estado === "ENVIADO") {
         throw new Error("Esta agenda ya fue enviada y no puede modificarse.")
       }
 
-      // 3b. Si existe, eliminar todos los hijos para recrearlos
       if (existingAgenda) {
-        // Los horarios se eliminan en cascada con los cursos
-        await tx.cursoAgenda.deleteMany({
-          where: { agendaId: existingAgenda.id },
-        })
-        await tx.actividadDocencia.deleteMany({
-          where: { agendaId: existingAgenda.id },
-        })
-        await tx.actividadInvestigacion.deleteMany({
-          where: { agendaId: existingAgenda.id },
-        })
-        await tx.actividadProyeccionSocial.deleteMany({
-          where: { agendaId: existingAgenda.id },
-        })
-        await tx.actividadGestion.deleteMany({
-          where: { agendaId: existingAgenda.id },
-        })
+        await tx.cursoAgenda.deleteMany({ where: { agendaId: existingAgenda.id } })
+        await tx.actividadDocencia.deleteMany({ where: { agendaId: existingAgenda.id } })
+        await tx.actividadInvestigacion.deleteMany({ where: { agendaId: existingAgenda.id } })
+        await tx.actividadProyeccionSocial.deleteMany({ where: { agendaId: existingAgenda.id } })
+        await tx.actividadGestion.deleteMany({ where: { agendaId: existingAgenda.id } })
       }
 
-      // 3c. Upsert de la agenda principal
       const agenda = existingAgenda
         ? await tx.agendaSemestral.update({
             where: { id: existingAgenda.id },
-            data: {
-              estado: enviar ? "ENVIADO" : "BORRADOR",
-            },
+            data: { estado: enviar ? "ENVIADO" : "BORRADOR" },
           })
         : await tx.agendaSemestral.create({
             data: {
@@ -136,7 +104,6 @@ export async function upsertAgendaCompletaAction(
             },
           })
 
-      // 3d. Crear cursos con sus horarios anidados
       for (const curso of validData.cursos) {
         const createdCurso = await tx.cursoAgenda.create({
           data: {
@@ -152,7 +119,6 @@ export async function upsertAgendaCompletaAction(
           },
         })
 
-        // Crear horario si hay al menos un día con valor
         const h = curso.horarios
         const tieneHorario = [
           h.lunes, h.martes, h.miercoles, h.jueves,
@@ -175,7 +141,6 @@ export async function upsertAgendaCompletaAction(
         }
       }
 
-      // 3e. Crear otras actividades de docencia
       if (validData.otrasActividadesDocencia.length > 0) {
         await tx.actividadDocencia.createMany({
           data: validData.otrasActividadesDocencia.map((act) => ({
@@ -187,7 +152,6 @@ export async function upsertAgendaCompletaAction(
         })
       }
 
-      // 3f. Crear actividades de investigación
       if (validData.actividadesInvestigacion.length > 0) {
         await tx.actividadInvestigacion.createMany({
           data: validData.actividadesInvestigacion.map((act) => ({
@@ -199,7 +163,6 @@ export async function upsertAgendaCompletaAction(
         })
       }
 
-      // 3g. Crear actividades de proyección social
       if (validData.actividadesProyeccionSocial.length > 0) {
         await tx.actividadProyeccionSocial.createMany({
           data: validData.actividadesProyeccionSocial.map((act) => ({
@@ -211,7 +174,6 @@ export async function upsertAgendaCompletaAction(
         })
       }
 
-      // 3h. Crear actividades de gestión
       if (validData.actividadesGestion.length > 0) {
         await tx.actividadGestion.createMany({
           data: validData.actividadesGestion.map((act) => ({
@@ -235,14 +197,6 @@ export async function upsertAgendaCompletaAction(
   }
 }
 
-// ========================================
-// searchCursosGuardadosAction
-// ========================================
-
-/**
- * Busca cursos guardados del docente para autocompletado en el Combobox.
- * Retorna los cursos que coincidan con la búsqueda por nombre o número.
- */
 export async function searchCursosGuardadosAction(query: string) {
   const session = await auth()
   if (!session?.user?.id) return []
@@ -262,14 +216,6 @@ export async function searchCursosGuardadosAction(query: string) {
   return cursos
 }
 
-// ========================================
-// deleteAgendaBorradorAction
-// ========================================
-
-/**
- * Elimina una agenda en estado BORRADOR del periodo activo.
- * Se usa desde el botón "Descartar" de la página principal.
- */
 export async function deleteAgendaBorradorAction(periodo: string) {
   const session = await auth()
   if (!session?.user?.id) {

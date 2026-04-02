@@ -115,16 +115,16 @@ model Docente {
 // ==========================================
 
 model CursoGuardado {
-  id              String   @id @default(cuid())
-  docenteId       String
-  cursoMaestroId  String?  // Relación opcional al catálogo maestro
-  numeroCurso     String
-  nombreCurso     String
-  subgrupo        String?
-  sede            String?
+  id                String   @id @default(cuid())
+  docenteId         String
+  cursoMaestroId    String?  // Relación opcional al catálogo maestro
+  numeroCurso       String
+  nombreCurso       String
+  subgrupo          String?
+  sede              String?
   horasPresenciales Int?
-  creditos        Int?
-  semanas         Int?
+  creditos          Int?
+  semanas           Int?
 
   docente      Docente       @relation(fields: [docenteId], references: [id], onDelete: Cascade)
   cursoMaestro CursoMaestro? @relation(fields: [cursoMaestroId], references: [id], onDelete: SetNull)
@@ -142,12 +142,16 @@ model AgendaSemestral {
   docenteId String
   periodo   String           // Ej: "2026-1"
   estado    EstadoFormulario @default(BORRADOR)
+  
+  // BLINDAJE DE AUDITORÍA ADMIN
+  observacionesAdmin String?
+
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
   // Sección 1: Docencia (Art. 7)
-  cursos                     CursoAgenda[]
-  otrasActividadesDocencia   ActividadDocencia[]
+  cursos                   CursoAgenda[]
+  otrasActividadesDocencia ActividadDocencia[]
 
   // Sección 2: Investigación (Art. 8)
   actividadesInvestigacion ActividadInvestigacion[]
@@ -177,10 +181,10 @@ model CursoAgenda {
   cursoMaestroId String? // Relación OPCIONAL al catálogo maestro
 
   // Campos de fallback histórico (Art. 7)
-  numeroCurso         String
-  nombreCurso         String  // Copia de seguridad del nombre
-  subgrupo            String? // Art. 7: subgrupos pedagógicos
-  creditos            Int     // Fallback de créditos
+  numeroCurso       String
+  nombreCurso       String  // Copia de seguridad del nombre
+  subgrupo          String? // Art. 7: subgrupos pedagógicos
+  creditos          Int     // Fallback de créditos
 
   // La sede DONDE se dicta este curso específico
   sede String?
@@ -189,6 +193,7 @@ model CursoAgenda {
   horasPresenciales Int
   semanas           Int
   dedicacionPeriodo Float // Horas totales del semestre para este curso
+  
 
   // Horario semanal
   horarios HorarioCurso[]
@@ -237,6 +242,8 @@ model ActividadDocencia {
   // Reporte de auditoría 1:1 (Art. 12)
   reporteActividadDocencia ReporteActividadDocencia?
 
+  // ---> NUEVO: BLINDAJE CONTRA CLONACIÓN <---
+  @@unique([agendaId, nombre])
   @@map("actividades_docencia")
 }
 
@@ -256,6 +263,8 @@ model ActividadInvestigacion {
   // Reporte de auditoría 1:1 (Art. 12)
   reporteInvestigacion ReporteInvestigacion?
 
+  // ---> NUEVO: BLINDAJE CONTRA CLONACIÓN <---
+  @@unique([agendaId, nombre])
   @@map("actividades_investigacion")
 }
 
@@ -275,6 +284,8 @@ model ActividadProyeccionSocial {
   // Reporte de auditoría 1:1 (Art. 12)
   reporteProyeccion ReporteProyeccion?
 
+  // ---> NUEVO: BLINDAJE CONTRA CLONACIÓN <---
+  @@unique([agendaId, nombre])
   @@map("actividades_proyeccion_social")
 }
 
@@ -295,15 +306,13 @@ model ActividadGestion {
   // Reporte de auditoría 1:1 (Art. 12)
   reporteGestion ReporteGestion?
 
+  // ---> NUEVO: BLINDAJE CONTRA CLONACIÓN <---
+  @@unique([agendaId, nombre])
   @@map("actividades_gestion")
 }
 
 // ==========================================
 // FO-20: MONITOREO AGENDA ACADÉMICA (Auditoría)
-// Art. 12 — Informe digital de cumplimiento
-// "Los docentes deberán entregar un informe digital
-//  del cumplimiento de su agenda, con copia digital
-//  de productos y resultados de sus planes de trabajo."
 // ==========================================
 
 model Monitoreo {
@@ -315,7 +324,6 @@ model Monitoreo {
   updatedAt DateTime         @updatedAt
 
   // REGLA CRÍTICA: Relación 1:1 obligatoria con AgendaSemestral.
-  // No puede existir auditoría sin planificación previa.
   agendaId String @unique
 
   // Reportes por sección — auditan lo prometido en la FO-19
@@ -336,9 +344,6 @@ model Monitoreo {
 
 // ——————————————————————————————————————————
 // Reportes de Auditoría (Art. 12)
-// REGLA: Cada reporte enlaza 1:1 (@unique) a la actividad
-// planeada correspondiente. No se pueden inventar actividades
-// nuevas en la auditoría que no estaban en la FO-19.
 // ——————————————————————————————————————————
 
 /// Audita un CursoAgenda específico de la FO-19
@@ -355,7 +360,7 @@ model ReporteDocencia {
   @@map("reportes_docencia")
 }
 
-/// Audita una ActividadDocencia específica de la FO-19 (Otras actividades de docencia)
+/// Audita una ActividadDocencia específica de la FO-19
 model ReporteActividadDocencia {
   id                   String  @id @default(cuid())
   monitoreoId          String
@@ -363,8 +368,8 @@ model ReporteActividadDocencia {
   horasEjecutadas      Float
   productosEntregados  String? // Art. 12: copia digital de productos
 
-  monitoreo          Monitoreo         @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
-  actividadDocencia  ActividadDocencia @relation(fields: [actividadDocenciaId], references: [id], onDelete: Cascade)
+  monitoreo         Monitoreo         @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
+  actividadDocencia ActividadDocencia @relation(fields: [actividadDocenciaId], references: [id], onDelete: Cascade)
 
   @@map("reportes_actividad_docencia")
 }
@@ -377,7 +382,7 @@ model ReporteInvestigacion {
   horasEjecutadas          Float
   productosEntregados      String?
 
-  monitoreo              Monitoreo             @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
+  monitoreo              Monitoreo              @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
   actividadInvestigacion ActividadInvestigacion @relation(fields: [actividadInvestigacionId], references: [id], onDelete: Cascade)
 
   @@map("reportes_investigacion")

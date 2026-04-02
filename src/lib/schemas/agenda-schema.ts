@@ -1,13 +1,5 @@
 import { z } from "zod"
 
-// ==========================================
-// Sub-esquemas para los modelos anidados
-// ==========================================
-
-/**
- * Valida un rango horario en formato "HH:MM-HH:MM".
- * Acepta null/undefined/empty string → se transforma a null.
- */
 const horarioStringSchema = z
   .string()
   .nullable()
@@ -30,16 +22,11 @@ const horarioStringSchema = z
       const inicio = parts[0]?.trim()
       const fin = parts[1]?.trim()
       if (!inicio || !fin) return true
-      // Comparación alfanumérica: "08:00" < "10:00" funciona en formato 24h
       return inicio < fin
     },
     { message: "La hora de fin debe ser posterior a la hora de inicio" }
   )
 
-/**
- * Schema para HorarioCurso — mapea al model Prisma HorarioCurso.
- * Cada día es un String? con formato "HH:MM-HH:MM" o null.
- */
 export const horarioCursoSchema = z.object({
   lunes: horarioStringSchema,
   martes: horarioStringSchema,
@@ -52,17 +39,9 @@ export const horarioCursoSchema = z.object({
 
 export type HorarioCursoFormData = z.infer<typeof horarioCursoSchema>
 
-/**
- * Schema para CursoAgenda — mapea al model Prisma CursoAgenda.
- * Incluye horarios anidados.
- */
 export const cursoAgendaSchema = z.object({
-  numeroCurso: z
-    .string()
-    .min(1, "El número de curso es obligatorio"),
-  nombreCurso: z
-    .string()
-    .min(1, "El nombre del curso es obligatorio"),
+  numeroCurso: z.string().min(1, "El número de curso es obligatorio"),
+  nombreCurso: z.string().min(1, "El nombre del curso es obligatorio"),
   subgrupo: z.string().optional().default(""),
   sede: z.string().optional().default(""),
   horasPresenciales: z.coerce
@@ -80,10 +59,9 @@ export const cursoAgendaSchema = z.object({
     .int("Debe ser un número entero")
     .min(0, "No puede ser negativo")
     .max(22, "El Acuerdo 048 establece un máximo de 22 semanas por semestre."),
-  dedicacionPeriodo: z.coerce
-    .number()
-    .min(0, "No puede ser negativo")
-    .max(880, "No puede exceder el límite físico de 880 horas semestrales."),
+  
+  dedicacionPeriodo: z.coerce.number().optional().default(0),
+  
   horarios: horarioCursoSchema.default({
     lunes: null,
     martes: null,
@@ -93,19 +71,22 @@ export const cursoAgendaSchema = z.object({
     sabado: null,
     domingo: null,
   }),
+}).transform((data) => {
+  const factorPreparacion = 1.5;
+  const horasTutoria = 1;
+  const horasSemanalesCalculadas = (data.horasPresenciales * factorPreparacion) + horasTutoria;
+  const calculoLegalTotal = horasSemanalesCalculadas * data.semanas;
+
+  return {
+    ...data,
+    dedicacionPeriodo: calculoLegalTotal
+  };
 })
 
 export type CursoAgendaFormData = z.infer<typeof cursoAgendaSchema>
 
-/**
- * Schema para actividades genéricas (ActividadDocencia, ActividadInvestigacion,
- * ActividadProyeccionSocial, ActividadGestion).
- * Mapea a los models Prisma correspondientes.
- */
 export const actividadSchema = z.object({
-  nombre: z
-    .string()
-    .min(1, "El nombre de la actividad es obligatorio"),
+  nombre: z.string().min(1, "El nombre de la actividad es obligatorio"),
   descripcion: z.string().optional().default(""),
   dedicacionPeriodo: z.coerce
     .number()
@@ -115,14 +96,6 @@ export const actividadSchema = z.object({
 
 export type ActividadFormData = z.infer<typeof actividadSchema>
 
-// ==========================================
-// Schema principal del Wizard
-// ==========================================
-
-/**
- * Schema base sin la validación de horas máximas.
- * Se compone con superRefine dinámicamente según la modalidad.
- */
 const agendaWizardBaseSchema = z.object({
   cursos: z.array(cursoAgendaSchema).default([]),
   otrasActividadesDocencia: z.array(actividadSchema).default([]),
@@ -133,9 +106,6 @@ const agendaWizardBaseSchema = z.object({
 
 export type AgendaWizardFormData = z.infer<typeof agendaWizardBaseSchema>
 
-/**
- * Calcula el total de horas de dedicación de todos los arrays del formulario.
- */
 export function calcularTotalHoras(data: AgendaWizardFormData): number {
   const sumArray = (items: { dedicacionPeriodo: number }[]) =>
     items.reduce((acc, item) => acc + (Number(item.dedicacionPeriodo) || 0), 0)
@@ -149,44 +119,53 @@ export function calcularTotalHoras(data: AgendaWizardFormData): number {
   )
 }
 
-/**
- * Crea el schema Zod completo con validación de horas máximas.
- *
- * @param maxHoras - Máximo de horas según modalidad (40 para TCP/TCO/CATEDRA, 20 para MTP/MTC)
- * @param esEstricto - Si true, superar maxHoras genera error de validación.
- *                     Si false (CATEDRA), solo se muestra advertencia visual.
- */
-export function createAgendaSchema(maxHoras: number, esEstricto: boolean) {
-  return agendaWizardBaseSchema.superRefine((data, ctx) => {
-    const totalHoras = calcularTotalHoras(data)
+// NUEVO: El schema ahora recibe las banderas académicas del usuario
+export type DocenteFlags = {
+  doctorado: boolean;
+  cargoAdministrativo: boolean;
+  proyectosActivos: boolean;
+}
 
+export function createAgendaSchema(maxHoras: number, esEstricto: boolean, flags: DocenteFlags) {
+  return agendaWizardBaseSchema.superRefine((data, ctx) => {
+    const totalHoras = calcularTotalHoras(data);
+    
+    // 1. REGLA DE TOPE MÁXIMO
     if (esEstricto && totalHoras > maxHoras) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: `El total de horas (${totalHoras}) supera el máximo permitido (${maxHoras}h) para su modalidad.`,
         path: ["_horasExcedidas"],
-      })
+      });
     }
-  })
+
+    // 2. REGLA ARTÍCULO 10: Gestión Académico Administrativa
+    const horasGestion = data.actividadesGestion.reduce((acc, item) => acc + (Number(item.dedicacionPeriodo) || 0), 0);
+    if (horasGestion > 0 && !flags.cargoAdministrativo) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "No puede asignar horas de Gestión porque no tiene un Cargo Administrativo registrado en su perfil.",
+        path: ["actividadesGestion"], 
+      });
+    }
+
+    // El límite del 20% para gestión se calcula sobre la dedicación total del semestre
+    const limiteGestion = maxHoras * 0.20; 
+    if (flags.cargoAdministrativo && horasGestion > limiteGestion) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Las horas de gestión (${horasGestion}h) no pueden exceder el 20% de su tiempo laboral (${limiteGestion}h).`,
+        path: ["actividadesGestion"], 
+      });
+    }
+  });
 }
 
-// ==========================================
-// Tipos para el payload del Server Action
-// ==========================================
-
-/**
- * Payload que el wizard envía al server action.
- * Incluye metadata de la agenda + los arrays del formulario.
- */
 export interface AgendaWizardPayload {
   periodo: string
-  enviar: boolean // true = cambiar estado a ENVIADO, false = guardar como BORRADOR
+  enviar: boolean
   data: AgendaWizardFormData
 }
-
-// ==========================================
-// Valores por defecto para inicializar el formulario
-// ==========================================
 
 export const EMPTY_HORARIO: HorarioCursoFormData = {
   lunes: null,
