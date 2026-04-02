@@ -25,10 +25,11 @@ import { signOutAction } from "@/lib/actions/sign-out"
 
 const navItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { title: "Mi Perfil", href: "/perfil", icon: User },
   { title: "Agenda Semestral", href: "/agenda", icon: Calendar },
   { title: "Monitoreo", href: "/monitoreo", icon: ClipboardCheck },
 ]
+
+const profileItem = { title: "Mi Perfil", href: "/perfil", icon: User }
 
 export function AppSidebar({ user }: { user: { name: string; email: string } }) {
   const pathname = usePathname()
@@ -64,20 +65,34 @@ export function AppSidebar({ user }: { user: { name: string; email: string } }) 
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t p-4">
-        <div className="mb-2">
-          <p className="text-sm font-medium">{user.name}</p>
-          <p className="text-xs text-muted-foreground">{user.email}</p>
+      <SidebarFooter className="p-4">
+        {/* Mi Perfil — isolated as a configuration-level item */}
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith(profileItem.href)}>
+              <Link href={profileItem.href}>
+                <profileItem.icon />
+                <span>{profileItem.title}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+
+        <div className="border-t pt-3 mt-2">
+          <div className="mb-2">
+            <p className="text-sm font-medium">{user.name}</p>
+            <p className="text-xs text-muted-foreground">{user.email}</p>
+          </div>
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <LogOut className="h-4 w-4" />
+              Cerrar Sesion
+            </button>
+          </form>
         </div>
-        <form action={signOutAction}>
-          <button
-            type="submit"
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <LogOut className="h-4 w-4" />
-            Cerrar Sesion
-          </button>
-        </form>
       </SidebarFooter>
     </Sidebar>
   )

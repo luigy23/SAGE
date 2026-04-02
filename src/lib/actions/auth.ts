@@ -4,7 +4,6 @@ import { signIn } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { redirect } from "next/navigation"
-import { Modalidad } from "@/generated/prisma/enums"
 
 type RegisterState = {
   error?: string
@@ -31,17 +30,22 @@ export async function registerAction(_prevState: RegisterState, formData: FormDa
   const facultad = formData.get("facultad") as string
   const programa = formData.get("programa") as string
   const celular = (formData.get("celular") as string) || ""
-  const sede = formData.get("sede") as string
-  const modalidad = formData.get("modalidad") as Modalidad
+  
+  // Obtenemos el texto crudo del frontend
+  const sedeRaw = formData.get("sede") as string
+  const modalidadRaw = formData.get("modalidad") as string
 
-  const doctorado = formData.get("doctorado") === "on"
-  const cargoAdministrativo = formData.get("cargoAdministrativo") === "on"
-  const proyectosActivos = formData.get("proyectosActivos") === "on"
+  // Parsear checkboxes
+  const doctorado = formData.get("doctorado") === "true"
+  const cargoAdministrativo = formData.get("cargoAdministrativo") === "true"
+  const proyectosActivos = formData.get("proyectosActivos") === "true"
 
-  // Valores para preservar el formulario en caso de error
-  const values = { email, nombre, cedula, facultad, programa, celular, sede, modalidad: modalidad as string, doctorado, cargoAdministrativo, proyectosActivos }
+  const values = { 
+    email, nombre, cedula, facultad, programa, celular, 
+    sede: sedeRaw, modalidad: modalidadRaw, doctorado, cargoAdministrativo, proyectosActivos 
+  }
 
-  if (!email || !password || !nombre || !cedula || !facultad || !programa || !modalidad || !sede) {
+  if (!email || !password || !nombre || !cedula || !facultad || !programa || !modalidadRaw || !sedeRaw) {
     return { error: "Todos los campos obligatorios deben ser completados.", values }
   }
 
@@ -81,6 +85,22 @@ export async function registerAction(_prevState: RegisterState, formData: FormDa
 
     const hashedPassword = await bcrypt.hash(password, 10)
 
+    // EL DICCIONARIO: Traduce lo que envía el formulario a lo que exige el Acuerdo 048
+    const diccionarioModalidad: Record<string, string> = {
+      "TCP": "PLANTA_TC",
+      "MTP": "PLANTA_MT",
+      "TCO": "OCASIONAL_TC",
+      "MTO": "OCASIONAL_MT",
+      "CATEDRA": "CATEDRA",
+      "VISITANTE": "VISITANTE",
+      "INVITADO": "INVITADO"
+    }
+
+    // Transformamos las variables
+    const sedeFormateada = sedeRaw.toUpperCase() as import("@/generated/prisma/client").Sede;
+    const modalidadTraducida = (diccionarioModalidad[modalidadRaw.toUpperCase()] || modalidadRaw);
+    const modalidadFormateada = modalidadTraducida as import("@/generated/prisma/client").Modalidad;
+
     await prisma.docente.create({
       data: {
         email,
@@ -90,8 +110,8 @@ export async function registerAction(_prevState: RegisterState, formData: FormDa
         facultad,
         programa,
         celular: celular || null,
-        sede,
-        modalidad,
+        sedeBase: sedeFormateada,
+        modalidad: modalidadFormateada,
         doctorado,
         cargoAdministrativo,
         proyectosActivos,
@@ -101,7 +121,7 @@ export async function registerAction(_prevState: RegisterState, formData: FormDa
     console.error("Register error:", error)
     const code = (error as { code?: string })?.code
     if (code === "ENETUNREACH" || code === "P1001" || code === "P1008") {
-      return { error: "No se pudo conectar a la base de datos. Verifica tu conexión de red e intenta de nuevo.", values }
+      return { error: "No se pudo conectar a la base de datos. Verifica tu conexión e intenta de nuevo.", values }
     }
     if (code === "P2002") {
       return { error: "Ya existe un docente con ese email o cédula.", values }

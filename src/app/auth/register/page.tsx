@@ -28,7 +28,6 @@ import { SEDES } from "@/lib/constants"
 const FACULTAD_PROGRAMAS: Record<string, string[]> = {
   "Ingeniería": [
     "Ingeniería de Software",
-    "Ingeniería de Sistemas",
     "Ingeniería Civil",
     "Ingeniería Agrícola",
     "Ingeniería Electrónica",
@@ -387,46 +386,54 @@ export default function RegisterPage() {
           </div>
 
           {/* ── Fila 6: Checkboxes booleanos ── */}
+          {/*
+            NOTA: Shadcn <Checkbox> es un botón Radix, NO un <input type="checkbox">.
+            No serializa a FormData. Usamos hidden inputs sincronizados con el state.
+          */}
+          <input type="hidden" name="doctorado" value={hasDoctorado ? "true" : "false"} />
+          <input type="hidden" name="cargoAdministrativo" value={hasCargoAdministrativo ? "true" : "false"} />
+          <input type="hidden" name="proyectosActivos" value={hasProyectosActivos ? "true" : "false"} />
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <label
-              htmlFor="doctorado"
+              htmlFor="doctorado-cb"
               className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 cursor-pointer hover:bg-gray-50 transition-colors duration-200"
             >
-              <Checkbox id="doctorado" name="doctorado" checked={hasDoctorado} onCheckedChange={(checked: boolean) => setHasDoctorado(checked)} />
+              <Checkbox id="doctorado-cb" checked={hasDoctorado} onCheckedChange={(checked: boolean) => setHasDoctorado(checked)} />
               <span className="text-sm text-gray-700">Doctorado</span>
             </label>
             <label
-              htmlFor="hasCargoAdministrativo"
+              htmlFor="hasCargoAdministrativo-cb"
               className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 cursor-pointer hover:bg-gray-50 transition-colors duration-200"
             >
               <Checkbox
-                id="hasCargoAdministrativo"
+                id="hasCargoAdministrativo-cb"
                 checked={hasCargoAdministrativo}
                 onCheckedChange={(checked: boolean) => setHasCargoAdministrativo(checked)}
               />
               <span className="text-sm text-gray-700">Cargo administrativo</span>
             </label>
             <label
-              htmlFor="proyectosActivos"
+              htmlFor="proyectosActivos-cb"
               className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 cursor-pointer hover:bg-gray-50 transition-colors duration-200"
             >
-              <Checkbox id="proyectosActivos" name="proyectosActivos" checked={hasProyectosActivos} onCheckedChange={(checked: boolean) => setHasProyectosActivos(checked)} />
+              <Checkbox id="proyectosActivos-cb" checked={hasProyectosActivos} onCheckedChange={(checked: boolean) => setHasProyectosActivos(checked)} />
               <span className="text-sm text-gray-700">Proyectos activos</span>
             </label>
           </div>
 
-          {/* ── Campo condicional: Cargo Administrativo (Acuerdo 048) ── */}
+          {/* ── Campo condicional: Tipo de Cargo Administrativo (Acuerdo 048) ── */}
           {hasCargoAdministrativo && (
             <div className="space-y-2">
-              <Label htmlFor="cargoAdministrativo" className={labelStyle}>Cargo administrativo</Label>
+              <Label htmlFor="tipoCargo" className={labelStyle}>Tipo de cargo administrativo</Label>
               <Select
-                name="cargoAdministrativo"
+                name="tipoCargo"
                 required
                 value={selectedCargo}
                 onValueChange={setSelectedCargo}
               >
                 <SelectTrigger
-                  id="cargoAdministrativo"
+                  id="tipoCargo"
                   className={`${inputStyle} ${hasCargoAdministrativo && !selectedCargo ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : ""}`}
                 >
                   <SelectValue placeholder="Seleccionar cargo" />
