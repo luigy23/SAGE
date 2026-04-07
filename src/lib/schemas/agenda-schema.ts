@@ -88,11 +88,20 @@ export type CursoAgendaFormData = z.infer<typeof cursoAgendaSchema>
 export const actividadSchema = z.object({
   nombre: z.string().min(1, "El nombre de la actividad es obligatorio"),
   descripcion: z.string().optional().default(""),
-  dedicacionPeriodo: z.coerce
+  horasSemanales: z.coerce
     .number()
     .min(0, "No puede ser negativo")
-    .max(880, "La dedicación máxima semestral es de 880 horas."),
-})
+    .max(40, "No puede exceder las 40 horas semanales."),
+  semanas: z.coerce
+    .number()
+    .int("Debe ser un número entero")
+    .min(0, "No puede ser negativo")
+    .max(22, "El Acuerdo 048 establece un máximo de 22 semanas por semestre."),
+  dedicacionPeriodo: z.coerce.number().optional().default(0),
+}).transform((data) => ({
+  ...data,
+  dedicacionPeriodo: data.horasSemanales * data.semanas
+}))
 
 export type ActividadFormData = z.infer<typeof actividadSchema>
 
@@ -128,18 +137,22 @@ export type DocenteFlags = {
 
 export function createAgendaSchema(maxHoras: number, esEstricto: boolean, flags: DocenteFlags) {
   return agendaWizardBaseSchema.superRefine((data, ctx) => {
-    const totalHoras = calcularTotalHoras(data);
+    const totalHorasSemestrales = calcularTotalHoras(data);
+    const maxHorasSemestrales = maxHoras * 22; // Convert weekly limit to semestral
+    const TOLERANCIA_SEMANAL = 0.5;
+    const minRequerido = (maxHoras - TOLERANCIA_SEMANAL) * 22;
+    const maxPermitido = (maxHoras + TOLERANCIA_SEMANAL) * 22;
     
-    // 1. REGLA DE TOPE MÁXIMO
-    if (esEstricto && totalHoras > maxHoras) {
+    // 1. REGLA DE TOPE MÁXIMO (Semestral vs Semestral)
+    if (esEstricto && (totalHorasSemestrales < minRequerido || totalHorasSemestrales > maxPermitido)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `El total de horas (${totalHoras}) supera el máximo permitido (${maxHoras}h) para su modalidad.`,
+        message: `Su dedicación actual es de ${totalHorasSemestrales}h semestrales. El contrato exige entre ${minRequerido}h y ${maxPermitido}h.`,
         path: ["_horasExcedidas"],
       });
     }
 
-    // 2. REGLA ARTÍCULO 10: Gestión Académico Administrativa
+    // 2. REGLA ARTÍCULO 10: Gestión Académico Administrativa (Semestral vs Semestral)
     const horasGestion = data.actividadesGestion.reduce((acc, item) => acc + (Number(item.dedicacionPeriodo) || 0), 0);
     if (horasGestion > 0 && !flags.cargoAdministrativo) {
       ctx.addIssue({
@@ -150,11 +163,11 @@ export function createAgendaSchema(maxHoras: number, esEstricto: boolean, flags:
     }
 
     // El límite del 20% para gestión se calcula sobre la dedicación total del semestre
-    const limiteGestion = maxHoras * 0.20; 
-    if (flags.cargoAdministrativo && horasGestion > limiteGestion) {
+    const limiteGestionSemestral = maxHorasSemestrales * 0.20; 
+    if (flags.cargoAdministrativo && horasGestion > limiteGestionSemestral) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `Las horas de gestión (${horasGestion}h) no pueden exceder el 20% de su tiempo laboral (${limiteGestion}h).`,
+        message: `Las horas de gestión semestrales (${horasGestion}h) no pueden exceder el 20% de su carga laboral (${limiteGestionSemestral}h).`,
         path: ["actividadesGestion"], 
       });
     }
@@ -192,6 +205,8 @@ export const EMPTY_CURSO: CursoAgendaFormData = {
 export const EMPTY_ACTIVIDAD: ActividadFormData = {
   nombre: "",
   descripcion: "",
+  horasSemanales: 0,
+  semanas: 0,
   dedicacionPeriodo: 0,
 }
 

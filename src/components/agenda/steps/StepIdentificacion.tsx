@@ -1,6 +1,7 @@
 "use client"
 
 import type { Docente } from "@/generated/prisma/client"
+import { getMaxHoras } from "@/lib/utils/periodo"
 import {
   Card,
   CardContent,
@@ -24,7 +25,7 @@ import {
  *
  * Muestra los datos del docente en campos disabled (solo lectura).
  * Muestra los booleanos (doctorado, cargoAdministrativo, proyectosActivos) como Badges.
- * Muestra el maxHoras calculado según la modalidad.
+ * Calcula el maxHoras dinámicamente desde la modalidad usando getMaxHoras().
  *
  * Este paso NO tiene campos editables del formulario RHF.
  */
@@ -37,6 +38,9 @@ export function StepIdentificacion({
   maxHoras: number
   esEstricto: boolean
 }) {
+  // Derive limit from modality + sede — single source of truth
+  const { maxHoras: maxHorasCalc } = getMaxHoras(docente.modalidad, docente.sedeBase)
+
   // Mapeo de modalidad a label legible
   const modalidadLabels: Record<string, string> = {
     TCP: "Tiempo Completo Planta",
@@ -152,17 +156,17 @@ export function StepIdentificacion({
 
           <Separator className="my-4" />
 
-          {/* Regla de horas máximas */}
+          {/* Regla de horas máximas — dynamic from getMaxHoras */}
           <div className="flex items-start gap-3 rounded-lg border bg-muted/50 p-4">
             <Clock className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
             <div>
               <p className="text-sm font-semibold">
-                Máximo de dedicación: {maxHoras} horas
+                Máximo de dedicación: {maxHorasCalc} horas
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {esEstricto
-                  ? `Su modalidad (${docente.modalidad}) tiene un límite estricto de ${maxHoras} horas. No podrá enviar la agenda si lo excede.`
-                  : `Su modalidad (${docente.modalidad}) tiene un umbral de referencia de ${maxHoras} horas. Si lo excede, verá una advertencia pero podrá enviar la agenda.`}
+                  ? `Su modalidad (${docente.modalidad}) tiene un límite estricto de ${maxHorasCalc} horas. No podrá enviar la agenda si lo excede.`
+                  : `Su modalidad (${docente.modalidad}) tiene un umbral de referencia de ${maxHorasCalc} horas. Si lo excede, verá una advertencia pero podrá enviar la agenda.`}
               </p>
             </div>
           </div>

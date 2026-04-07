@@ -53,6 +53,36 @@ enum EstadoFormulario {
   RECHAZADO
 }
 
+/// Estados de cuenta de un docente para acceso al sistema
+enum EstadoCuenta {
+  PENDIENTE
+  ACTIVO
+  INACTIVO
+}
+
+/// Estados del ciclo de vida de un período académico
+enum EstadoPeriodo {
+  ABIERTO
+  CERRADO
+}
+
+// ==========================================
+// PERÍODOS ACADÉMICOS — Reloj global del sistema SAGE
+// Solo el Administrador gestiona los períodos.
+// ==========================================
+
+model PeriodoAcademico {
+  id          String        @id @default(cuid())
+  nombre      String        @unique // Ej: "2026-1", "2026-2"
+  fechaInicio DateTime
+  fechaFin    DateTime
+  estado      EstadoPeriodo @default(ABIERTO)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@map("periodos_academicos")
+}
+
 // ==========================================
 // CATÁLOGO MAESTRO — Inventario oficial de materias
 // Solo el Administrador gestiona este catálogo.
@@ -87,17 +117,22 @@ model Docente {
   cedula   String @unique
 
   // Datos institucionales
-  rol       Rol       @default(DOCENTE)
-  sedeBase  Sede      // Sede contractual obligatoria
-  modalidad Modalidad // Determina límites de carga (Art. 4)
+  rol       Rol          @default(DOCENTE)
+  estadoCuenta EstadoCuenta @default(PENDIENTE) 
+  sedeBase  Sede         // Sede contractual obligatoria
+  modalidad Modalidad    // Determina límites de carga (Art. 4)
   facultad  String
-  programa  String    // Programa o Departamento
+  programa  String       // Programa o Departamento
   celular   String?
 
   // Flags derivados del Acuerdo 048
   doctorado           Boolean @default(false) // Art. 4 Par. 3: vinculación a grupo de investigación
   cargoAdministrativo Boolean @default(false) // Art. 10: gestión no puede exceder 20%
+  tipoCargo           String?                 // Tipo específico de cargo (Jefe de Programa, Decano, etc.)
   proyectosActivos    Boolean @default(false) // Art. 3 Par. 1: reduce mínimo de docencia
+
+  // Gatekeeper: el docente debe confirmar su perfil al menos una vez antes de acceder a la Agenda
+  perfilVerificado    Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

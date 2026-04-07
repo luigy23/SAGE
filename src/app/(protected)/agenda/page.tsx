@@ -46,6 +46,15 @@ export default async function AgendaPage() {
   if (!docente) redirect("/auth/login")
 
   // ==========================================
+  // 1b. GATEKEEPER — Profile Verification Guard
+  // New users must confirm their academic conditions
+  // at least once before accessing the FO-19 Agenda.
+  // ==========================================
+  if (!docente.perfilVerificado) {
+    redirect("/perfil/editar?aviso=requerido")
+  }
+
+  // ==========================================
   // 2. Periodo activo
   // ==========================================
   const periodo = getPeriodoActivo()
@@ -143,6 +152,8 @@ export default async function AgendaPage() {
         (a) => ({
           nombre: a.nombre,
           descripcion: a.descripcion || "",
+          horasSemanales: 0,
+          semanas: 0,
           dedicacionPeriodo: a.dedicacionPeriodo,
         })
       ),
@@ -150,6 +161,8 @@ export default async function AgendaPage() {
         (a) => ({
           nombre: a.nombre,
           descripcion: a.descripcion || "",
+          horasSemanales: 0,
+          semanas: 0,
           dedicacionPeriodo: a.dedicacionPeriodo,
         })
       ),
@@ -157,12 +170,16 @@ export default async function AgendaPage() {
         (a) => ({
           nombre: a.nombre,
           descripcion: a.descripcion || "",
+          horasSemanales: 0,
+          semanas: 0,
           dedicacionPeriodo: a.dedicacionPeriodo,
         })
       ),
       actividadesGestion: agenda.actividadesGestion.map((a) => ({
         nombre: a.nombre,
         descripcion: a.descripcion || "",
+        horasSemanales: 0,
+        semanas: 0,
         dedicacionPeriodo: a.dedicacionPeriodo,
       })),
     }

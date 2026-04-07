@@ -8,6 +8,10 @@ import {
   Calendar,
   ClipboardCheck,
   LogOut,
+  ShieldCheck,
+  BookOpen,
+  CalendarDays,
+  Users,
 } from "lucide-react"
 import {
   Sidebar,
@@ -20,6 +24,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
 } from "@/components/ui/sidebar"
 import { signOutAction } from "@/lib/actions/sign-out"
 
@@ -31,7 +38,7 @@ const navItems = [
 
 const profileItem = { title: "Mi Perfil", href: "/perfil", icon: User }
 
-export function AppSidebar({ user }: { user: { name: string; email: string } }) {
+export function AppSidebar({ user }: { user: { name: string; email: string; rol?: string } }) {
   const pathname = usePathname()
 
   return (
@@ -60,6 +67,53 @@ export function AppSidebar({ user }: { user: { name: string; email: string } }) 
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              
+              {/* ADMIN ONLY LINKS - GRUPADOS */}
+              {user.rol === "ADMIN" && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton>
+                    <ShieldCheck />
+                    <span className="font-semibold">Administración</span>
+                  </SidebarMenuButton>
+                  <SidebarMenuSub>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton 
+                        asChild 
+                        isActive={pathname.startsWith("/admin/docentes")}
+                      >
+                        <Link href="/admin/docentes">
+                          <Users />
+                          <span>Gestión de Docentes</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton 
+                        asChild 
+                        isActive={pathname.startsWith("/admin/cursos")}
+                      >
+                        <Link href="/admin/cursos">
+                          <BookOpen />
+                          <span>Catálogo de Cursos</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton 
+                        asChild 
+                        isActive={pathname.startsWith("/admin/periodos")}
+                      >
+                        <Link href="/admin/periodos">
+                          <CalendarDays />
+                          <span>Periodos Académicos</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  </SidebarMenuSub>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

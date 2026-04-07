@@ -37,7 +37,7 @@ export async function upsertAgendaCompletaAction(
     return { error: "El periodo académico es obligatorio." }
   }
 
-  const { maxHoras, esEstricto } = getMaxHoras(docente.modalidad)
+  const { maxHoras, esEstricto } = getMaxHoras(docente.modalidad, docente.sedeBase)
   
   // NUEVO: Empaquetamos las banderas del docente
   const flags = {

@@ -22,6 +22,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Plus, Trash2 } from "lucide-react"
+import { CalculadoraActividad } from "@/components/agenda/CalculadoraActividad"
 
 /**
  * Paso 3 — Secciones 2 y 3: Investigación y Proyección Social
@@ -30,7 +31,10 @@ import { Plus, Trash2 } from "lucide-react"
  * - actividadesInvestigacion
  * - actividadesProyeccionSocial
  *
- * Cada actividad tiene: nombre, descripcion (textarea), dedicacionPeriodo.
+ * Cada actividad captura: nombre, horasSemanales, semanas, descripcion.
+ * La dedicacionPeriodo se calcula silenciosamente (horasSemanales × semanas)
+ * mediante el componente CalculadoraActividad.
+ *
  * Usa useFormContext() — no recibe form como prop.
  */
 export function StepInvestigacionProyeccion() {
@@ -73,6 +77,12 @@ export function StepInvestigacionProyeccion() {
               key={field.id}
               className="relative rounded-lg border p-4"
             >
+              {/* Silent calculator — renders nothing */}
+              <CalculadoraActividad
+                arrayName="actividadesInvestigacion"
+                index={index}
+              />
+
               <div className="mb-3 flex items-center justify-between">
                 <h4 className="text-sm font-semibold text-muted-foreground">
                   Actividad #{index + 1}
@@ -88,63 +98,102 @@ export function StepInvestigacionProyeccion() {
                 </Button>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField
-                  control={control}
-                  name={`actividadesInvestigacion.${index}.nombre`}
-                  render={({ field: f }) => (
-                    <FormItem>
-                      <FormLabel>Nombre de la actividad *</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...f}
-                          placeholder="Ej: Proyecto de investigación X"
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Nombre del proyecto o actividad de investigación
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <div className="grid gap-4 sm:grid-cols-12">
+                {/* Nombre — 6 columnas */}
+                <div className="sm:col-span-6">
+                  <FormField
+                    control={control}
+                    name={`actividadesInvestigacion.${index}.nombre`}
+                    render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel>Nombre de la actividad *</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...f}
+                            placeholder="Ej: Proyecto de investigación X"
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Nombre del proyecto o actividad de investigación
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
-                <FormField
-                  control={control}
-                  name={`actividadesInvestigacion.${index}.dedicacionPeriodo`}
-                  render={({ field: f }) => (
-                    <FormItem>
-                      <FormLabel>Dedicación (horas) *</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={880}
-                          step="0.5"
-                          name={f.name}
-                          ref={f.ref}
-                          onBlur={f.onBlur}
-                          value={f.value === 0 ? "" : f.value}
-                          placeholder="0"
-                          onChange={(e) => {
-                            const raw = e.target.value
-                            if (raw === "") { f.onChange(0); return }
-                            let val = parseFloat(raw)
-                            if (isNaN(val)) val = 0
-                            if (val > 880) val = 880
-                            f.onChange(val)
-                          }}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Horas totales durante el semestre
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* Horas semanales — 3 columnas */}
+                <div className="sm:col-span-3">
+                  <FormField
+                    control={control}
+                    name={`actividadesInvestigacion.${index}.horasSemanales`}
+                    render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel>Horas/semana *</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={40}
+                            step="0.5"
+                            name={f.name}
+                            ref={f.ref}
+                            onBlur={f.onBlur}
+                            value={f.value === 0 ? "" : f.value}
+                            placeholder="0"
+                            onChange={(e) => {
+                              const raw = e.target.value
+                              if (raw === "") { f.onChange(0); return }
+                              let val = parseFloat(raw)
+                              if (isNaN(val)) val = 0
+                              if (val > 40) val = 40
+                              f.onChange(val)
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
-                <div className="sm:col-span-2">
+                {/* Semanas — 3 columnas */}
+                <div className="sm:col-span-3">
+                  <FormField
+                    control={control}
+                    name={`actividadesInvestigacion.${index}.semanas`}
+                    render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel>Semanas *</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={22}
+                            step={1}
+                            name={f.name}
+                            ref={f.ref}
+                            onBlur={f.onBlur}
+                            value={f.value === 0 ? "" : f.value}
+                            placeholder="0"
+                            onChange={(e) => {
+                              const raw = e.target.value
+                              if (raw === "") { f.onChange(0); return }
+                              let val = parseInt(raw, 10)
+                              if (isNaN(val)) val = 0
+                              if (val > 22) val = 22
+                              f.onChange(val)
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Descripción — 12 columnas (full width) */}
+                <div className="sm:col-span-12">
                   <FormField
                     control={control}
                     name={`actividadesInvestigacion.${index}.descripcion`}
@@ -170,7 +219,7 @@ export function StepInvestigacionProyeccion() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => appendInv({ ...EMPTY_ACTIVIDAD })}
+            onClick={() => appendInv({ ...EMPTY_ACTIVIDAD, horasSemanales: 0, semanas: 0 })}
             className="w-full border-dashed"
           >
             <Plus className="mr-2 h-4 w-4" />
@@ -202,6 +251,12 @@ export function StepInvestigacionProyeccion() {
               key={field.id}
               className="relative rounded-lg border p-4"
             >
+              {/* Silent calculator — renders nothing */}
+              <CalculadoraActividad
+                arrayName="actividadesProyeccionSocial"
+                index={index}
+              />
+
               <div className="mb-3 flex items-center justify-between">
                 <h4 className="text-sm font-semibold text-muted-foreground">
                   Actividad #{index + 1}
@@ -217,63 +272,102 @@ export function StepInvestigacionProyeccion() {
                 </Button>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField
-                  control={control}
-                  name={`actividadesProyeccionSocial.${index}.nombre`}
-                  render={({ field: f }) => (
-                    <FormItem>
-                      <FormLabel>Nombre de la actividad *</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...f}
-                          placeholder="Ej: Diplomado en gestión ambiental"
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Nombre del proyecto o actividad de proyección social
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <div className="grid gap-4 sm:grid-cols-12">
+                {/* Nombre — 6 columnas */}
+                <div className="sm:col-span-6">
+                  <FormField
+                    control={control}
+                    name={`actividadesProyeccionSocial.${index}.nombre`}
+                    render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel>Nombre de la actividad *</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...f}
+                            placeholder="Ej: Diplomado en gestión ambiental"
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Nombre del proyecto o actividad de proyección social
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
-                <FormField
-                  control={control}
-                  name={`actividadesProyeccionSocial.${index}.dedicacionPeriodo`}
-                  render={({ field: f }) => (
-                    <FormItem>
-                      <FormLabel>Dedicación (horas) *</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={880}
-                          step="0.5"
-                          name={f.name}
-                          ref={f.ref}
-                          onBlur={f.onBlur}
-                          value={f.value === 0 ? "" : f.value}
-                          placeholder="0"
-                          onChange={(e) => {
-                            const raw = e.target.value
-                            if (raw === "") { f.onChange(0); return }
-                            let val = parseFloat(raw)
-                            if (isNaN(val)) val = 0
-                            if (val > 880) val = 880
-                            f.onChange(val)
-                          }}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Horas totales durante el semestre
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* Horas semanales — 3 columnas */}
+                <div className="sm:col-span-3">
+                  <FormField
+                    control={control}
+                    name={`actividadesProyeccionSocial.${index}.horasSemanales`}
+                    render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel>Horas/semana *</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={40}
+                            step="0.5"
+                            name={f.name}
+                            ref={f.ref}
+                            onBlur={f.onBlur}
+                            value={f.value === 0 ? "" : f.value}
+                            placeholder="0"
+                            onChange={(e) => {
+                              const raw = e.target.value
+                              if (raw === "") { f.onChange(0); return }
+                              let val = parseFloat(raw)
+                              if (isNaN(val)) val = 0
+                              if (val > 40) val = 40
+                              f.onChange(val)
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
-                <div className="sm:col-span-2">
+                {/* Semanas — 3 columnas */}
+                <div className="sm:col-span-3">
+                  <FormField
+                    control={control}
+                    name={`actividadesProyeccionSocial.${index}.semanas`}
+                    render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel>Semanas *</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={22}
+                            step={1}
+                            name={f.name}
+                            ref={f.ref}
+                            onBlur={f.onBlur}
+                            value={f.value === 0 ? "" : f.value}
+                            placeholder="0"
+                            onChange={(e) => {
+                              const raw = e.target.value
+                              if (raw === "") { f.onChange(0); return }
+                              let val = parseInt(raw, 10)
+                              if (isNaN(val)) val = 0
+                              if (val > 22) val = 22
+                              f.onChange(val)
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Descripción — 12 columnas (full width) */}
+                <div className="sm:col-span-12">
                   <FormField
                     control={control}
                     name={`actividadesProyeccionSocial.${index}.descripcion`}
@@ -299,7 +393,7 @@ export function StepInvestigacionProyeccion() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => appendPro({ ...EMPTY_ACTIVIDAD })}
+            onClick={() => appendPro({ ...EMPTY_ACTIVIDAD, horasSemanales: 0, semanas: 0 })}
             className="w-full border-dashed"
           >
             <Plus className="mr-2 h-4 w-4" />

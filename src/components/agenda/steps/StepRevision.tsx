@@ -17,13 +17,18 @@ import {
   Users,
   Building2,
   GraduationCap,
+  AlertTriangle,
+  XCircle,
 } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 /**
  * Paso 5 — Revisión y Resumen
  *
  * Muestra un resumen de todos los arrays del formulario con subtotales
- * y un gran total. NO tiene campos editables propios.
+ * y un GRAN TOTAL con doble presentación:
+ * - Row 1: Dedicación Semestral (total absoluto en horas del periodo)
+ * - Row 2: Equivalencia Promedio Semanal vs. límite legal de la modalidad
  *
  * El botón de envío vive en el AgendaWizardForm (orquestador)
  * porque necesita manejar el estado de submit y la lógica de disabled.
@@ -39,6 +44,9 @@ export function StepRevision({
   maxHoras: number
   esEstricto: boolean
 }) {
+  // Observar el estado del formulario globalmente
+  const { formState: { errors } } = useFormContext<AgendaWizardFormData>()
+
   // Observar todos los arrays del formulario
   const cursos = useWatch<AgendaWizardFormData, "cursos">({ name: "cursos" }) || []
   const otrasDocencia = useWatch<AgendaWizardFormData, "otrasActividadesDocencia">({ name: "otrasActividadesDocencia" }) || []
@@ -46,7 +54,7 @@ export function StepRevision({
   const proyeccion = useWatch<AgendaWizardFormData, "actividadesProyeccionSocial">({ name: "actividadesProyeccionSocial" }) || []
   const gestion = useWatch<AgendaWizardFormData, "actividadesGestion">({ name: "actividadesGestion" }) || []
 
-  // Calcular subtotales
+  // Calcular subtotales (horas semestrales)
   const sum = (items: { dedicacionPeriodo?: number }[]) =>
     items.reduce((acc, i) => acc + (Number(i?.dedicacionPeriodo) || 0), 0)
 
@@ -58,7 +66,13 @@ export function StepRevision({
   const totalGestion = sum(gestion)
   const granTotal = totalDocencia + totalInvestigacion + totalProyeccion + totalGestion
 
-  const excedido = granTotal > maxHoras
+  // =========================================================
+  // Equivalencia Promedio Semanal — compara contra maxHoras
+  // =========================================================
+  const SEMANAS_REFERENCIA = 22
+  const promedioSemanal = granTotal / SEMANAS_REFERENCIA
+  const promedioRedondeado = Math.round(promedioSemanal * 10) / 10
+  const excedidoSemanal = promedioSemanal > maxHoras
 
   return (
     <div className="space-y-6">
@@ -92,6 +106,12 @@ export function StepRevision({
               <span className="text-muted-foreground">Modalidad: </span>
               <Badge variant="secondary" className="ml-1">
                 {docente.modalidad}
+              </Badge>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Sede: </span>
+              <Badge variant="secondary" className="ml-1">
+                {docente.sedeBase}
               </Badge>
             </div>
           </div>
@@ -276,53 +296,67 @@ export function StepRevision({
         </Card>
       )}
 
-      {/* Gran Total */}
+      {/* ==========================================
+          GRAN TOTAL — Doble presentación legal
+          Row 1: Dedicación Semestral (absoluta)
+          Row 2: Equivalencia Promedio Semanal vs. maxHoras
+          ========================================== */}
       <Card
-        className={
-          excedido && esEstricto
+        className={cn(
+          "print:border print:border-gray-400 print:bg-gray-50",
+          excedidoSemanal
             ? "border-destructive/50 bg-destructive/5"
-            : excedido && !esEstricto
-              ? "border-yellow-500/50 bg-yellow-500/5"
-              : "border-primary/30 bg-primary/5"
-        }
+            : "border-primary/30 bg-primary/5"
+        )}
       >
-        <CardContent className="py-6">
-          <div className="flex items-center justify-between">
+        <CardContent className="py-6 space-y-4">
+          {/* Row 1: Dedicación Semestral (absoluta) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b pb-4 border-primary/20">
             <div>
-              <h3 className="text-lg font-bold">GRAN TOTAL</h3>
-              <p className="text-sm text-muted-foreground">
-                Suma de todas las secciones
+              <h3 className="text-xl font-bold uppercase">Dedicación Semestral</h3>
+              <p className="text-sm text-muted-foreground print:text-gray-500">
+                Suma absoluta de todas las horas en el periodo
               </p>
             </div>
-            <div className="text-right">
-              <p
-                className={`text-3xl font-bold tabular-nums ${
-                  excedido && esEstricto
-                    ? "text-destructive"
-                    : excedido && !esEstricto
-                      ? "text-yellow-600 dark:text-yellow-400"
-                      : "text-primary"
-                }`}
-              >
-                {granTotal}h
-              </p>
-              <p className="text-sm text-muted-foreground">
-                de {maxHoras}h máximo
-              </p>
-            </div>
+            <span className="text-3xl font-bold tabular-nums text-primary mt-2 sm:mt-0 print:text-black">
+              {granTotal} horas
+            </span>
           </div>
 
-          {excedido && esEstricto && (
-            <p className="mt-3 text-sm font-medium text-destructive">
-              ⛔ La dedicación total supera el máximo permitido. Reduzca horas
-              en alguna sección para poder enviar la agenda.
-            </p>
-          )}
-          {excedido && !esEstricto && (
-            <p className="mt-3 text-sm font-medium text-yellow-700 dark:text-yellow-400">
-              ⚠️ Advertencia: La carga supera las {maxHoras} horas de referencia
-              para modalidad Cátedra. Puede enviar, pero revise la distribución.
-            </p>
+          {/* Row 2: Equivalencia Promedio Semanal vs límite legal */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-2">
+            <div>
+              <h3 className={cn(
+                "text-lg font-bold",
+                (errors as Record<string, any>)._horasExcedidas ? "text-destructive" : "text-muted-foreground"
+              )}>
+                Equivalencia Promedio Semanal
+              </h3>
+              <p className="text-sm text-muted-foreground print:text-gray-500">
+                Modalidad ({docente.modalidad}): <strong>{maxHoras} hrs/semana</strong>
+              </p>
+            </div>
+            <span className={cn(
+              "text-2xl font-bold tabular-nums mt-2 sm:mt-0 print:text-black",
+              (errors as Record<string, any>)._horasExcedidas ? "text-destructive" : "text-green-600"
+            )}>
+              {promedioRedondeado} hrs/semana
+            </span>
+          </div>
+
+          {/* Clean Validation Hook Alert directly tied to Zod tolerances */}
+          {(errors as Record<string, any>)._horasExcedidas && (
+            <div className="mt-4 flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+              <div>
+                <p className="text-sm font-semibold text-destructive">
+                  Validación Contractual Estricta
+                </p>
+                <p className="mt-1 text-sm text-destructive/80">
+                  {String((errors as Record<string, any>)._horasExcedidas.message)}
+                </p>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

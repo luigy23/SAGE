@@ -8,7 +8,6 @@ import { toast } from "sonner"
 import type { Docente, CursoGuardado } from "@/generated/prisma/client"
 import {
   createAgendaSchema,
-  calcularTotalHoras,
   DEFAULT_FORM_VALUES,
   type AgendaWizardFormData,
 } from "@/lib/schemas/agenda-schema"
@@ -170,9 +169,13 @@ export function AgendaWizardForm({
   const [isPending, startTransition] = useTransition()
   const [isSavingDraft, setIsSavingDraft] = useState(false)
 
+  // =========================================================
+  // Single Source of Truth: Dynamic legal limits (Art. 4)
+  // Cátedra limit depends on docente.sedeBase (16 ó 19 h/sem)
+  // =========================================================
   const { maxHoras, esEstricto } = useMemo(
-    () => getMaxHoras(docente.modalidad),
-    [docente.modalidad]
+    () => getMaxHoras(docente.modalidad, docente.sedeBase),
+    [docente.modalidad, docente.sedeBase]
   )
 
   const schema = useMemo(
@@ -199,10 +202,57 @@ export function AgendaWizardForm({
     mode: "onTouched",
   })
 
+  // =========================================================
+  // Validation Engine: Single Source of Truth
+  //
+  // Calculates totalHorasSemanales by deriving the average
+  // weekly hours from each item's dedicacionPeriodo/semanas.
+  //
+  // Formula per item:
+  //   weeklyAvg = dedicacionPeriodo / semanas
+  //   (if semanas is 0/undefined, fallback to 22 to avoid division by zero)
+  //
+  // Sum across ALL arrays: cursos, otrasActividadesDocencia,
+  // actividadesInvestigacion, actividadesProyeccionSocial,
+  // actividadesGestion.
+  // =========================================================
   const watchedData = useWatch({ control: form.control })
-  const totalHoras = calcularTotalHoras(watchedData as AgendaWizardFormData)
-  const envioDisabled =
-    (esEstricto && totalHoras > maxHoras) || isPending || isSavingDraft
+
+  const SEMANAS_DEFAULT = 22
+
+  // Cursos: each has its own .semanas and .dedicacionPeriodo
+  const totalCursosWeekly = watchedData.cursos?.reduce((acc, item) => {
+    const horas = Number(item?.dedicacionPeriodo) || 0
+    const sem = Number(item?.semanas) || SEMANAS_DEFAULT
+    return acc + (sem > 0 ? horas / sem : 0)
+  }, 0) || 0
+
+  // Activities: each has .dedicacionPeriodo and .semanas from the new schema
+  const activityArrayKeys = [
+    "otrasActividadesDocencia",
+    "actividadesInvestigacion",
+    "actividadesProyeccionSocial",
+    "actividadesGestion",
+  ] as const
+
+  const totalActividadesWeekly = activityArrayKeys.reduce((acc, key) => {
+    const items = watchedData[key] as { dedicacionPeriodo?: number; semanas?: number }[] | undefined
+    if (!items) return acc
+    return acc + items.reduce((sum, item) => {
+      const dedicacion = Number(item?.dedicacionPeriodo) || 0
+      const sem = Number(item?.semanas) || SEMANAS_DEFAULT
+      return sum + (sem > 0 ? dedicacion / sem : 0)
+    }, 0)
+  }, 0)
+
+  const totalHorasSemanales = totalCursosWeekly + totalActividadesWeekly
+
+  // =========================================================
+  // Envío bloqueado si:
+  // - esEstricto AND promedio semanal excede el límite legal
+  // - O hay una transición en progreso
+  // =========================================================
+  const envioDisabled = (esEstricto && totalHorasSemanales > maxHoras) || isPending || isSavingDraft
 
   async function handleNext() {
     const currentFields = steps[currentStep]?.fieldsToValidate || []
@@ -289,7 +339,7 @@ export function AgendaWizardForm({
           />
         )
       case "docencia":
-        return <StepDocencia cursosGuardados={cursosGuardados} />
+        return <StepDocencia cursosGuardados={cursosGuardados} modalidad={docente.modalidad} sedeBase={docente.sedeBase} />
       case "investigacion":
         return <StepInvestigacionProyeccion />
       case "gestion":

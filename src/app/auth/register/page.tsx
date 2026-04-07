@@ -6,7 +6,6 @@ import { registerAction } from "@/lib/actions/auth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Card,
   CardContent,
@@ -58,21 +57,11 @@ const FACULTAD_PROGRAMAS: Record<string, string[]> = {
 }
 
 const MODALIDADES = [
-  { value: "TCP", label: "Tiempo Completo Planta" },
-  { value: "TCO", label: "Tiempo Completo Ocasional" },
-  { value: "MTP", label: "Medio Tiempo Planta" },
-  { value: "MTC", label: "Medio Tiempo Cátedra" },
+  { value: "PLANTA_TC", label: "Tiempo Completo Planta" },
+  { value: "OCASIONAL_TC", label: "Tiempo Completo Ocasional" },
+  { value: "PLANTA_MT", label: "Medio Tiempo Planta" },
+  { value: "OCASIONAL_MT", label: "Medio Tiempo Ocasional" },
   { value: "CATEDRA", label: "Cátedra" },
-]
-
-const CARGOS_ADMINISTRATIVOS = [
-  { value: "JEFE_PROGRAMA", label: "Jefe de Programa" },
-  { value: "JEFE_DEPARTAMENTO", label: "Jefe de Departamento" },
-  { value: "COORD_INVESTIGACION", label: "Coordinador de Centro de Investigación" },
-  { value: "COORD_EMPRENDIMIENTO", label: "Coordinador de Emprendimiento e Innovación" },
-  { value: "COORD_AUTOEVALUACION", label: "Coordinador de Autoevaluación y Calidad" },
-  { value: "COORD_AREA", label: "Coordinador de Área" },
-  { value: "OTRO_COMITE", label: "Otro (Miembro de Comité / Consejo)" },
 ]
 
 // =============================================
@@ -112,10 +101,6 @@ export default function RegisterPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
-  const [hasDoctorado, setHasDoctorado] = useState(false)
-  const [hasCargoAdministrativo, setHasCargoAdministrativo] = useState(false)
-  const [hasProyectosActivos, setHasProyectosActivos] = useState(false)
-  const [selectedCargo, setSelectedCargo] = useState("")
 
   // Restaurar valores de Select cuando el server action retorna error
   useEffect(() => {
@@ -125,13 +110,10 @@ export default function RegisterPage() {
       if (sv.programa) setSelectedPrograma(sv.programa)
       if (sv.sede) setSelectedSede(sv.sede)
       if (sv.modalidad) setSelectedModalidad(sv.modalidad)
-      setHasDoctorado(sv.doctorado)
-      setHasCargoAdministrativo(sv.cargoAdministrativo)
-      setHasProyectosActivos(sv.proyectosActivos)
     }
   }, [state])
 
-  const isFormInvalid = pending || password !== confirmPassword || !password || (hasCargoAdministrativo && !selectedCargo)
+  const isFormInvalid = pending || password !== confirmPassword || !password
 
   const programas = selectedFacultad ? FACULTAD_PROGRAMAS[selectedFacultad] || [] : []
 
@@ -374,81 +356,6 @@ export default function RegisterPage() {
               </Select>
             </div>
           </div>
-
-          {/* ── Separador visual ── */}
-          <div className="relative py-1">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-white px-3 text-gray-400">Información adicional</span>
-            </div>
-          </div>
-
-          {/* ── Fila 6: Checkboxes booleanos ── */}
-          {/*
-            NOTA: Shadcn <Checkbox> es un botón Radix, NO un <input type="checkbox">.
-            No serializa a FormData. Usamos hidden inputs sincronizados con el state.
-          */}
-          <input type="hidden" name="doctorado" value={hasDoctorado ? "true" : "false"} />
-          <input type="hidden" name="cargoAdministrativo" value={hasCargoAdministrativo ? "true" : "false"} />
-          <input type="hidden" name="proyectosActivos" value={hasProyectosActivos ? "true" : "false"} />
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <label
-              htmlFor="doctorado-cb"
-              className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 cursor-pointer hover:bg-gray-50 transition-colors duration-200"
-            >
-              <Checkbox id="doctorado-cb" checked={hasDoctorado} onCheckedChange={(checked: boolean) => setHasDoctorado(checked)} />
-              <span className="text-sm text-gray-700">Doctorado</span>
-            </label>
-            <label
-              htmlFor="hasCargoAdministrativo-cb"
-              className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 cursor-pointer hover:bg-gray-50 transition-colors duration-200"
-            >
-              <Checkbox
-                id="hasCargoAdministrativo-cb"
-                checked={hasCargoAdministrativo}
-                onCheckedChange={(checked: boolean) => setHasCargoAdministrativo(checked)}
-              />
-              <span className="text-sm text-gray-700">Cargo administrativo</span>
-            </label>
-            <label
-              htmlFor="proyectosActivos-cb"
-              className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 cursor-pointer hover:bg-gray-50 transition-colors duration-200"
-            >
-              <Checkbox id="proyectosActivos-cb" checked={hasProyectosActivos} onCheckedChange={(checked: boolean) => setHasProyectosActivos(checked)} />
-              <span className="text-sm text-gray-700">Proyectos activos</span>
-            </label>
-          </div>
-
-          {/* ── Campo condicional: Tipo de Cargo Administrativo (Acuerdo 048) ── */}
-          {hasCargoAdministrativo && (
-            <div className="space-y-2">
-              <Label htmlFor="tipoCargo" className={labelStyle}>Tipo de cargo administrativo</Label>
-              <Select
-                name="tipoCargo"
-                required
-                value={selectedCargo}
-                onValueChange={setSelectedCargo}
-              >
-                <SelectTrigger
-                  id="tipoCargo"
-                  className={`${inputStyle} ${hasCargoAdministrativo && !selectedCargo ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : ""}`}
-                >
-                  <SelectValue placeholder="Seleccionar cargo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CARGOS_ADMINISTRATIVOS.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {!selectedCargo && (
-                <p className="text-red-500 text-sm">Debe seleccionar un cargo administrativo para continuar</p>
-              )}
-            </div>
-          )}
 
           {/* ── Botón de envío ── */}
           <Button

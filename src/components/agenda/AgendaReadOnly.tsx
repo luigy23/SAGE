@@ -1,6 +1,7 @@
 "use client"
 
 import type { AgendaConRelaciones } from "@/lib/types/agenda"
+import { getMaxHoras } from "@/lib/utils/periodo"
 import {
   Card,
   CardContent,
@@ -19,12 +20,14 @@ import {
   Printer,
   CheckCircle2,
   Clock,
+  XCircle,
+  AlertTriangle,
 } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 // ==========================================
 // Helper: etiquetas de días para horarios
 // ==========================================
-
 const DIAS_LABELS: Record<string, string> = {
   lunes: "Lun",
   martes: "Mar",
@@ -38,7 +41,6 @@ const DIAS_LABELS: Record<string, string> = {
 // ==========================================
 // Sub-componente reutilizable: Sección de actividades
 // ==========================================
-
 interface ActividadItem {
   id: string
   nombre: string
@@ -104,17 +106,6 @@ function SectionCard({
 // ==========================================
 // Componente principal: AgendaReadOnly
 // ==========================================
-
-/**
- * AgendaReadOnly — Vista estrictamente estática de una agenda en estado ENVIADO.
- *
- * Características:
- * - CERO inputs, CERO botones de edición, CERO validaciones de formulario
- * - Reutiliza diseño de tarjetas (Card de Shadcn UI) del StepRevision
- * - Botón "Descargar PDF / Imprimir" que ejecuta window.print()
- * - Clases print:hidden en elementos no aptos para impresión
- * - Tabla detallada para cursos con horarios inline
- */
 export function AgendaReadOnly({
   agenda,
 }: {
@@ -123,9 +114,13 @@ export function AgendaReadOnly({
   const { docente } = agenda
 
   // ==========================================
+  // Dynamic legal limit — Single Source of Truth
+  // ==========================================
+  const { maxHoras, esEstricto } = getMaxHoras(docente.modalidad, docente.sedeBase)
+
+  // ==========================================
   // Calcular todos los totales una sola vez
   // ==========================================
-
   const subtotalCursos = agenda.cursos.reduce(
     (s, c) => s + c.dedicacionPeriodo,
     0
@@ -151,14 +146,19 @@ export function AgendaReadOnly({
     totalDocencia + totalInvestigacion + totalProyeccion + totalGestion
 
   // ==========================================
+  // Equivalencia Promedio Semanal
+  // ==========================================
+  const SEMANAS_REFERENCIA = 22
+  const promedioSemanal = granTotal / SEMANAS_REFERENCIA
+  const promedioRedondeado = Math.round(promedioSemanal * 10) / 10
+  const excedidoSemanal = promedioSemanal > maxHoras
+
+  // ==========================================
   // Render
   // ==========================================
-
   return (
     <div className="space-y-6">
-      {/* ==========================================
-          Header: Título, estado y botón de impresión
-          ========================================== */}
+      {/* Header: Título, estado y botón de impresión */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold sm:text-3xl">
@@ -205,9 +205,7 @@ export function AgendaReadOnly({
         </p>
       </div>
 
-      {/* ==========================================
-          Datos del Docente
-          ========================================== */}
+      {/* Datos del Docente */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -276,9 +274,7 @@ export function AgendaReadOnly({
         </CardContent>
       </Card>
 
-      {/* ==========================================
-          Sección 1: Docencia
-          ========================================== */}
+      {/* Sección 1: Docencia */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -434,9 +430,7 @@ export function AgendaReadOnly({
         </CardContent>
       </Card>
 
-      {/* ==========================================
-          Sección 2: Investigación
-          ========================================== */}
+      {/* Sección 2: Investigación */}
       <SectionCard
         icon={<FlaskConical className="h-5 w-5 print:hidden" />}
         title="2. Investigación"
@@ -445,9 +439,7 @@ export function AgendaReadOnly({
         totalLabel="TOTAL 2 — Investigación"
       />
 
-      {/* ==========================================
-          Sección 3: Proyección Social
-          ========================================== */}
+      {/* Sección 3: Proyección Social */}
       <SectionCard
         icon={<Users className="h-5 w-5 print:hidden" />}
         title="3. Proyección Social"
@@ -456,9 +448,7 @@ export function AgendaReadOnly({
         totalLabel="TOTAL 3 — Proyección Social"
       />
 
-      {/* ==========================================
-          Sección 4: Gestión (solo si tiene actividades)
-          ========================================== */}
+      {/* Sección 4: Gestión (solo si tiene actividades) */}
       {agenda.actividadesGestion.length > 0 && (
         <SectionCard
           icon={<Building2 className="h-5 w-5 print:hidden" />}
@@ -470,21 +460,69 @@ export function AgendaReadOnly({
       )}
 
       {/* ==========================================
-          Gran Total
+          GRAN TOTAL — Doble presentación legal
+          Row 1: Dedicación Semestral (absoluta)
+          Row 2: Equivalencia Promedio Semanal vs. maxHoras dinámico
           ========================================== */}
-      <Card className="border-primary/30 bg-primary/5 print:border print:border-gray-400 print:bg-gray-50">
-        <CardContent className="py-6">
-          <div className="flex items-center justify-between">
+      <Card
+        className={cn(
+          "print:border print:border-gray-400 print:bg-gray-50",
+          excedidoSemanal
+            ? "border-destructive/50 bg-destructive/5"
+            : "border-primary/30 bg-primary/5"
+        )}
+      >
+        <CardContent className="py-6 space-y-4">
+          {/* Row 1: Dedicación Semestral (absoluta) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b pb-4 border-primary/20">
             <div>
-              <h3 className="text-lg font-bold">GRAN TOTAL</h3>
+              <h3 className="text-xl font-bold uppercase">Dedicación Semestral</h3>
               <p className="text-sm text-muted-foreground print:text-gray-500">
-                Suma de todas las secciones
+                Suma absoluta de todas las horas en el periodo
               </p>
             </div>
-            <span className="text-3xl font-bold tabular-nums text-primary print:text-black">
-              {granTotal}h
+            <span className="text-3xl font-bold tabular-nums text-primary mt-2 sm:mt-0 print:text-black">
+              {granTotal} horas
             </span>
           </div>
+
+          {/* Row 2: Equivalencia Promedio Semanal vs límite legal */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-2">
+            <div>
+              <h3 className={cn(
+                "text-lg font-bold",
+                excedidoSemanal ? "text-destructive" : "text-muted-foreground"
+              )}>
+                Equivalencia Promedio Semanal
+              </h3>
+              <p className="text-sm text-muted-foreground print:text-gray-500">
+                Límite estricto por modalidad ({docente.modalidad}): <strong>{maxHoras} hrs/semana</strong>
+              </p>
+            </div>
+            <span className={cn(
+              "text-2xl font-bold tabular-nums mt-2 sm:mt-0 print:text-black",
+              excedidoSemanal ? "text-destructive" : "text-green-600"
+            )}>
+              {promedioRedondeado} hrs/semana
+            </span>
+          </div>
+
+          {/* Warning box when exceeded (read-only view — informational) */}
+          {excedidoSemanal && (
+            <div className="mt-2 flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4 print:hidden">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+              <div>
+                <p className="text-sm font-semibold text-destructive">
+                  ⚠️ Advertencia Legal
+                </p>
+                <p className="mt-1 text-sm text-destructive/80">
+                  La carga promedio ({promedioRedondeado} hrs/sem) supera el
+                  límite legal de {maxHoras} hrs/sem para la modalidad {docente.modalidad}.
+                  Esta agenda requiere revisión administrativa.
+                </p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
