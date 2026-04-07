@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../src/generated/prisma"
 }
 
@@ -72,8 +72,8 @@ enum EstadoPeriodo {
 // ==========================================
 
 model PeriodoAcademico {
-  id          String        @id @default(cuid())
-  nombre      String        @unique // Ej: "2026-1", "2026-2"
+  id        String        @id @default(cuid())
+  nombre    String        @unique // Ej: "2026-1", "2026-2"
   fechaInicio DateTime
   fechaFin    DateTime
   estado      EstadoPeriodo @default(ABIERTO)
@@ -117,7 +117,7 @@ model Docente {
   cedula   String @unique
 
   // Datos institucionales
-  rol       Rol          @default(DOCENTE)
+  rol          Rol          @default(DOCENTE)
   estadoCuenta EstadoCuenta @default(PENDIENTE) 
   sedeBase  Sede         // Sede contractual obligatoria
   modalidad Modalidad    // Determina límites de carga (Art. 4)
