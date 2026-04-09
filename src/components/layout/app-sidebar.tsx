@@ -8,6 +8,10 @@ import {
   Calendar,
   ClipboardCheck,
   LogOut,
+  ShieldCheck,
+  BookOpen,
+  CalendarDays,
+  Users,
 } from "lucide-react"
 import {
   Sidebar,
@@ -20,17 +24,21 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
 } from "@/components/ui/sidebar"
 import { signOutAction } from "@/lib/actions/sign-out"
 
 const navItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { title: "Mi Perfil", href: "/perfil", icon: User },
   { title: "Agenda Semestral", href: "/agenda", icon: Calendar },
   { title: "Monitoreo", href: "/monitoreo", icon: ClipboardCheck },
 ]
 
-export function AppSidebar({ user }: { user: { name: string; email: string } }) {
+const profileItem = { title: "Mi Perfil", href: "/perfil", icon: User }
+
+export function AppSidebar({ user }: { user: { name: string; email: string; rol?: string } }) {
   const pathname = usePathname()
 
   return (
@@ -59,25 +67,86 @@ export function AppSidebar({ user }: { user: { name: string; email: string } }) 
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              
+              {/* ADMIN ONLY LINKS - GRUPADOS */}
+              {user.rol === "ADMIN" && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton>
+                    <ShieldCheck />
+                    <span className="font-semibold">Administración</span>
+                  </SidebarMenuButton>
+                  <SidebarMenuSub>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton 
+                        asChild 
+                        isActive={pathname.startsWith("/admin/docentes")}
+                      >
+                        <Link href="/admin/docentes">
+                          <Users />
+                          <span>Gestión de Docentes</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton 
+                        asChild 
+                        isActive={pathname.startsWith("/admin/cursos")}
+                      >
+                        <Link href="/admin/cursos">
+                          <BookOpen />
+                          <span>Catálogo de Cursos</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton 
+                        asChild 
+                        isActive={pathname.startsWith("/admin/periodos")}
+                      >
+                        <Link href="/admin/periodos">
+                          <CalendarDays />
+                          <span>Periodos Académicos</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  </SidebarMenuSub>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t p-4">
-        <div className="mb-2">
-          <p className="text-sm font-medium">{user.name}</p>
-          <p className="text-xs text-muted-foreground">{user.email}</p>
+      <SidebarFooter className="p-4">
+        {/* Mi Perfil — isolated as a configuration-level item */}
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith(profileItem.href)}>
+              <Link href={profileItem.href}>
+                <profileItem.icon />
+                <span>{profileItem.title}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+
+        <div className="border-t pt-3 mt-2">
+          <div className="mb-2">
+            <p className="text-sm font-medium">{user.name}</p>
+            <p className="text-xs text-muted-foreground">{user.email}</p>
+          </div>
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <LogOut className="h-4 w-4" />
+              Cerrar Sesion
+            </button>
+          </form>
         </div>
-        <form action={signOutAction}>
-          <button
-            type="submit"
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <LogOut className="h-4 w-4" />
-            Cerrar Sesion
-          </button>
-        </form>
       </SidebarFooter>
     </Sidebar>
   )

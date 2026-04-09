@@ -33,10 +33,9 @@ export async function createAgendaAction(_prevState: unknown, formData: FormData
   if (!user) return { error: "No autenticado." }
 
   const periodo = formData.get("periodo") as string
-  const fechaStr = formData.get("fecha") as string
 
-  if (!periodo || !fechaStr) {
-    return { error: "Periodo y fecha son obligatorios." }
+  if (!periodo) {
+    return { error: "El periodo es obligatorio." }
   }
 
   const existing = await prisma.agendaSemestral.findUnique({
@@ -50,7 +49,6 @@ export async function createAgendaAction(_prevState: unknown, formData: FormData
     data: {
       docenteId: user.id,
       periodo,
-      fecha: new Date(fechaStr),
     },
   })
 

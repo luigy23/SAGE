@@ -29,6 +29,17 @@ export default async function DashboardPage() {
     },
   })
 
+  if (!docente) redirect("/auth/login")
+
+  // ==========================================
+  // GATEKEEPER — Profile Verification Guard
+  // New users must confirm their academic conditions
+  // at least once before accessing any feature.
+  // ==========================================
+  if (!docente.perfilVerificado) {
+    redirect("/perfil/editar?aviso=requerido")
+  }
+
   return (
     <div className="space-y-6">
       <div>

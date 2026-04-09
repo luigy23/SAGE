@@ -4,7 +4,72 @@ import { signIn } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { redirect } from "next/navigation"
-import { Modalidad } from "@/generated/prisma/enums"
+
+// =============================================
+// DICCIONARIO ESTRICTO: Facultad → Programa
+// Duplicado del frontend para validación server-side.
+// Impide corrupción de datos por payloads manipulados.
+// =============================================
+const FACULTAD_PROGRAMAS: Record<string, string[]> = {
+  "Ingeniería": [
+    "Ingeniería de Software",
+    "Ingeniería Civil",
+    "Ingeniería Agrícola",
+    "Ingeniería Electrónica",
+  ],
+  "Salud": [
+    "Medicina",
+    "Enfermería",
+  ],
+  "Educación": [
+    "Licenciatura en Educación Infantil",
+    "Licenciatura en Matemáticas",
+    "Licenciatura en Ciencias Naturales",
+  ],
+  "Economía y Administración": [
+    "Administración de Empresas",
+    "Contaduría Pública",
+    "Economía",
+  ],
+  "Ciencias Exactas y Naturales": [
+    "Biología",
+    "Matemática Aplicada",
+  ],
+  "Ciencias Sociales y Humanas": [
+    "Derecho",
+    "Psicología",
+    "Comunicación Social",
+  ],
+}
+
+// =============================================
+// DICCIONARIO DE MODALIDAD
+// Traduce las abreviaturas del formulario frontend
+// a los enum values reales de Prisma (Acuerdo 048).
+// =============================================
+const DICCIONARIO_MODALIDAD: Record<string, string> = {
+  "PLANTA_TC": "PLANTA_TC",
+  "PLANTA_MT": "PLANTA_MT",
+  "OCASIONAL_TC": "OCASIONAL_TC",
+  "OCASIONAL_MT": "OCASIONAL_MT",
+  "CATEDRA": "CATEDRA",
+  "VISITANTE": "VISITANTE",
+  "INVITADO": "INVITADO",
+  // Legacy frontend abbreviations (backward compat)
+  "TCP": "PLANTA_TC",
+  "MTP": "PLANTA_MT",
+  "TCO": "OCASIONAL_TC",
+  "MTO": "OCASIONAL_MT",
+}
+
+// Modalidades válidas (must match Prisma enum exactly)
+const MODALIDADES_VALIDAS = new Set([
+  "PLANTA_TC", "PLANTA_MT", "OCASIONAL_TC", "OCASIONAL_MT",
+  "CATEDRA", "VISITANTE", "INVITADO",
+])
+
+// Sedes válidas (must match Prisma enum exactly)
+const SEDES_VALIDAS = new Set(["NEIVA", "PITALITO", "GARZON", "LA_PLATA"])
 
 type RegisterState = {
   error?: string
@@ -17,9 +82,6 @@ type RegisterState = {
     celular: string
     sede: string
     modalidad: string
-    doctorado: boolean
-    cargoAdministrativo: boolean
-    proyectosActivos: boolean
   }
 } | null
 
@@ -31,20 +93,25 @@ export async function registerAction(_prevState: RegisterState, formData: FormDa
   const facultad = formData.get("facultad") as string
   const programa = formData.get("programa") as string
   const celular = (formData.get("celular") as string) || ""
-  const sede = formData.get("sede") as string
-  const modalidad = formData.get("modalidad") as Modalidad
+  
+  const sedeRaw = formData.get("sede") as string
+  const modalidadRaw = formData.get("modalidad") as string
 
-  const doctorado = formData.get("doctorado") === "on"
-  const cargoAdministrativo = formData.get("cargoAdministrativo") === "on"
-  const proyectosActivos = formData.get("proyectosActivos") === "on"
+  const values = { 
+    email, nombre, cedula, facultad, programa, celular, 
+    sede: sedeRaw, modalidad: modalidadRaw
+  }
 
-  // Valores para preservar el formulario en caso de error
-  const values = { email, nombre, cedula, facultad, programa, celular, sede, modalidad: modalidad as string, doctorado, cargoAdministrativo, proyectosActivos }
-
-  if (!email || !password || !nombre || !cedula || !facultad || !programa || !modalidad || !sede) {
+  // ==========================================
+  // 1. Presencia — todos los campos requeridos
+  // ==========================================
+  if (!email || !password || !nombre || !cedula || !facultad || !programa || !modalidadRaw || !sedeRaw) {
     return { error: "Todos los campos obligatorios deben ser completados.", values }
   }
 
+  // ==========================================
+  // 2. Formato — validaciones de campo
+  // ==========================================
   if (!/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+$/.test(nombre)) {
     return { error: "El nombre solo puede contener letras y espacios.", values }
   }
@@ -65,6 +132,33 @@ export async function registerAction(_prevState: RegisterState, formData: FormDa
     return { error: "La contraseña debe tener al menos 6 caracteres.", values }
   }
 
+  // ==========================================
+  // 3. Integridad relacional — Facultad ↔ Programa
+  // ==========================================
+  const programasValidos = FACULTAD_PROGRAMAS[facultad]
+  if (!programasValidos) {
+    return { error: `La facultad "${facultad}" no es válida.`, values }
+  }
+  if (!programasValidos.includes(programa)) {
+    return { error: `El programa "${programa}" no pertenece a la facultad "${facultad}".`, values }
+  }
+
+  // ==========================================
+  // 4. Enums — Modalidad y Sede válidas
+  // ==========================================
+  const modalidadTraducida = DICCIONARIO_MODALIDAD[modalidadRaw.toUpperCase()] || modalidadRaw.toUpperCase()
+  if (!MODALIDADES_VALIDAS.has(modalidadTraducida)) {
+    return { error: `La modalidad "${modalidadRaw}" no es válida.`, values }
+  }
+
+  const sedeFormateada = sedeRaw.toUpperCase()
+  if (!SEDES_VALIDAS.has(sedeFormateada)) {
+    return { error: `La sede "${sedeRaw}" no es válida.`, values }
+  }
+
+  // ==========================================
+  // 5. Unicidad + Persistencia
+  // ==========================================
   try {
     const existing = await prisma.docente.findFirst({
       where: {
@@ -90,18 +184,20 @@ export async function registerAction(_prevState: RegisterState, formData: FormDa
         facultad,
         programa,
         celular: celular || null,
-        sede,
-        modalidad,
-        doctorado,
-        cargoAdministrativo,
-        proyectosActivos,
+        sedeBase: sedeFormateada as import("@/generated/prisma/client").Sede,
+        modalidad: modalidadTraducida as import("@/generated/prisma/client").Modalidad,
+        // Flags dinámicos — hardcodeados en false al registrar.
+        // Se gestionan desde el Perfil del docente, NO en registro.
+        doctorado: false,
+        cargoAdministrativo: false,
+        proyectosActivos: false,
       },
     })
   } catch (error: unknown) {
     console.error("Register error:", error)
     const code = (error as { code?: string })?.code
     if (code === "ENETUNREACH" || code === "P1001" || code === "P1008") {
-      return { error: "No se pudo conectar a la base de datos. Verifica tu conexión de red e intenta de nuevo.", values }
+      return { error: "No se pudo conectar a la base de datos. Verifica tu conexión e intenta de nuevo.", values }
     }
     if (code === "P2002") {
       return { error: "Ya existe un docente con ese email o cédula.", values }
