@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import {
   createAgendaSchema,
+  agendaWizardBaseSchema,
   calcularTotalHoras,
   type AgendaWizardPayload,
   type AgendaWizardFormData,
@@ -46,8 +47,12 @@ export async function upsertAgendaCompletaAction(
     proyectosActivos: docente.proyectosActivos,
   }
 
-  // Pasamos las banderas al validador
-  const schema = createAgendaSchema(maxHoras, esEstricto, flags)
+  // Borradores: solo validación estructural (tipos y transformaciones)
+  // Envío final: validación completa con reglas de negocio del Acuerdo 048
+  const schema = enviar
+    ? createAgendaSchema(maxHoras, esEstricto, flags)
+    : agendaWizardBaseSchema
+
   const parseResult = schema.safeParse(data)
 
   if (!parseResult.success) {
@@ -58,15 +63,6 @@ export async function upsertAgendaCompletaAction(
   }
 
   const validData = parseResult.data as AgendaWizardFormData
-
-  if (enviar) {
-    const totalHoras = calcularTotalHoras(validData)
-    if (esEstricto && totalHoras > maxHoras) {
-      return {
-        error: `No se puede enviar: el total de horas (${totalHoras}) supera el máximo (${maxHoras}h).`,
-      }
-    }
-  }
 
   try {
     const result = await prisma.$transaction(async (tx) => {

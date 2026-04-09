@@ -105,7 +105,7 @@ export const actividadSchema = z.object({
 
 export type ActividadFormData = z.infer<typeof actividadSchema>
 
-const agendaWizardBaseSchema = z.object({
+export const agendaWizardBaseSchema = z.object({
   cursos: z.array(cursoAgendaSchema).default([]),
   otrasActividadesDocencia: z.array(actividadSchema).default([]),
   actividadesInvestigacion: z.array(actividadSchema).default([]),
