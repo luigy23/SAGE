@@ -42,7 +42,11 @@ const navItems = [
 
 const profileItem = { title: "Mi Perfil", href: "/perfil", icon: User }
 
-export function AppSidebar({ user }: { user: { name: string; email: string; rol?: string } }) {
+export function AppSidebar({
+  user,
+}: {
+  user: { name?: string | null; email?: string | null; rol?: string }
+}) {
   const pathname = usePathname()
 
   return (

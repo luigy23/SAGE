@@ -29,7 +29,7 @@ export function StepDatosGenerales({
     { label: "Celular", value: docente.celular || "—" },
     { label: "Facultad", value: docente.facultad || "—" },
     { label: "Programa", value: docente.programa || "—" },
-    { label: "Sede", value: docente.sede || "—" },
+    { label: "Sede", value: docente.sedeBase || "—" },
     { label: "Modalidad", value: formatModalidad(docente.modalidad) },
     { label: "Periodo", value: agenda.periodo },
     {
