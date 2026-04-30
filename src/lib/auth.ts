@@ -58,6 +58,10 @@ declare module "next-auth/jwt" {
 // CONFIGURACIÓN CENTRAL DE AUTENTICACIÓN
 // =====================================================================
 export const { auth, handlers, signIn, signOut } = NextAuth({
+  // Confiar en headers X-Forwarded-Host/X-Forwarded-Proto del reverse proxy
+  // (Dokploy/Traefik). Sin esto, NextAuth v5 rechaza requests con
+  // "UntrustedHost" en producción.
+  trustHost: true,
   providers: [
     Credentials({
       credentials: {
