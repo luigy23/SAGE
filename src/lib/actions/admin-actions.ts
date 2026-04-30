@@ -10,7 +10,9 @@ import { EstadoCuenta } from "@/generated/prisma/client"
  */
 async function ensureAdmin() {
   const session = await auth()
-  if (!session?.user || session.user.rol !== "ADMIN") {
+  // SUPERADMIN hereda permisos de ADMIN.
+  const rol = session?.user?.rol
+  if (!session?.user || (rol !== "ADMIN" && rol !== "SUPERADMIN")) {
     throw new Error("No autorizado. Se requieren privilegios de Administrador.")
   }
 }

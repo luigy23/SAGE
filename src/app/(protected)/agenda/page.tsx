@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
-import { getPeriodoActivo } from "@/lib/utils/periodo"
+import { getPeriodoActivo } from "@/lib/utils/periodo-server"
 import { AgendaWizardForm } from "@/components/agenda/AgendaWizardForm"
 import { NuevaAgendaView } from "@/components/agenda/NuevaAgendaView"
 import { AgendaReadOnly } from "@/components/agenda/AgendaReadOnly"
@@ -57,7 +57,7 @@ export default async function AgendaPage() {
   // ==========================================
   // 2. Periodo activo
   // ==========================================
-  const periodo = getPeriodoActivo()
+  const periodo = await getPeriodoActivo()
 
   // ==========================================
   // 3. Buscar agenda del periodo con relaciones
@@ -83,11 +83,50 @@ export default async function AgendaPage() {
   })
 
   // ==========================================
-  // 4. Cursos guardados (para el Combobox del Wizard)
+  // 4. Cursos guardados (cache personal del docente) + Catálogo Maestro (oficial)
   // ==========================================
   const cursosGuardados = await prisma.cursoGuardado.findMany({
     where: { docenteId: docente.id },
     orderBy: { nombreCurso: "asc" },
+  })
+
+  const cursosMaestros = await prisma.cursoMaestro.findMany({
+    where: { estado: true },
+    orderBy: [{ componente: "asc" }, { codigo: "asc" }],
+    select: {
+      id: true,
+      codigo: true,
+      nombre: true,
+      creditos: true,
+      tipo: true,
+      facultad: true,
+      componente: true,
+      horasSemT: true,
+      horasSemP: true,
+      horasSemI: true,
+    },
+  })
+
+  const catalogoActividades = await prisma.catalogoActividad.findMany({
+    where: { activo: true },
+    orderBy: [{ categoria: "asc" }, { nombre: "asc" }],
+    select: {
+      id: true,
+      categoria: true,
+      nombre: true,
+      descripcion: true,
+      topeSemestralH: true,
+      topePorUnidad: true,
+      unidadMax: true,
+      topeSemanalHPorUnidad: true,
+      cantidadMaxSimultaneos: true,
+      restriccionTemporalAnos: true,
+      aplicaUnoPorFacultad: true,
+      aplicaUnoPorSede: true,
+      requiereResolucionRector: true,
+      requiereProyectoAprobado: true,
+      articuloOrigen: true,
+    },
   })
 
   // ==========================================
@@ -111,6 +150,8 @@ export default async function AgendaPage() {
         <NuevaAgendaView
           docente={docente}
           cursosGuardados={cursosGuardados}
+          cursosMaestros={cursosMaestros}
+          catalogoActividades={catalogoActividades}
           periodo={periodo}
         />
 
@@ -280,6 +321,8 @@ export default async function AgendaPage() {
         <AgendaWizardForm
           docente={docente}
           cursosGuardados={cursosGuardados}
+          cursosMaestros={cursosMaestros}
+          catalogoActividades={catalogoActividades}
           periodo={periodo}
           defaultValues={defaultValues}
         />

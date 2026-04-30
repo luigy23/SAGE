@@ -1,6 +1,7 @@
 import { getCursosMaestros } from "@/lib/actions/curso-maestro-actions"
 import { CreateCourseDialog } from "@/components/admin/create-course-dialog"
 import { CourseStatusToggle } from "@/components/admin/course-status-toggle"
+import { ImportCursosDialog } from "@/components/admin/import-cursos-dialog"
 import { Badge } from "@/components/ui/badge"
 import {
   Table,
@@ -28,7 +29,10 @@ export default async function AdminCursosPage() {
               Los docentes seleccionarán de este catálogo al planificar su agenda (FO-19).
             </CardDescription>
           </div>
-          <CreateCourseDialog />
+          <div className="flex items-center gap-2">
+            <ImportCursosDialog />
+            <CreateCourseDialog />
+          </div>
         </CardHeader>
         <CardContent>
           <div className="rounded-md border">

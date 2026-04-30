@@ -6,11 +6,11 @@ import { revalidatePath } from "next/cache"
 import {
   createAgendaSchema,
   agendaWizardBaseSchema,
-  calcularTotalHoras,
   type AgendaWizardPayload,
   type AgendaWizardFormData,
 } from "@/lib/schemas/agenda-schema"
-import { getMaxHoras } from "@/lib/utils/periodo"
+import { resolveAgendaLimits } from "@/lib/rules/resolver"
+import { getPeriodoActivo } from "@/lib/utils/periodo-server"
 
 async function getAuthenticatedDocente() {
   const session = await auth()
@@ -38,9 +38,24 @@ export async function upsertAgendaCompletaAction(
     return { error: "El periodo académico es obligatorio." }
   }
 
-  const { maxHoras, esEstricto } = getMaxHoras(docente.modalidad, docente.sedeBase)
-  
-  // NUEVO: Empaquetamos las banderas del docente
+  // Resolver paramétrico (Fase 3): lee desde DB con cascada y cache.
+  // Si no hay parámetros en DB, cae al fallback hardcoded del Acuerdo 048.
+  const periodoActivo = await getPeriodoActivo()
+  const periodoRow = await prisma.periodoAcademico.findUnique({
+    where: { nombre: periodoActivo },
+    select: { id: true },
+  })
+  const limits = await resolveAgendaLimits(
+    {
+      modalidad: docente.modalidad,
+      sedeBase: docente.sedeBase,
+      doctorado: docente.doctorado,
+      cargoAdministrativo: docente.cargoAdministrativo,
+      proyectosActivos: docente.proyectosActivos,
+    },
+    periodoRow?.id ?? null
+  )
+
   const flags = {
     doctorado: docente.doctorado,
     cargoAdministrativo: docente.cargoAdministrativo,
@@ -48,9 +63,9 @@ export async function upsertAgendaCompletaAction(
   }
 
   // Borradores: solo validación estructural (tipos y transformaciones)
-  // Envío final: validación completa con reglas de negocio del Acuerdo 048
+  // Envío final: validación completa con reglas de negocio resueltas
   const schema = enviar
-    ? createAgendaSchema(maxHoras, esEstricto, flags)
+    ? createAgendaSchema(limits.maxHorasSemanales, limits.esEstricto, flags)
     : agendaWizardBaseSchema
 
   const parseResult = schema.safeParse(data)

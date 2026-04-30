@@ -67,12 +67,12 @@ export function StepRevision({
   const granTotal = totalDocencia + totalInvestigacion + totalProyeccion + totalGestion
 
   // =========================================================
-  // Equivalencia Promedio Semanal — compara contra maxHoras
+  // Comparación Semestral — granTotal vs límite legal del periodo
   // =========================================================
   const SEMANAS_REFERENCIA = 22
-  const promedioSemanal = granTotal / SEMANAS_REFERENCIA
-  const promedioRedondeado = Math.round(promedioSemanal * 10) / 10
-  const excedidoSemanal = promedioSemanal > maxHoras
+  const horasSemestrales = maxHoras * SEMANAS_REFERENCIA
+  const excedidoSemestral = granTotal > horasSemestrales
+  const porcentajeUso = horasSemestrales > 0 ? Math.round((granTotal / horasSemestrales) * 100) : 0
 
   return (
     <div className="space-y-6">
@@ -297,54 +297,39 @@ export function StepRevision({
       )}
 
       {/* ==========================================
-          GRAN TOTAL — Doble presentación legal
-          Row 1: Dedicación Semestral (absoluta)
-          Row 2: Equivalencia Promedio Semanal vs. maxHoras
+          GRAN TOTAL — Comparación con la carga semestral del contrato
           ========================================== */}
       <Card
         className={cn(
           "print:border print:border-gray-400 print:bg-gray-50",
-          excedidoSemanal
+          excedidoSemestral
             ? "border-destructive/50 bg-destructive/5"
             : "border-primary/30 bg-primary/5"
         )}
       >
         <CardContent className="py-6 space-y-4">
-          {/* Row 1: Dedicación Semestral (absoluta) */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b pb-4 border-primary/20">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between">
             <div>
-              <h3 className="text-xl font-bold uppercase">Dedicación Semestral</h3>
+              <h3 className="text-xl font-bold uppercase">Dedicación del Semestre</h3>
               <p className="text-sm text-muted-foreground print:text-gray-500">
-                Suma absoluta de todas las horas en el periodo
+                Modalidad <strong>{docente.modalidad}</strong>: carga semestral de <strong>{horasSemestrales} horas</strong>
+                {esEstricto && " (estricto)"}
               </p>
             </div>
-            <span className="text-3xl font-bold tabular-nums text-primary mt-2 sm:mt-0 print:text-black">
-              {granTotal} horas
-            </span>
-          </div>
-
-          {/* Row 2: Equivalencia Promedio Semanal vs límite legal */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-2">
-            <div>
-              <h3 className={cn(
-                "text-lg font-bold",
-                (errors as Record<string, any>)._horasExcedidas ? "text-destructive" : "text-muted-foreground"
+            <div className="mt-2 sm:mt-0 text-right">
+              <p className={cn(
+                "text-3xl font-bold tabular-nums print:text-black",
+                excedidoSemestral ? "text-destructive" : "text-primary"
               )}>
-                Equivalencia Promedio Semanal
-              </h3>
-              <p className="text-sm text-muted-foreground print:text-gray-500">
-                Modalidad ({docente.modalidad}): <strong>{maxHoras} hrs/semana</strong>
+                {granTotal} / {horasSemestrales}h
+              </p>
+              <p className="text-xs text-muted-foreground print:text-gray-500">
+                {porcentajeUso}% de la carga del semestre
               </p>
             </div>
-            <span className={cn(
-              "text-2xl font-bold tabular-nums mt-2 sm:mt-0 print:text-black",
-              (errors as Record<string, any>)._horasExcedidas ? "text-destructive" : "text-green-600"
-            )}>
-              {promedioRedondeado} hrs/semana
-            </span>
           </div>
 
-          {/* Clean Validation Hook Alert directly tied to Zod tolerances */}
+          {/* Validation Hook Alert tied to Zod */}
           {(errors as Record<string, any>)._horasExcedidas && (
             <div className="mt-4 flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />

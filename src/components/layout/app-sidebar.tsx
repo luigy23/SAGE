@@ -12,6 +12,10 @@ import {
   BookOpen,
   CalendarDays,
   Users,
+  Crown,
+  Sliders,
+  GitBranch,
+  RefreshCw,
 } from "lucide-react"
 import {
   Sidebar,
@@ -68,8 +72,8 @@ export function AppSidebar({ user }: { user: { name: string; email: string; rol?
                 </SidebarMenuItem>
               ))}
               
-              {/* ADMIN ONLY LINKS - GRUPADOS */}
-              {user.rol === "ADMIN" && (
+              {/* ADMIN ONLY LINKS - GRUPADOS (también accesible por SUPERADMIN) */}
+              {(user.rol === "ADMIN" || user.rol === "SUPERADMIN") && (
                 <SidebarMenuItem>
                   <SidebarMenuButton>
                     <ShieldCheck />
@@ -101,13 +105,72 @@ export function AppSidebar({ user }: { user: { name: string; email: string; rol?
                     </SidebarMenuSubItem>
                     
                     <SidebarMenuSubItem>
-                      <SidebarMenuSubButton 
-                        asChild 
+                      <SidebarMenuSubButton
+                        asChild
                         isActive={pathname.startsWith("/admin/periodos")}
                       >
                         <Link href="/admin/periodos">
                           <CalendarDays />
                           <span>Periodos Académicos</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  </SidebarMenuSub>
+                </SidebarMenuItem>
+              )}
+
+              {/* SUPERADMIN ONLY — gestión de reglas paramétricas y rehabilitación */}
+              {user.rol === "SUPERADMIN" && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton>
+                    <Crown />
+                    <span className="font-semibold">SuperAdmin</span>
+                  </SidebarMenuButton>
+                  <SidebarMenuSub>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={pathname.startsWith("/superadmin/parametros")}
+                      >
+                        <Link href="/superadmin/parametros">
+                          <Sliders />
+                          <span>Parámetros Globales</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={pathname.startsWith("/superadmin/modalidades")}
+                      >
+                        <Link href="/superadmin/modalidades">
+                          <GitBranch />
+                          <span>Modalidades</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={pathname.startsWith("/superadmin/agendas")}
+                      >
+                        <Link href="/superadmin/agendas">
+                          <RefreshCw />
+                          <span>Rehabilitar Agendas</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={pathname.startsWith("/superadmin/usuarios")}
+                      >
+                        <Link href="/superadmin/usuarios">
+                          <Users />
+                          <span>Usuarios y Roles</span>
                         </Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>

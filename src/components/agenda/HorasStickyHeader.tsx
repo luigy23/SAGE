@@ -6,22 +6,21 @@ import { AlertTriangle, CheckCircle, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 /**
- * Sticky header que muestra el progreso de horas en tiempo real.
+ * Sticky header que muestra el progreso de horas SEMESTRALES en tiempo real.
  *
- * Usa useWatch() para escuchar cambios en todos los arrays del formulario
- * y sumar dinámicamente el campo dedicacionPeriodo de cada item.
+ * Suma directamente `dedicacionPeriodo` de cada item (ya está en horas semestrales).
  *
  * Lógica de colores:
  * - Normal (dentro del límite): fondo secundario
- * - Exceso bloqueante (TCP/TCO > 40, MTP/MTC > 20): fondo destructive
- * - Advertencia CATEDRA (> 40 pero no bloquea): fondo amarillo
+ * - Exceso bloqueante (granTotal > horasTotalesPeriodo): fondo destructive
+ * - Advertencia (granTotal > horasTotalesPeriodo pero modalidad no estricta): amarillo
  */
 export function HorasStickyHeader({
-  maxHoras,
+  horasTotalesPeriodo,
   esEstricto,
   periodo,
 }: {
-  maxHoras: number
+  horasTotalesPeriodo: number
   esEstricto: boolean
   periodo: string
 }) {
@@ -32,47 +31,27 @@ export function HorasStickyHeader({
   const proyeccion = useWatch<AgendaWizardFormData, "actividadesProyeccionSocial">({ name: "actividadesProyeccionSocial" }) || []
   const gestion = useWatch<AgendaWizardFormData, "actividadesGestion">({ name: "actividadesGestion" }) || []
 
-  // ==========================================
-  // Normalización: convertir horas semestrales → horas semanales
-  // Cursos: dividir por su campo 'semanas' propio
-  // Actividades: dividir por 22 semanas (máximo Acuerdo 048)
-  // ==========================================
-  const SEMANAS_DEFAULT = 22
+  const sumPeriodo = (items: { dedicacionPeriodo?: number }[]) =>
+    items.reduce((acc, item) => acc + (Number(item?.dedicacionPeriodo) || 0), 0)
 
-  const sumCursosWeekly = (items: { dedicacionPeriodo?: number; semanas?: number }[]) =>
-    items.reduce((acc, item) => {
-      const dedicacion = Number(item?.dedicacionPeriodo) || 0
-      const semanas = Number(item?.semanas) || SEMANAS_DEFAULT
-      return acc + (semanas > 0 ? dedicacion / semanas : 0)
-    }, 0)
-
-  const sumActividadesWeekly = (items: { dedicacionPeriodo?: number }[]) =>
-    items.reduce((acc, item) => {
-      const dedicacion = Number(item?.dedicacionPeriodo) || 0
-      return acc + (dedicacion / SEMANAS_DEFAULT)
-    }, 0)
-
-  const totalHorasSemanales =
-    sumCursosWeekly(cursos) +
-    sumActividadesWeekly(otrasDocencia) +
-    sumActividadesWeekly(investigacion) +
-    sumActividadesWeekly(proyeccion) +
-    sumActividadesWeekly(gestion)
+  const totalSemestral =
+    sumPeriodo(cursos) +
+    sumPeriodo(otrasDocencia) +
+    sumPeriodo(investigacion) +
+    sumPeriodo(proyeccion) +
+    sumPeriodo(gestion)
 
   // Redondear a 1 decimal para display limpio
-  const totalHoras = Math.round(totalHorasSemanales * 10) / 10
+  const totalHoras = Math.round(totalSemestral * 10) / 10
 
-  // Calcular porcentaje para la barra de progreso (capped at 100%)
-  const porcentaje = Math.min((totalHoras / maxHoras) * 100, 100)
-  const excedido = totalHoras > maxHoras
+  const porcentaje = Math.min((totalHoras / horasTotalesPeriodo) * 100, 100)
+  const excedido = totalHoras > horasTotalesPeriodo
 
-  // Determinar estado visual
   type Estado = "normal" | "advertencia" | "exceso"
   let estado: Estado = "normal"
   if (excedido && esEstricto) estado = "exceso"
   else if (excedido && !esEstricto) estado = "advertencia"
 
-  // Clases condicionales según estado
   const containerClasses = cn(
     "relative block w-full mb-6 rounded-lg border px-4 py-3 shadow-sm transition-colors duration-300 print:hidden",
     {
@@ -118,7 +97,7 @@ export function HorasStickyHeader({
             <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
           )}
           <span className={textClasses}>
-            {totalHoras} / {maxHoras} hrs/semana
+            {totalHoras} / {horasTotalesPeriodo} hrs/semestre
           </span>
         </div>
       </div>
@@ -134,12 +113,12 @@ export function HorasStickyHeader({
       {/* Mensajes de estado */}
       {estado === "exceso" && (
         <p className="mt-1.5 text-xs font-medium text-destructive">
-          ⛔ La dedicación supera el máximo permitido. Debe reducir horas para poder enviar.
+          ⛔ La dedicación supera el máximo permitido del semestre. Debe reducir horas para poder enviar.
         </p>
       )}
       {estado === "advertencia" && (
         <p className="mt-1.5 text-xs font-medium text-yellow-700 dark:text-yellow-400">
-          ⚠️ Advertencia: Revisar carga horaria de Cátedra. Puede enviar, pero se recomienda verificar.
+          ⚠️ Advertencia: La dedicación supera el techo de referencia del semestre. Puede enviar, pero se recomienda verificar.
         </p>
       )}
     </div>

@@ -1,9 +1,13 @@
 /**
  * Reglas de validación de la Agenda Semestral
  * según Acuerdo 048 de 2018 — Universidad Surcolombiana
+ *
+ * NOTA: Este archivo será reemplazado en la Fase 3 por un resolver
+ * paramétrico que lea desde la tabla `ParametrosModalidad`.
+ * Mientras tanto, contiene los valores por defecto del Acuerdo 048.
  */
 
-import type { Modalidad } from "@/generated/prisma/client"
+import type { Modalidad, Sede } from "@/generated/prisma/client"
 import type { AgendaConRelaciones } from "@/lib/types/agenda"
 
 // ========================================
@@ -15,7 +19,7 @@ type DocenteInfo = {
   doctorado: boolean
   cargoAdministrativo: boolean
   proyectosActivos: boolean
-  sede: string | null
+  sedeBase: Sede | null
 }
 
 export type ValidationSeverity = "error" | "warning" | "info"
@@ -39,6 +43,7 @@ export type AgendaTotals = {
 export type AgendaLimits = {
   horasTotalesPeriodo: number
   maxHorasSemanales: number
+  esEstricto: boolean // bloqueo duro al envío si excede
   minDocencia: number
   maxGestion: number
   maxInvProySocialCatedra: number | null // null = sin límite especial
@@ -46,21 +51,27 @@ export type AgendaLimits = {
 }
 
 // ========================================
-// Constantes
+// Constantes (Acuerdo 048 — defaults)
 // ========================================
 
 const SEMANAS_PERIODO = 22
-const SEDES_CATEDRA_EXTENDIDA = ["Pitalito", "Garzón", "La Plata"]
+const SEDES_CATEDRA_EXTENDIDA: Sede[] = ["PITALITO", "GARZON", "LA_PLATA"]
+const PORCENTAJE_GESTION_MAX = 0.20
+const PORCENTAJE_VISITANTE_DOCENCIA_MIN = 0.60
+const HORAS_SEMANALES_INV_PS_CATEDRA = 4
 
 // ========================================
 // Cálculo de límites según modalidad
 // ========================================
 
 export function getAgendaLimits(docente: DocenteInfo): AgendaLimits {
-  const horasTotales = getHorasTotalesPeriodo(docente)
+  // Acuerdo 048: VISITANTE/INVITADO no estrictos; el resto sí.
+  const esEstricto =
+    docente.modalidad !== "VISITANTE" && docente.modalidad !== "INVITADO"
   return {
-    horasTotalesPeriodo: horasTotales,
+    horasTotalesPeriodo: getHorasTotalesPeriodo(docente),
     maxHorasSemanales: getMaxHorasSemanales(docente),
+    esEstricto,
     minDocencia: getMinDocencia(docente),
     maxGestion: getMaxGestion(docente),
     maxInvProySocialCatedra: getMaxInvProySocialCatedra(docente),
@@ -71,85 +82,85 @@ export function getAgendaLimits(docente: DocenteInfo): AgendaLimits {
 /** Art. 4: Horas totales del periodo */
 function getHorasTotalesPeriodo(docente: DocenteInfo): number {
   switch (docente.modalidad) {
-    case "TCP":
-    case "TCO":
-      return 880
-    case "MTP":
-    case "MTC":
-      return 440
+    case "PLANTA_TC":
+    case "OCASIONAL_TC":
+      return 880 // Art. 4a/4c
+    case "PLANTA_MT":
+    case "OCASIONAL_MT":
+      return 440 // Art. 4b/4c
     case "CATEDRA":
-      // Sedes regionales: hasta 19 hrs/sem, sino 16 hrs/sem
-      if (
-        docente.sede &&
-        SEDES_CATEDRA_EXTENDIDA.includes(docente.sede)
-      ) {
-        return 19 * SEMANAS_PERIODO // 418
-      }
-      return 16 * SEMANAS_PERIODO // 352
+      return getMaxHorasSemanales(docente) * SEMANAS_PERIODO
+    case "VISITANTE":
+    case "INVITADO":
+      // Art. 4e/f: según contrato. Default conservador a TC hasta tener parámetro.
+      return 880
   }
 }
 
 /** Art. 4: Horas máximas semanales */
 function getMaxHorasSemanales(docente: DocenteInfo): number {
   switch (docente.modalidad) {
-    case "TCP":
-    case "TCO":
+    case "PLANTA_TC":
+    case "OCASIONAL_TC":
       return 40
-    case "MTP":
-    case "MTC":
+    case "PLANTA_MT":
+    case "OCASIONAL_MT":
       return 20
     case "CATEDRA":
-      if (
-        docente.sede &&
-        SEDES_CATEDRA_EXTENDIDA.includes(docente.sede)
-      ) {
-        return 19
-      }
-      return 16
+      return docente.sedeBase &&
+        SEDES_CATEDRA_EXTENDIDA.includes(docente.sedeBase)
+        ? 19 // Art. 4d sedes regionales
+        : 16 // Art. 4d sede central
+    case "VISITANTE":
+    case "INVITADO":
+      return 40
   }
 }
 
 /**
  * Art. 3: Horas mínimas de docencia
- * Docentes con proyectos activos de investigación/proyección social
- * tienen un mínimo reducido
+ * - PLANTA/OCASIONAL: reducible si hay proyectos activos (Par. 1)
+ * - VISITANTE: ≥ 60% de la agenda (Par. 3)
+ * - CATEDRA / INVITADO: sin mínimo formal
  */
 function getMinDocencia(docente: DocenteInfo): number {
-  if (docente.modalidad === "CATEDRA") return 0 // no aplica mínimo formal
-
-  const conProyectos = docente.proyectosActivos
-
   switch (docente.modalidad) {
-    case "TCP":
-    case "TCO":
-      return conProyectos ? 288 : 432
-    case "MTP":
-    case "MTC":
-      return conProyectos ? 144 : 240
+    case "PLANTA_TC":
+    case "OCASIONAL_TC":
+      return docente.proyectosActivos ? 288 : 432
+    case "PLANTA_MT":
+    case "OCASIONAL_MT":
+      return docente.proyectosActivos ? 144 : 240
+    case "VISITANTE":
+      return Math.floor(
+        getHorasTotalesPeriodo(docente) * PORCENTAJE_VISITANTE_DOCENCIA_MIN
+      )
+    case "CATEDRA":
+    case "INVITADO":
+      return 0
   }
 }
 
 /**
  * Art. 10: Gestión no puede exceder 20% del total
- * Excepto jefes de programa/departamento, asesores (cargoAdministrativo = true)
+ * Excepto cargos administrativos (Jefe de Programa, Decano, etc.)
  */
 function getMaxGestion(docente: DocenteInfo): number {
   if (docente.cargoAdministrativo) {
-    // Sin límite del 20% para cargos administrativos
     return getHorasTotalesPeriodo(docente)
   }
-  return Math.floor(getHorasTotalesPeriodo(docente) * 0.2)
+  return Math.floor(getHorasTotalesPeriodo(docente) * PORCENTAJE_GESTION_MAX)
 }
 
 /**
  * Art. 3, Parágrafo 2: Catedráticos con proyectos pueden hasta
- * 4 hrs/sem en investigación o proyección social (88 hrs)
+ * 4 hrs/sem en investigación o proyección social
  */
 function getMaxInvProySocialCatedra(
   docente: DocenteInfo
 ): number | null {
   if (docente.modalidad !== "CATEDRA") return null
-  return 4 * SEMANAS_PERIODO // 88
+  return HORAS_SEMANALES_INV_PS_CATEDRA * SEMANAS_PERIODO
 }
 
 // ========================================
@@ -206,7 +217,7 @@ export function validateAgenda(
     doctorado: agenda.docente.doctorado,
     cargoAdministrativo: agenda.docente.cargoAdministrativo,
     proyectosActivos: agenda.docente.proyectosActivos,
-    sede: agenda.docente.sede,
+    sedeBase: agenda.docente.sedeBase,
   }
 
   const limits = getAgendaLimits(docente)
@@ -233,15 +244,20 @@ export function validateAgenda(
   }
 
   // 2. Mínimo de docencia
-  if (docente.modalidad !== "CATEDRA" && limits.minDocencia > 0) {
-    if (totals.totalDocencia < limits.minDocencia) {
-      const diff = limits.minDocencia - totals.totalDocencia
-      items.push({
-        severity: "error",
-        message: `La docencia total (${totals.totalDocencia}h) no alcanza el mínimo requerido (${limits.minDocencia}h)${docente.proyectosActivos ? " (reducido por proyectos activos)" : ""}. Faltan ${diff}h.`,
-        rule: "Art. 3",
-      })
-    }
+  if (limits.minDocencia > 0 && totals.totalDocencia < limits.minDocencia) {
+    const diff = limits.minDocencia - totals.totalDocencia
+    const motivo =
+      docente.modalidad === "VISITANTE"
+        ? " (mínimo 60% para visitantes, Art. 3 Par. 3)"
+        : docente.proyectosActivos
+        ? " (reducido por proyectos activos)"
+        : ""
+    items.push({
+      severity: "error",
+      message: `La docencia total (${totals.totalDocencia}h) no alcanza el mínimo requerido (${limits.minDocencia}h)${motivo}. Faltan ${diff}h.`,
+      rule:
+        docente.modalidad === "VISITANTE" ? "Art. 3 Par. 3" : "Art. 3",
+    })
   }
 
   // 3. Gestión no puede exceder 20%
@@ -276,7 +292,11 @@ export function validateAgenda(
   }
 
   // 6. Sin cursos
-  if (agenda.cursos.length === 0 && docente.modalidad !== "CATEDRA") {
+  if (
+    agenda.cursos.length === 0 &&
+    docente.modalidad !== "CATEDRA" &&
+    docente.modalidad !== "INVITADO"
+  ) {
     items.push({
       severity: "warning",
       message: "No se han registrado cursos en la agenda.",
@@ -293,11 +313,13 @@ export function validateAgenda(
 
 export function formatModalidad(modalidad: Modalidad): string {
   const labels: Record<Modalidad, string> = {
-    TCP: "Tiempo Completo Planta",
-    TCO: "Tiempo Completo Ocasional",
-    MTP: "Medio Tiempo Planta",
-    MTC: "Medio Tiempo Cátedra",
+    PLANTA_TC: "Tiempo Completo Planta",
+    PLANTA_MT: "Medio Tiempo Planta",
+    OCASIONAL_TC: "Tiempo Completo Ocasional",
+    OCASIONAL_MT: "Medio Tiempo Ocasional",
     CATEDRA: "Cátedra",
+    VISITANTE: "Visitante",
+    INVITADO: "Invitado",
   }
   return labels[modalidad]
 }

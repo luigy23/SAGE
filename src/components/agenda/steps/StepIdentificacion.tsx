@@ -41,13 +41,15 @@ export function StepIdentificacion({
   // Derive limit from modality + sede — single source of truth
   const { maxHoras: maxHorasCalc } = getMaxHoras(docente.modalidad, docente.sedeBase)
 
-  // Mapeo de modalidad a label legible
+  // Mapeo de modalidad a label legible (alineado con enum Prisma)
   const modalidadLabels: Record<string, string> = {
-    TCP: "Tiempo Completo Planta",
-    TCO: "Tiempo Completo Ocasional",
-    MTP: "Medio Tiempo Planta",
-    MTC: "Medio Tiempo Cátedra",
+    PLANTA_TC: "Tiempo Completo Planta",
+    PLANTA_MT: "Medio Tiempo Planta",
+    OCASIONAL_TC: "Tiempo Completo Ocasional",
+    OCASIONAL_MT: "Medio Tiempo Ocasional",
     CATEDRA: "Cátedra",
+    VISITANTE: "Visitante",
+    INVITADO: "Invitado",
   }
 
   return (
@@ -161,12 +163,15 @@ export function StepIdentificacion({
             <Clock className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
             <div>
               <p className="text-sm font-semibold">
-                Máximo de dedicación: {maxHorasCalc} horas
+                Carga del semestre: {maxHorasCalc * 22} horas
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  ({maxHorasCalc} h/sem × 22 semanas)
+                </span>
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {esEstricto
-                  ? `Su modalidad (${docente.modalidad}) tiene un límite estricto de ${maxHorasCalc} horas. No podrá enviar la agenda si lo excede.`
-                  : `Su modalidad (${docente.modalidad}) tiene un umbral de referencia de ${maxHorasCalc} horas. Si lo excede, verá una advertencia pero podrá enviar la agenda.`}
+                  ? `Su modalidad (${docente.modalidad}) tiene un límite estricto de ${maxHorasCalc * 22} horas en el semestre. No podrá enviar la agenda si lo excede.`
+                  : `Su modalidad (${docente.modalidad}) tiene un techo de referencia de ${maxHorasCalc * 22} horas en el semestre. Si lo excede, verá una advertencia pero podrá enviar la agenda.`}
               </p>
             </div>
           </div>

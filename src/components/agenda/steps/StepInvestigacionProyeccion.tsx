@@ -4,8 +4,6 @@ import { useFormContext, useFieldArray } from "react-hook-form"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import { EMPTY_ACTIVIDAD } from "@/lib/schemas/agenda-schema"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Card,
   CardContent,
@@ -13,31 +11,21 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card"
-import {
-  FormField,
-  FormItem,
-  FormLabel,
-  FormControl,
-  FormDescription,
-  FormMessage,
-} from "@/components/ui/form"
-import { Plus, Trash2 } from "lucide-react"
-import { CalculadoraActividad } from "@/components/agenda/CalculadoraActividad"
+import { Plus } from "lucide-react"
+import { ActividadCardRow } from "@/components/agenda/ActividadCardRow"
+import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatalogoSelector"
 
 /**
  * Paso 3 — Secciones 2 y 3: Investigación y Proyección Social
  *
- * Dos useFieldArray independientes:
- * - actividadesInvestigacion
- * - actividadesProyeccionSocial
- *
- * Cada actividad captura: nombre, horasSemanales, semanas, descripcion.
- * La dedicacionPeriodo se calcula silenciosamente (horasSemanales × semanas)
- * mediante el componente CalculadoraActividad.
- *
- * Usa useFormContext() — no recibe form como prop.
+ * El docente selecciona del catálogo Art. 11 (Acuerdo 048/2018) y solo escribe
+ * la descripción específica del caso. Las horas se sugieren del tope normativo.
  */
-export function StepInvestigacionProyeccion() {
+export function StepInvestigacionProyeccion({
+  catalogoActividades,
+}: {
+  catalogoActividades: ActividadCatalogoOption[]
+}) {
   const { control } = useFormContext<AgendaWizardFormData>()
 
   const {
@@ -61,8 +49,8 @@ export function StepInvestigacionProyeccion() {
         <CardHeader>
           <CardTitle>2. Actividades de Investigación</CardTitle>
           <CardDescription>
-            Proyectos de investigación, publicaciones, participación en grupos de
-            investigación, dirección de tesis, etc.
+            Seleccione del catálogo oficial (Art. 11 del Acuerdo 048/2018).
+            Cada actividad trae sus topes y restricciones precargados.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -73,147 +61,14 @@ export function StepInvestigacionProyeccion() {
           )}
 
           {invFields.map((field, index) => (
-            <div
+            <ActividadCardRow
               key={field.id}
-              className="relative rounded-lg border p-4"
-            >
-              {/* Silent calculator — renders nothing */}
-              <CalculadoraActividad
-                arrayName="actividadesInvestigacion"
-                index={index}
-              />
-
-              <div className="mb-3 flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-muted-foreground">
-                  Actividad #{index + 1}
-                </h4>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeInv(index)}
-                  className="h-8 w-8 text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-12">
-                {/* Nombre — 6 columnas */}
-                <div className="sm:col-span-6">
-                  <FormField
-                    control={control}
-                    name={`actividadesInvestigacion.${index}.nombre`}
-                    render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel>Nombre de la actividad *</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...f}
-                            placeholder="Ej: Proyecto de investigación X"
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Nombre del proyecto o actividad de investigación
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Horas semanales — 3 columnas */}
-                <div className="sm:col-span-3">
-                  <FormField
-                    control={control}
-                    name={`actividadesInvestigacion.${index}.horasSemanales`}
-                    render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel>Horas/semana *</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={40}
-                            step="0.5"
-                            name={f.name}
-                            ref={f.ref}
-                            onBlur={f.onBlur}
-                            value={f.value === 0 ? "" : f.value}
-                            placeholder="0"
-                            onChange={(e) => {
-                              const raw = e.target.value
-                              if (raw === "") { f.onChange(0); return }
-                              let val = parseFloat(raw)
-                              if (isNaN(val)) val = 0
-                              if (val > 40) val = 40
-                              f.onChange(val)
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Semanas — 3 columnas */}
-                <div className="sm:col-span-3">
-                  <FormField
-                    control={control}
-                    name={`actividadesInvestigacion.${index}.semanas`}
-                    render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel>Semanas *</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={22}
-                            step={1}
-                            name={f.name}
-                            ref={f.ref}
-                            onBlur={f.onBlur}
-                            value={f.value === 0 ? "" : f.value}
-                            placeholder="0"
-                            onChange={(e) => {
-                              const raw = e.target.value
-                              if (raw === "") { f.onChange(0); return }
-                              let val = parseInt(raw, 10)
-                              if (isNaN(val)) val = 0
-                              if (val > 22) val = 22
-                              f.onChange(val)
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Descripción — 12 columnas (full width) */}
-                <div className="sm:col-span-12">
-                  <FormField
-                    control={control}
-                    name={`actividadesInvestigacion.${index}.descripcion`}
-                    render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel>Descripción</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            {...f}
-                            rows={2}
-                            placeholder="Descripción detallada de la actividad (opcional)"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </div>
-            </div>
+              index={index}
+              arrayName="actividadesInvestigacion"
+              catalogo={catalogoActividades}
+              categoria="INVESTIGACION"
+              onRemove={() => removeInv(index)}
+            />
           ))}
 
           <Button
@@ -235,8 +90,8 @@ export function StepInvestigacionProyeccion() {
         <CardHeader>
           <CardTitle>3. Actividades de Proyección Social</CardTitle>
           <CardDescription>
-            Extensión universitaria, educación continua, consultoría,
-            participación comunitaria, eventos académicos, etc.
+            Seleccione del catálogo oficial (Art. 11 del Acuerdo 048/2018).
+            Las horas y restricciones aparecen automáticamente.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -247,147 +102,14 @@ export function StepInvestigacionProyeccion() {
           )}
 
           {proFields.map((field, index) => (
-            <div
+            <ActividadCardRow
               key={field.id}
-              className="relative rounded-lg border p-4"
-            >
-              {/* Silent calculator — renders nothing */}
-              <CalculadoraActividad
-                arrayName="actividadesProyeccionSocial"
-                index={index}
-              />
-
-              <div className="mb-3 flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-muted-foreground">
-                  Actividad #{index + 1}
-                </h4>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removePro(index)}
-                  className="h-8 w-8 text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-12">
-                {/* Nombre — 6 columnas */}
-                <div className="sm:col-span-6">
-                  <FormField
-                    control={control}
-                    name={`actividadesProyeccionSocial.${index}.nombre`}
-                    render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel>Nombre de la actividad *</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...f}
-                            placeholder="Ej: Diplomado en gestión ambiental"
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Nombre del proyecto o actividad de proyección social
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Horas semanales — 3 columnas */}
-                <div className="sm:col-span-3">
-                  <FormField
-                    control={control}
-                    name={`actividadesProyeccionSocial.${index}.horasSemanales`}
-                    render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel>Horas/semana *</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={40}
-                            step="0.5"
-                            name={f.name}
-                            ref={f.ref}
-                            onBlur={f.onBlur}
-                            value={f.value === 0 ? "" : f.value}
-                            placeholder="0"
-                            onChange={(e) => {
-                              const raw = e.target.value
-                              if (raw === "") { f.onChange(0); return }
-                              let val = parseFloat(raw)
-                              if (isNaN(val)) val = 0
-                              if (val > 40) val = 40
-                              f.onChange(val)
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Semanas — 3 columnas */}
-                <div className="sm:col-span-3">
-                  <FormField
-                    control={control}
-                    name={`actividadesProyeccionSocial.${index}.semanas`}
-                    render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel>Semanas *</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={22}
-                            step={1}
-                            name={f.name}
-                            ref={f.ref}
-                            onBlur={f.onBlur}
-                            value={f.value === 0 ? "" : f.value}
-                            placeholder="0"
-                            onChange={(e) => {
-                              const raw = e.target.value
-                              if (raw === "") { f.onChange(0); return }
-                              let val = parseInt(raw, 10)
-                              if (isNaN(val)) val = 0
-                              if (val > 22) val = 22
-                              f.onChange(val)
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Descripción — 12 columnas (full width) */}
-                <div className="sm:col-span-12">
-                  <FormField
-                    control={control}
-                    name={`actividadesProyeccionSocial.${index}.descripcion`}
-                    render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel>Descripción</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            {...f}
-                            rows={2}
-                            placeholder="Descripción detallada de la actividad (opcional)"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </div>
-            </div>
+              index={index}
+              arrayName="actividadesProyeccionSocial"
+              catalogo={catalogoActividades}
+              categoria="PROYECCION_SOCIAL"
+              onRemove={() => removePro(index)}
+            />
           ))}
 
           <Button

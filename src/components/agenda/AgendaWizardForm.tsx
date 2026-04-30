@@ -29,6 +29,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { HorasStickyHeader } from "./HorasStickyHeader"
+import type { CursoMaestroOption } from "@/components/agenda/CursoMaestroSelector"
+import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatalogoSelector"
 import { StepIdentificacion } from "./steps/StepIdentificacion"
 import { StepDocencia } from "./steps/StepDocencia"
 import { StepInvestigacionProyeccion } from "./steps/StepInvestigacionProyeccion"
@@ -156,11 +158,15 @@ function WizardStepper({
 export function AgendaWizardForm({
   docente,
   cursosGuardados,
+  cursosMaestros,
+  catalogoActividades,
   periodo,
   defaultValues,
 }: {
   docente: Docente
   cursosGuardados: CursoGuardado[]
+  cursosMaestros: CursoMaestroOption[]
+  catalogoActividades: ActividadCatalogoOption[]
   periodo: string
   defaultValues?: AgendaWizardFormData
 }) {
@@ -203,56 +209,31 @@ export function AgendaWizardForm({
   })
 
   // =========================================================
-  // Validation Engine: Single Source of Truth
+  // Validation Engine — Modelo Semestral
   //
-  // Calculates totalHorasSemanales by deriving the average
-  // weekly hours from each item's dedicacionPeriodo/semanas.
-  //
-  // Formula per item:
-  //   weeklyAvg = dedicacionPeriodo / semanas
-  //   (if semanas is 0/undefined, fallback to 22 to avoid division by zero)
-  //
-  // Sum across ALL arrays: cursos, otrasActividadesDocencia,
-  // actividadesInvestigacion, actividadesProyeccionSocial,
-  // actividadesGestion.
+  // Suma directamente `dedicacionPeriodo` (ya está en horas semestrales)
+  // de TODOS los arrays: cursos, otras actividades, investigación,
+  // proyección social, gestión.
   // =========================================================
   const watchedData = useWatch({ control: form.control })
+  const horasTotalesPeriodo = maxHoras * 22
 
-  const SEMANAS_DEFAULT = 22
+  const sumPeriodo = (items?: { dedicacionPeriodo?: number }[]) =>
+    items?.reduce((acc, item) => acc + (Number(item?.dedicacionPeriodo) || 0), 0) || 0
 
-  // Cursos: each has its own .semanas and .dedicacionPeriodo
-  const totalCursosWeekly = watchedData.cursos?.reduce((acc, item) => {
-    const horas = Number(item?.dedicacionPeriodo) || 0
-    const sem = Number(item?.semanas) || SEMANAS_DEFAULT
-    return acc + (sem > 0 ? horas / sem : 0)
-  }, 0) || 0
-
-  // Activities: each has .dedicacionPeriodo and .semanas from the new schema
-  const activityArrayKeys = [
-    "otrasActividadesDocencia",
-    "actividadesInvestigacion",
-    "actividadesProyeccionSocial",
-    "actividadesGestion",
-  ] as const
-
-  const totalActividadesWeekly = activityArrayKeys.reduce((acc, key) => {
-    const items = watchedData[key] as { dedicacionPeriodo?: number; semanas?: number }[] | undefined
-    if (!items) return acc
-    return acc + items.reduce((sum, item) => {
-      const dedicacion = Number(item?.dedicacionPeriodo) || 0
-      const sem = Number(item?.semanas) || SEMANAS_DEFAULT
-      return sum + (sem > 0 ? dedicacion / sem : 0)
-    }, 0)
-  }, 0)
-
-  const totalHorasSemanales = totalCursosWeekly + totalActividadesWeekly
+  const totalSemestral =
+    sumPeriodo(watchedData.cursos) +
+    sumPeriodo(watchedData.otrasActividadesDocencia as { dedicacionPeriodo?: number }[] | undefined) +
+    sumPeriodo(watchedData.actividadesInvestigacion as { dedicacionPeriodo?: number }[] | undefined) +
+    sumPeriodo(watchedData.actividadesProyeccionSocial as { dedicacionPeriodo?: number }[] | undefined) +
+    sumPeriodo(watchedData.actividadesGestion as { dedicacionPeriodo?: number }[] | undefined)
 
   // =========================================================
   // Envío bloqueado si:
-  // - esEstricto AND promedio semanal excede el límite legal
+  // - esEstricto AND total semestral excede el límite legal
   // - O hay una transición en progreso
   // =========================================================
-  const envioDisabled = (esEstricto && totalHorasSemanales > maxHoras) || isPending || isSavingDraft
+  const envioDisabled = (esEstricto && totalSemestral > horasTotalesPeriodo) || isPending || isSavingDraft
 
   async function handleNext() {
     const currentFields = steps[currentStep]?.fieldsToValidate || []
@@ -339,9 +320,21 @@ export function AgendaWizardForm({
           />
         )
       case "docencia":
-        return <StepDocencia cursosGuardados={cursosGuardados} modalidad={docente.modalidad} sedeBase={docente.sedeBase} />
+        return (
+          <StepDocencia
+            cursosGuardados={cursosGuardados}
+            cursosMaestros={cursosMaestros}
+            catalogoActividades={catalogoActividades}
+            modalidad={docente.modalidad}
+            sedeBase={docente.sedeBase}
+          />
+        )
       case "investigacion":
-        return <StepInvestigacionProyeccion />
+        return (
+          <StepInvestigacionProyeccion
+            catalogoActividades={catalogoActividades}
+          />
+        )
       case "gestion":
         return (
           <StepGestion
@@ -368,7 +361,7 @@ export function AgendaWizardForm({
         className="space-y-6"
       >
         <HorasStickyHeader
-          maxHoras={maxHoras}
+          horasTotalesPeriodo={horasTotalesPeriodo}
           esEstricto={esEstricto}
           periodo={periodo}
         />

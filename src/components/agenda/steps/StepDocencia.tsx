@@ -6,9 +6,12 @@ import type { CursoGuardado } from "@/generated/prisma/client"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import { EMPTY_CURSO, EMPTY_ACTIVIDAD } from "@/lib/schemas/agenda-schema"
 import { SEDES } from "@/lib/constants"
-import { getMaxHoras } from "@/lib/utils/periodo"
-import { CursoCombobox } from "@/components/agenda/CursoCombobox"
-import { CalculadoraActividad } from "@/components/agenda/CalculadoraActividad"
+import {
+  CursoMaestroSelector,
+  type CursoMaestroOption,
+} from "@/components/agenda/CursoMaestroSelector"
+import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatalogoSelector"
+import { ActividadCardRow } from "@/components/agenda/ActividadCardRow"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -240,6 +243,184 @@ function SilentDedicacionCalc({ cursoIndex }: { cursoIndex: number }) {
 }
 
 // ==========================================
+// Sub-componente: Tarjeta de un curso con selector de catálogo
+// ==========================================
+function CursoCardRow({
+  index,
+  cursosMaestros,
+  onSelect,
+  onClear,
+  onRemove,
+}: {
+  index: number
+  cursosMaestros: CursoMaestroOption[]
+  onSelect: (curso: CursoMaestroOption) => void
+  onClear: () => void
+  onRemove: () => void
+}) {
+  const { control } = useFormContext<AgendaWizardFormData>()
+  const numeroCurso = useWatch({ name: `cursos.${index}.numeroCurso` }) as string
+  const nombreCurso = useWatch({ name: `cursos.${index}.nombreCurso` }) as string
+  const creditos = useWatch({ name: `cursos.${index}.creditos` }) as number
+  const horasPresenciales = useWatch({ name: `cursos.${index}.horasPresenciales` }) as number
+  const semanas = useWatch({ name: `cursos.${index}.semanas` }) as number
+  const dedicacionPeriodo = useWatch({ name: `cursos.${index}.dedicacionPeriodo` }) as number
+
+  const selected = !!numeroCurso
+
+  return (
+    <Card className="bg-card border shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-3">
+        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+            {index + 1}
+          </span>
+          {selected ? nombreCurso : `Curso #${index + 1}`}
+        </h4>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onRemove}
+          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+          title="Eliminar curso"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <CardContent className="p-4 pt-5 space-y-5">
+        {/* Silent Acuerdo 048 calculator — renders nothing */}
+        <SilentDedicacionCalc cursoIndex={index} />
+
+        {/* Selector del catálogo maestro (siempre visible) */}
+        <div className="space-y-2">
+          <FormLabel>Curso del Catálogo Oficial *</FormLabel>
+          <CursoMaestroSelector
+            cursosMaestros={cursosMaestros}
+            selectedCodigo={numeroCurso}
+            onSelect={onSelect}
+            onClear={onClear}
+          />
+          <FormDescription>
+            La denominación, créditos y horas presenciales se toman automáticamente del catálogo (Acuerdo 033/2024 y CA 009/2026).
+          </FormDescription>
+        </div>
+
+        {/* Resumen de horas calculadas — solo si hay curso seleccionado */}
+        {selected && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 rounded-md border bg-muted/30 p-3 text-sm">
+            <div>
+              <p className="text-xs text-muted-foreground">Créditos</p>
+              <p className="font-semibold tabular-nums">{creditos}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Hrs. presenciales/sem</p>
+              <p className="font-semibold tabular-nums">{horasPresenciales}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Semanas</p>
+              <p className="font-semibold tabular-nums">{semanas}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Total semestre (Art. 048)</p>
+              <p className="font-semibold tabular-nums text-primary">
+                {Math.round((dedicacionPeriodo || 0) * 10) / 10}h
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Campos editables: subgrupo, sede, semanas, horario */}
+        {selected && (
+          <div className="grid grid-cols-12 gap-x-6 gap-y-4">
+            <div className="col-span-12 md:col-span-4">
+              <FormField
+                control={control}
+                name={`cursos.${index}.subgrupo`}
+                render={({ field: f }) => (
+                  <FormItem>
+                    <FormLabel>Subgrupo</FormLabel>
+                    <FormControl>
+                      <Input {...f} placeholder="Ej: A1" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="col-span-12 md:col-span-4">
+              <FormField
+                control={control}
+                name={`cursos.${index}.sede`}
+                render={({ field: f }) => (
+                  <FormItem>
+                    <FormLabel>Sede donde se dicta</FormLabel>
+                    <Select value={f.value || ""} onValueChange={f.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {SEDES.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="col-span-12 md:col-span-4">
+              <FormField
+                control={control}
+                name={`cursos.${index}.semanas`}
+                render={({ field: f }) => (
+                  <FormItem>
+                    <FormLabel>Semanas del periodo</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={22}
+                        name={f.name}
+                        ref={f.ref}
+                        onBlur={f.onBlur}
+                        value={f.value === 0 ? "" : f.value}
+                        placeholder="22"
+                        onChange={(e) => {
+                          const raw = e.target.value
+                          if (raw === "") { f.onChange(0); return }
+                          let val = parseInt(raw, 10)
+                          if (isNaN(val)) val = 0
+                          if (val > 22) val = 22
+                          f.onChange(val)
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="col-span-12">
+              <HorarioChipToggles cursoIndex={index} />
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ==========================================
 // Componente principal: Paso 2 — Docencia
 // ==========================================
 
@@ -256,19 +437,16 @@ function SilentDedicacionCalc({ cursoIndex }: { cursoIndex: number }) {
  * - 1.2 Otras Actividades de Docencia (useFieldArray "otrasActividadesDocencia")
  */
 export function StepDocencia({
-  cursosGuardados,
-  modalidad,
-  sedeBase,
+  cursosMaestros,
+  catalogoActividades,
 }: {
-  cursosGuardados: CursoGuardado[]
+  cursosGuardados?: CursoGuardado[]
+  cursosMaestros: CursoMaestroOption[]
+  catalogoActividades: ActividadCatalogoOption[]
   modalidad: string
   sedeBase?: string | null
 }) {
-  const { control, setValue, watch } = useFormContext<AgendaWizardFormData>()
-
-  // Poka-yoke: derive physical max from modality + sede
-  const { maxHoras } = getMaxHoras(modalidad, sedeBase)
-  const maxPresenciales = Math.floor((maxHoras - 1) / 1.5)
+  const { control, setValue } = useFormContext<AgendaWizardFormData>()
 
   const {
     fields: cursoFields,
@@ -282,14 +460,21 @@ export function StepDocencia({
     remove: removeActDocencia,
   } = useFieldArray({ control, name: "otrasActividadesDocencia" })
 
-  function handleCursoImport(index: number, curso: CursoGuardado) {
-    setValue(`cursos.${index}.numeroCurso`, curso.numeroCurso, { shouldValidate: true })
-    setValue(`cursos.${index}.nombreCurso`, curso.nombreCurso, { shouldValidate: true })
-    setValue(`cursos.${index}.subgrupo`, curso.subgrupo || "")
-    setValue(`cursos.${index}.sede`, curso.sede || "")
-    setValue(`cursos.${index}.horasPresenciales`, curso.horasPresenciales ?? 0)
-    setValue(`cursos.${index}.creditos`, curso.creditos ?? 0)
-    setValue(`cursos.${index}.semanas`, curso.semanas ?? 0)
+  function handleCursoMaestroSelect(index: number, curso: CursoMaestroOption) {
+    const horasPresenciales = (curso.horasSemT ?? 0) + (curso.horasSemP ?? 0)
+    setValue(`cursos.${index}.numeroCurso`, curso.codigo, { shouldValidate: true })
+    setValue(`cursos.${index}.nombreCurso`, curso.nombre, { shouldValidate: true })
+    setValue(`cursos.${index}.creditos`, curso.creditos)
+    setValue(`cursos.${index}.horasPresenciales`, horasPresenciales)
+    // Default: semestre estándar de 22 semanas (Acuerdo 048 Art. 4)
+    setValue(`cursos.${index}.semanas`, 22)
+  }
+
+  function handleCursoMaestroClear(index: number) {
+    setValue(`cursos.${index}.numeroCurso`, "", { shouldValidate: true })
+    setValue(`cursos.${index}.nombreCurso`, "", { shouldValidate: true })
+    setValue(`cursos.${index}.creditos`, 0)
+    setValue(`cursos.${index}.horasPresenciales`, 0)
   }
 
   return (
@@ -319,246 +504,14 @@ export function StepDocencia({
           )}
 
           {cursoFields.map((field, index) => (
-            <Card
+            <CursoCardRow
               key={field.id}
-              className="bg-card border shadow-sm overflow-hidden"
-            >
-              {/* Card header */}
-              <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-3">
-                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                    {index + 1}
-                  </span>
-                  Curso #{index + 1}
-                </h4>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeCurso(index)}
-                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                  title="Eliminar curso"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <CardContent className="p-4 pt-5 space-y-5">
-                {/* Silent Acuerdo 048 calculator — renders nothing */}
-                <SilentDedicacionCalc cursoIndex={index} />
-
-                {/* ========== 12-COLUMN GRID ========== */}
-                <div className="grid grid-cols-12 gap-x-6 gap-y-4">
-
-                  {/* === ROW 1 === */}
-                  {/* Sede (3 cols) */}
-                  <div className="col-span-12 md:col-span-3">
-                    <FormField
-                      control={control}
-                      name={`cursos.${index}.sede`}
-                      render={({ field: f }) => (
-                        <FormItem>
-                          <FormLabel>Sede</FormLabel>
-                          <Select
-                            value={f.value || ""}
-                            onValueChange={f.onChange}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {SEDES.map((s) => (
-                                <SelectItem key={s} value={s}>
-                                  {s}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  {/* Nombre del curso + Combobox (9 cols) */}
-                  <div className="col-span-12 md:col-span-9">
-                    <FormField
-                      control={control}
-                      name={`cursos.${index}.nombreCurso`}
-                      render={({ field: f }) => (
-                        <FormItem>
-                          <FormLabel>Nombre del Curso *</FormLabel>
-                          <div className="flex gap-2">
-                            <FormControl>
-                              <Input
-                                {...f}
-                                placeholder="Ej: Cálculo Integral"
-                              />
-                            </FormControl>
-                            <CursoCombobox
-                              cursosGuardados={cursosGuardados}
-                              selectedNombre={watch(`cursos.${index}.nombreCurso`)}
-                              onSelect={(curso) =>
-                                handleCursoImport(index, curso)
-                              }
-                            />
-                          </div>
-                          <FormDescription>
-                            Escriba el nombre o use 🔍 para importar de guardados
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  {/* === ROW 2 === */}
-                  {/* Número de curso (5 cols) */}
-                  <div className="col-span-12 md:col-span-5">
-                    <FormField
-                      control={control}
-                      name={`cursos.${index}.numeroCurso`}
-                      render={({ field: f }) => (
-                        <FormItem>
-                          <FormLabel>No. Curso *</FormLabel>
-                          <FormControl>
-                            <Input {...f} placeholder="Ej: MAT201" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  {/* Créditos (2 cols) */}
-                  <div className="col-span-12 md:col-span-2">
-                    <FormField
-                      control={control}
-                      name={`cursos.${index}.creditos`}
-                      render={({ field: f }) => (
-                        <FormItem>
-                          <FormLabel>Créditos</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={15}
-                              name={f.name}
-                              ref={f.ref}
-                              onBlur={f.onBlur}
-                              value={f.value === 0 ? "" : f.value}
-                              placeholder="0"
-                              onChange={(e) => {
-                                const raw = e.target.value
-                                if (raw === "") { f.onChange(0); return }
-                                let val = parseInt(raw, 10)
-                                if (isNaN(val)) val = 0
-                                if (val > 15) val = 15
-                                f.onChange(val)
-                              }}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  {/* Subgrupo (3 cols) — leaves 2 empty cols intentionally */}
-                  <div className="col-span-12 md:col-span-3">
-                    <FormField
-                      control={control}
-                      name={`cursos.${index}.subgrupo`}
-                      render={({ field: f }) => (
-                        <FormItem>
-                          <FormLabel>Subgrupo</FormLabel>
-                          <FormControl>
-                            <Input {...f} placeholder="Ej: A1" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  {/* === ROW 3 === */}
-                  {/* Horas presenciales (3 cols) — Poka-yoke max from modality */}
-                  <div className="col-span-12 md:col-span-3">
-                    <FormField
-                      control={control}
-                      name={`cursos.${index}.horasPresenciales`}
-                      render={({ field: f }) => (
-                        <FormItem>
-                          <FormLabel>Hrs. Presenciales</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={maxPresenciales}
-                              name={f.name}
-                              ref={f.ref}
-                              onBlur={f.onBlur}
-                              value={f.value === 0 ? "" : f.value}
-                              placeholder="0"
-                              onChange={(e) => {
-                                const raw = e.target.value
-                                if (raw === "") { f.onChange(0); return }
-                                let val = parseInt(raw, 10)
-                                if (isNaN(val)) val = 0
-                                if (val > maxPresenciales) val = maxPresenciales
-                                f.onChange(val)
-                              }}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  {/* Semanas (3 cols) — leaves 6 empty cols intentionally */}
-                  <div className="col-span-12 md:col-span-3">
-                    <FormField
-                      control={control}
-                      name={`cursos.${index}.semanas`}
-                      render={({ field: f }) => (
-                        <FormItem>
-                          <FormLabel>Semanas</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={22}
-                              name={f.name}
-                              ref={f.ref}
-                              onBlur={f.onBlur}
-                              value={f.value === 0 ? "" : f.value}
-                              placeholder="0"
-                              onChange={(e) => {
-                                const raw = e.target.value
-                                if (raw === "") { f.onChange(0); return }
-                                let val = parseInt(raw, 10)
-                                if (isNaN(val)) val = 0
-                                if (val > 22) val = 22
-                                f.onChange(val)
-                              }}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  {/* === ROW 4: Horario (full width) === */}
-                  <div className="col-span-12">
-                    <HorarioChipToggles cursoIndex={index} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              index={index}
+              cursosMaestros={cursosMaestros}
+              onSelect={(curso) => handleCursoMaestroSelect(index, curso)}
+              onClear={() => handleCursoMaestroClear(index)}
+              onRemove={() => removeCurso(index)}
+            />
           ))}
 
           <Button
@@ -592,137 +545,14 @@ export function StepDocencia({
           )}
 
           {actDocenciaFields.map((field, index) => (
-            <div
+            <ActividadCardRow
               key={field.id}
-              className="relative rounded-lg border p-4"
-            >
-              {/* Silent calculator — renders nothing */}
-              <CalculadoraActividad
-                arrayName="otrasActividadesDocencia"
-                index={index}
-              />
-
-              <div className="mb-3 flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-muted-foreground">
-                  Actividad #{index + 1}
-                </h4>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeActDocencia(index)}
-                  className="h-8 w-8 text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-12">
-                {/* Nombre — 6 columnas */}
-                <div className="sm:col-span-6">
-                  <FormField
-                    control={control}
-                    name={`otrasActividadesDocencia.${index}.nombre`}
-                    render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel>Nombre *</FormLabel>
-                        <FormControl>
-                          <Input {...f} placeholder="Ej: Tutorías académicas" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Horas semanales — 3 columnas */}
-                <div className="sm:col-span-3">
-                  <FormField
-                    control={control}
-                    name={`otrasActividadesDocencia.${index}.horasSemanales`}
-                    render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel>Horas/semana *</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={40}
-                            step="0.5"
-                            name={f.name}
-                            ref={f.ref}
-                            onBlur={f.onBlur}
-                            value={f.value === 0 ? "" : f.value}
-                            placeholder="0"
-                            onChange={(e) => {
-                              const raw = e.target.value
-                              if (raw === "") { f.onChange(0); return }
-                              let val = parseFloat(raw)
-                              if (isNaN(val)) val = 0
-                              if (val > 40) val = 40
-                              f.onChange(val)
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Semanas — 3 columnas */}
-                <div className="sm:col-span-3">
-                  <FormField
-                    control={control}
-                    name={`otrasActividadesDocencia.${index}.semanas`}
-                    render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel>Semanas *</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={22}
-                            step={1}
-                            name={f.name}
-                            ref={f.ref}
-                            onBlur={f.onBlur}
-                            value={f.value === 0 ? "" : f.value}
-                            placeholder="0"
-                            onChange={(e) => {
-                              const raw = e.target.value
-                              if (raw === "") { f.onChange(0); return }
-                              let val = parseInt(raw, 10)
-                              if (isNaN(val)) val = 0
-                              if (val > 22) val = 22
-                              f.onChange(val)
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Descripción — 12 columnas (full width) */}
-                <div className="sm:col-span-12">
-                  <FormField
-                    control={control}
-                    name={`otrasActividadesDocencia.${index}.descripcion`}
-                    render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel>Descripción</FormLabel>
-                        <FormControl>
-                          <Input {...f} placeholder="Detalle opcional" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </div>
-            </div>
+              index={index}
+              arrayName="otrasActividadesDocencia"
+              catalogo={catalogoActividades}
+              categoria="DOCENCIA"
+              onRemove={() => removeActDocencia(index)}
+            />
           ))}
 
           <Button

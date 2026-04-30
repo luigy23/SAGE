@@ -91,17 +91,31 @@ export const actividadSchema = z.object({
   horasSemanales: z.coerce
     .number()
     .min(0, "No puede ser negativo")
-    .max(40, "No puede exceder las 40 horas semanales."),
+    .max(40, "No puede exceder las 40 horas semanales.")
+    .default(0),
   semanas: z.coerce
     .number()
     .int("Debe ser un número entero")
     .min(0, "No puede ser negativo")
-    .max(22, "El Acuerdo 048 establece un máximo de 22 semanas por semestre."),
-  dedicacionPeriodo: z.coerce.number().optional().default(0),
-}).transform((data) => ({
-  ...data,
-  dedicacionPeriodo: data.horasSemanales * data.semanas
-}))
+    .max(22, "El Acuerdo 048 establece un máximo de 22 semanas por semestre.")
+    .default(0),
+  dedicacionPeriodo: z.coerce
+    .number()
+    .min(0, "No puede ser negativo")
+    .max(880, "No puede exceder 880 horas en el semestre.")
+    .default(0),
+}).transform((data) => {
+  // Si el usuario llenó h/sem × semanas, ese cálculo gana; si no, se preserva
+  // el `dedicacionPeriodo` ingresado directamente (modo "total semestre").
+  const calculadoPorSemana =
+    data.horasSemanales > 0 && data.semanas > 0
+      ? data.horasSemanales * data.semanas
+      : null
+  return {
+    ...data,
+    dedicacionPeriodo: calculadoPorSemana ?? data.dedicacionPeriodo,
+  }
+})
 
 export type ActividadFormData = z.infer<typeof actividadSchema>
 
