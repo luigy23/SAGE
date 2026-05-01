@@ -149,40 +149,68 @@ export type DocenteFlags = {
   proyectosActivos: boolean;
 }
 
-export function createAgendaSchema(maxHoras: number, esEstricto: boolean, flags: DocenteFlags) {
+export function createAgendaSchema(
+  maxHoras: number,
+  esEstricto: boolean,
+  flags: DocenteFlags,
+  minDocencia: number = 0,
+) {
   return agendaWizardBaseSchema.superRefine((data, ctx) => {
     const totalHorasSemestrales = calcularTotalHoras(data);
-    const maxHorasSemestrales = maxHoras * 22; // Convert weekly limit to semestral
+    const maxHorasSemestrales = maxHoras * 22; // tope semestral derivado del semanal
     const TOLERANCIA_SEMANAL = 0.5;
-    const minRequerido = (maxHoras - TOLERANCIA_SEMANAL) * 22;
     const maxPermitido = (maxHoras + TOLERANCIA_SEMANAL) * 22;
-    
-    // 1. REGLA DE TOPE MÁXIMO (Semestral vs Semestral)
-    if (esEstricto && (totalHorasSemestrales < minRequerido || totalHorasSemestrales > maxPermitido)) {
+
+    // 1. TOPE MÁXIMO (Acuerdo 048 Arts. 4a/4b/4c/4d)
+    // `maxHoras` es el límite superior contractual, NO una obligación de
+    // igualdad. El docente puede registrar menos horas que el tope.
+    if (esEstricto && totalHorasSemestrales > maxPermitido) {
+      const exceso = Math.round((totalHorasSemestrales - maxPermitido) * 10) / 10;
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `Su dedicación actual es de ${totalHorasSemestrales}h semestrales. El contrato exige entre ${minRequerido}h y ${maxPermitido}h.`,
+        message: `Su dedicación (${totalHorasSemestrales}h) excede en ${exceso}h el tope contractual semestral (${maxPermitido}h). Reduzca actividades para continuar.`,
         path: ["_horasExcedidas"],
       });
     }
 
-    // 2. REGLA ARTÍCULO 10: Gestión Académico Administrativa (Semestral vs Semestral)
+    // 2. MÍNIMO DE DOCENCIA (Art. 3) — se evalúa sobre las horas de docencia
+    // (cursos + otras actividades de docencia), no sobre el total de la agenda.
+    // `minDocencia` ya viene ajustado según `proyectosActivos` (Art. 3 Par. 1).
+    if (minDocencia > 0) {
+      const horasDocencia =
+        data.cursos.reduce((acc, c) => acc + (Number(c.dedicacionPeriodo) || 0), 0) +
+        data.otrasActividadesDocencia.reduce(
+          (acc, a) => acc + (Number(a.dedicacionPeriodo) || 0),
+          0
+        );
+
+      if (horasDocencia < minDocencia) {
+        const deficit = Math.round((minDocencia - horasDocencia) * 10) / 10;
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Sus horas de docencia (${horasDocencia}h) están ${deficit}h por debajo del mínimo legal (${minDocencia}h, Art. 3 Acuerdo 048).`,
+          path: ["cursos"],
+        });
+      }
+    }
+
+    // 3. ARTÍCULO 10: Gestión Académico Administrativa
     const horasGestion = data.actividadesGestion.reduce((acc, item) => acc + (Number(item.dedicacionPeriodo) || 0), 0);
     if (horasGestion > 0 && !flags.cargoAdministrativo) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "No puede asignar horas de Gestión porque no tiene un Cargo Administrativo registrado en su perfil.",
-        path: ["actividadesGestion"], 
+        path: ["actividadesGestion"],
       });
     }
 
     // El límite del 20% para gestión se calcula sobre la dedicación total del semestre
-    const limiteGestionSemestral = maxHorasSemestrales * 0.20; 
+    const limiteGestionSemestral = maxHorasSemestrales * 0.20;
     if (flags.cargoAdministrativo && horasGestion > limiteGestionSemestral) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: `Las horas de gestión semestrales (${horasGestion}h) no pueden exceder el 20% de su carga laboral (${limiteGestionSemestral}h).`,
-        path: ["actividadesGestion"], 
+        path: ["actividadesGestion"],
       });
     }
   });

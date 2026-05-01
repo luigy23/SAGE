@@ -53,3 +53,27 @@ export function getMaxHoras(
   // Fallback (VISITANTE, INVITADO): 40 h/sem hasta tener parámetro contractual.
   return { maxHoras: 40, esEstricto: true }
 }
+
+/**
+ * getMinDocencia — Mínimo legal de horas de docencia para el semestre
+ * (Acuerdo 048, Art. 3). Si el docente tiene proyectos activos, aplica el
+ * mínimo reducido (Art. 3 Par. 1).
+ *
+ * Síncrono / fallback. Para resolver desde DB ver `resolveAgendaLimits`.
+ */
+export function getMinDocencia(
+  modalidad: string,
+  proyectosActivos: boolean
+): number {
+  if (modalidad === "PLANTA_TC" || modalidad === "OCASIONAL_TC") {
+    return proyectosActivos ? 288 : 432
+  }
+  if (modalidad === "PLANTA_MT" || modalidad === "OCASIONAL_MT") {
+    return proyectosActivos ? 144 : 240
+  }
+  if (modalidad === "VISITANTE") {
+    return 528 // 60% de 880 (Art. 3 Par. 4)
+  }
+  // CATEDRA, INVITADO: sin mínimo de docencia
+  return 0
+}

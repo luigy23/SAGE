@@ -11,7 +11,7 @@ import {
   DEFAULT_FORM_VALUES,
   type AgendaWizardFormData,
 } from "@/lib/schemas/agenda-schema"
-import { getMaxHoras } from "@/lib/utils/periodo"
+import { getMaxHoras, getMinDocencia } from "@/lib/utils/periodo"
 import {
   upsertAgendaCompletaAction,
 } from "@/lib/actions/agenda-wizard"
@@ -184,13 +184,23 @@ export function AgendaWizardForm({
     [docente.modalidad, docente.sedeBase]
   )
 
+  const minDocencia = useMemo(
+    () => getMinDocencia(docente.modalidad, docente.proyectosActivos),
+    [docente.modalidad, docente.proyectosActivos]
+  )
+
   const schema = useMemo(
-    () => createAgendaSchema(maxHoras, esEstricto, {
-      doctorado: docente.doctorado,
-      cargoAdministrativo: docente.cargoAdministrativo,
-      proyectosActivos: docente.proyectosActivos,
-    }),
-    [maxHoras, esEstricto, docente.doctorado, docente.cargoAdministrativo, docente.proyectosActivos]
+    () => createAgendaSchema(
+      maxHoras,
+      esEstricto,
+      {
+        doctorado: docente.doctorado,
+        cargoAdministrativo: docente.cargoAdministrativo,
+        proyectosActivos: docente.proyectosActivos,
+      },
+      minDocencia,
+    ),
+    [maxHoras, esEstricto, minDocencia, docente.doctorado, docente.cargoAdministrativo, docente.proyectosActivos]
   )
 
   const steps = useMemo(
@@ -235,7 +245,38 @@ export function AgendaWizardForm({
   // =========================================================
   const envioDisabled = (esEstricto && totalSemestral > horasTotalesPeriodo) || isPending || isSavingDraft
 
+  // Elimina filas dinámicas vacías antes de validar/enviar.
+  // Una fila se considera "vacía" cuando el usuario tocó "+ Agregar" pero
+  // nunca seleccionó un curso/actividad del catálogo — estado fuente del
+  // bloqueo silencioso reportado en QA.
+  function pruneEmptyArrayRows() {
+    const values = form.getValues()
+
+    const cursosFiltrados = (values.cursos ?? []).filter(
+      (c) => (c?.numeroCurso ?? "").trim() !== ""
+    )
+    if (cursosFiltrados.length !== (values.cursos?.length ?? 0)) {
+      form.setValue("cursos", cursosFiltrados, { shouldDirty: true })
+    }
+
+    const actividadArrays = [
+      "otrasActividadesDocencia",
+      "actividadesInvestigacion",
+      "actividadesProyeccionSocial",
+      "actividadesGestion",
+    ] as const
+    for (const name of actividadArrays) {
+      const arr = values[name] ?? []
+      const pruned = arr.filter((a) => (a?.nombre ?? "").trim() !== "")
+      if (pruned.length !== arr.length) {
+        form.setValue(name, pruned, { shouldDirty: true })
+      }
+    }
+  }
+
   async function handleNext() {
+    pruneEmptyArrayRows()
+
     const currentFields = steps[currentStep]?.fieldsToValidate || []
 
     if (currentFields.length > 0) {
@@ -252,6 +293,7 @@ export function AgendaWizardForm({
   }
 
   function handlePrev() {
+    pruneEmptyArrayRows()
     setCurrentStep((s) => Math.max(0, s - 1))
   }
 
@@ -262,6 +304,7 @@ export function AgendaWizardForm({
   }
 
   async function handleSaveDraft() {
+    pruneEmptyArrayRows()
     setIsSavingDraft(true)
     const data = form.getValues()
 
@@ -283,6 +326,8 @@ export function AgendaWizardForm({
   }
 
   async function handleSubmitAgenda() {
+    pruneEmptyArrayRows()
+
     const valid = await form.trigger()
     if (!valid) {
       toast.error("Hay errores en el formulario. Revise todos los pasos.")
