@@ -291,7 +291,7 @@ export default function RegisterPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {SEDES.map((sede) => (
-                    <SelectItem key={sede} value={sede}>{sede}</SelectItem>
+                    <SelectItem key={sede.value} value={sede.value}>{sede.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

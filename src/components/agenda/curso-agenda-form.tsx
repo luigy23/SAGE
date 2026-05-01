@@ -92,8 +92,8 @@ export function CursoAgendaForm({
             </SelectTrigger>
             <SelectContent>
               {SEDES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
                 </SelectItem>
               ))}
             </SelectContent>
