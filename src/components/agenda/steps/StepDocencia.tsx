@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo } from "react"
 import { useFormContext, useFieldArray, useWatch } from "react-hook-form"
-import type { CursoGuardado } from "@/generated/prisma/client"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import { EMPTY_CURSO, EMPTY_ACTIVIDAD } from "@/lib/schemas/agenda-schema"
 import { SEDES } from "@/lib/constants"
@@ -440,7 +439,6 @@ export function StepDocencia({
   cursosMaestros,
   catalogoActividades,
 }: {
-  cursosGuardados?: CursoGuardado[]
   cursosMaestros: CursoMaestroOption[]
   catalogoActividades: ActividadCatalogoOption[]
   modalidad: string

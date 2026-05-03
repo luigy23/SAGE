@@ -5,7 +5,7 @@ import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import type { Docente, CursoGuardado } from "@/generated/prisma/client"
+import type { Docente } from "@/generated/prisma/client"
 import {
   createAgendaSchema,
   DEFAULT_FORM_VALUES,
@@ -157,14 +157,12 @@ function WizardStepper({
 
 export function AgendaWizardForm({
   docente,
-  cursosGuardados,
   cursosMaestros,
   catalogoActividades,
   periodo,
   defaultValues,
 }: {
   docente: Docente
-  cursosGuardados: CursoGuardado[]
   cursosMaestros: CursoMaestroOption[]
   catalogoActividades: ActividadCatalogoOption[]
   periodo: string
@@ -367,7 +365,6 @@ export function AgendaWizardForm({
       case "docencia":
         return (
           <StepDocencia
-            cursosGuardados={cursosGuardados}
             cursosMaestros={cursosMaestros}
             catalogoActividades={catalogoActividades}
             modalidad={docente.modalidad}

@@ -83,13 +83,8 @@ export default async function AgendaPage() {
   })
 
   // ==========================================
-  // 4. Cursos guardados (cache personal del docente) + Catálogo Maestro (oficial)
+  // 4. Catálogo Maestro (oficial, gestionado por SUPERADMIN)
   // ==========================================
-  const cursosGuardados = await prisma.cursoGuardado.findMany({
-    where: { docenteId: docente.id },
-    orderBy: { nombreCurso: "asc" },
-  })
-
   const cursosMaestros = await prisma.cursoMaestro.findMany({
     where: { estado: true },
     orderBy: [{ componente: "asc" }, { codigo: "asc" }],
@@ -149,7 +144,6 @@ export default async function AgendaPage() {
 
         <NuevaAgendaView
           docente={docente}
-          cursosGuardados={cursosGuardados}
           cursosMaestros={cursosMaestros}
           catalogoActividades={catalogoActividades}
           periodo={periodo}
@@ -320,7 +314,6 @@ export default async function AgendaPage() {
         {/* Wizard con datos pre-cargados (Continuar Editando) */}
         <AgendaWizardForm
           docente={docente}
-          cursosGuardados={cursosGuardados}
           cursosMaestros={cursosMaestros}
           catalogoActividades={catalogoActividades}
           periodo={periodo}

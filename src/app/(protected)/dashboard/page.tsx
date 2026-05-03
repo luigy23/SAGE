@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Calendar, ClipboardCheck, BookOpen, User } from "lucide-react"
+import { Calendar, ClipboardCheck, User } from "lucide-react"
 
 export default async function DashboardPage() {
   const session = await auth()
@@ -21,7 +21,6 @@ export default async function DashboardPage() {
     include: {
       _count: {
         select: {
-          cursosGuardados: true,
           agendasSemestrales: true,
           monitoreos: true,
         },
@@ -49,24 +48,7 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Cursos Guardados
-            </CardTitle>
-            <BookOpen className="h-4 w-4 text-[#8F141B]" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-[#8F141B]">
-              {docente?._count.cursosGuardados ?? 0}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Cursos en tu perfil
-            </p>
-          </CardContent>
-        </Card>
-
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
@@ -112,7 +94,7 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle>Mi Perfil</CardTitle>
             <CardDescription>
-              Actualiza tus datos y gestiona tus cursos guardados
+              Actualiza tus datos académicos y de contacto
             </CardDescription>
           </CardHeader>
           <CardContent>

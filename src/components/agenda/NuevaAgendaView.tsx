@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import type { Docente, CursoGuardado } from "@/generated/prisma/client"
+import type { Docente } from "@/generated/prisma/client"
 import { AgendaWizardForm } from "@/components/agenda/AgendaWizardForm"
 import type { CursoMaestroOption } from "@/components/agenda/CursoMaestroSelector"
 import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatalogoSelector"
@@ -27,13 +27,11 @@ import { CalendarDays, Plus } from "lucide-react"
  */
 export function NuevaAgendaView({
   docente,
-  cursosGuardados,
   cursosMaestros,
   catalogoActividades,
   periodo,
 }: {
   docente: Docente
-  cursosGuardados: CursoGuardado[]
   cursosMaestros: CursoMaestroOption[]
   catalogoActividades: ActividadCatalogoOption[]
   periodo: string
@@ -47,7 +45,6 @@ export function NuevaAgendaView({
     return (
       <AgendaWizardForm
         docente={docente}
-        cursosGuardados={cursosGuardados}
         cursosMaestros={cursosMaestros}
         catalogoActividades={catalogoActividades}
         periodo={periodo}
