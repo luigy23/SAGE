@@ -108,8 +108,10 @@ function SectionCard({
 // ==========================================
 export function AgendaReadOnly({
   agenda,
+  semanasPeriodo,
 }: {
   agenda: AgendaConRelaciones
+  semanasPeriodo: number
 }) {
   const { docente } = agenda
 
@@ -148,8 +150,7 @@ export function AgendaReadOnly({
   // ==========================================
   // Equivalencia Promedio Semanal
   // ==========================================
-  const SEMANAS_REFERENCIA = 22
-  const promedioSemanal = granTotal / SEMANAS_REFERENCIA
+  const promedioSemanal = semanasPeriodo > 0 ? granTotal / semanasPeriodo : 0
   const promedioRedondeado = Math.round(promedioSemanal * 10) / 10
   const excedidoSemanal = promedioSemanal > maxHoras
 

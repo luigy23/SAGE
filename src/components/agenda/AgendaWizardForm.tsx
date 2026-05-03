@@ -161,12 +161,14 @@ export function AgendaWizardForm({
   catalogoActividades,
   periodo,
   defaultValues,
+  semanasPeriodo,
 }: {
   docente: Docente
   cursosMaestros: CursoMaestroOption[]
   catalogoActividades: ActividadCatalogoOption[]
   periodo: string
   defaultValues?: AgendaWizardFormData
+  semanasPeriodo: number
 }) {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState(0)
@@ -197,8 +199,9 @@ export function AgendaWizardForm({
         proyectosActivos: docente.proyectosActivos,
       },
       minDocencia,
+      semanasPeriodo,
     ),
-    [maxHoras, esEstricto, minDocencia, docente.doctorado, docente.cargoAdministrativo, docente.proyectosActivos]
+    [maxHoras, esEstricto, minDocencia, semanasPeriodo, docente.doctorado, docente.cargoAdministrativo, docente.proyectosActivos]
   )
 
   const steps = useMemo(
@@ -224,7 +227,7 @@ export function AgendaWizardForm({
   // proyección social, gestión.
   // =========================================================
   const watchedData = useWatch({ control: form.control })
-  const horasTotalesPeriodo = maxHoras * 22
+  const horasTotalesPeriodo = maxHoras * semanasPeriodo
 
   const sumPeriodo = (items?: { dedicacionPeriodo?: number }[]) =>
     items?.reduce((acc, item) => acc + (Number(item?.dedicacionPeriodo) || 0), 0) || 0
@@ -360,6 +363,7 @@ export function AgendaWizardForm({
             docente={docente}
             maxHoras={maxHoras}
             esEstricto={esEstricto}
+            semanasPeriodo={semanasPeriodo}
           />
         )
       case "docencia":
@@ -369,18 +373,21 @@ export function AgendaWizardForm({
             catalogoActividades={catalogoActividades}
             modalidad={docente.modalidad}
             sedeBase={docente.sedeBase}
+            semanasPeriodo={semanasPeriodo}
           />
         )
       case "investigacion":
         return (
           <StepInvestigacionProyeccion
             catalogoActividades={catalogoActividades}
+            semanasPeriodo={semanasPeriodo}
           />
         )
       case "gestion":
         return (
           <StepGestion
             cargoAdministrativo={docente.cargoAdministrativo}
+            semanasPeriodo={semanasPeriodo}
           />
         )
       case "revision":
@@ -389,6 +396,7 @@ export function AgendaWizardForm({
             docente={docente}
             maxHoras={maxHoras}
             esEstricto={esEstricto}
+            semanasPeriodo={semanasPeriodo}
           />
         )
       default:

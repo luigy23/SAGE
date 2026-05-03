@@ -8,6 +8,7 @@ import { AgendaReadOnly } from "@/components/agenda/AgendaReadOnly"
 import type { AgendaConRelaciones } from "@/lib/types/agenda"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import { DiscardDraftButton } from "@/components/agenda/DiscardDraftButton"
+import { resolveGlobales } from "@/lib/rules/resolver"
 import {
   Card,
   CardContent,
@@ -55,9 +56,15 @@ export default async function AgendaPage() {
   }
 
   // ==========================================
-  // 2. Periodo activo
+  // 2. Periodo activo + parámetros globales (cascada DB → fallback)
   // ==========================================
   const periodo = await getPeriodoActivo()
+  const periodoRow = await prisma.periodoAcademico.findUnique({
+    where: { nombre: periodo },
+    select: { id: true },
+  })
+  const globales = await resolveGlobales(periodoRow?.id ?? null)
+  const semanasPeriodo = globales.semanasPeriodo
 
   // ==========================================
   // 3. Buscar agenda del periodo con relaciones
@@ -147,6 +154,7 @@ export default async function AgendaPage() {
           cursosMaestros={cursosMaestros}
           catalogoActividades={catalogoActividades}
           periodo={periodo}
+          semanasPeriodo={semanasPeriodo}
         />
 
         {/* Lista de agendas de periodos anteriores */}
@@ -318,6 +326,7 @@ export default async function AgendaPage() {
           catalogoActividades={catalogoActividades}
           periodo={periodo}
           defaultValues={defaultValues}
+          semanasPeriodo={semanasPeriodo}
         />
 
         {/* Botón Descartar — client component para manejar el server action */}
@@ -331,7 +340,7 @@ export default async function AgendaPage() {
   // ==========================================
   // CASO C: ENVIADO → Vista de solo lectura
   // ==========================================
-  return <AgendaReadOnly agenda={agenda as AgendaConRelaciones} />
+  return <AgendaReadOnly agenda={agenda as AgendaConRelaciones} semanasPeriodo={semanasPeriodo} />
 }
 
 // ==========================================

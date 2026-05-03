@@ -48,12 +48,14 @@ export function ActividadCardRow({
   arrayName,
   catalogo,
   categoria,
+  semanasPeriodo,
   onRemove,
 }: {
   index: number
   arrayName: ArrayFieldName
   catalogo: ActividadCatalogoOption[]
   categoria: CategoriaActividadFiltro
+  semanasPeriodo: number
   onRemove: () => void
 }) {
   const { control, setValue } = useFormContext<AgendaWizardFormData>()
@@ -84,10 +86,10 @@ export function ActividadCardRow({
     if (act.topeSemestralH !== null) {
       setValue(`${arrayName}.${index}.dedicacionPeriodo`, act.topeSemestralH)
     } else if (act.topeSemanalHPorUnidad !== null) {
-      // Por unidad — pre-poblar con 1 unidad (22 sem × 1 × topeSemanalHPorUnidad)
+      // Por unidad — pre-poblar con 1 unidad (semanasPeriodo × 1 × topeSemanalHPorUnidad)
       setValue(
         `${arrayName}.${index}.dedicacionPeriodo`,
-        Math.round(act.topeSemanalHPorUnidad * 22 * 10) / 10
+        Math.round(act.topeSemanalHPorUnidad * semanasPeriodo * 10) / 10
       )
     }
     // Limpiar h/s — si el docente quiere puede re-ingresarlas en modo cálculo
@@ -287,19 +289,19 @@ export function ActividadCardRow({
                             <Input
                               type="number"
                               min={0}
-                              max={22}
+                              max={semanasPeriodo}
                               step={1}
                               name={f.name}
                               ref={f.ref}
                               onBlur={f.onBlur}
                               value={f.value === 0 ? "" : f.value}
-                              placeholder="22"
+                              placeholder={String(semanasPeriodo)}
                               onChange={(e) => {
                                 const raw = e.target.value
                                 if (raw === "") { handleSemanasChange(0); return }
                                 let val = parseInt(raw, 10)
                                 if (isNaN(val)) val = 0
-                                if (val > 22) val = 22
+                                if (val > semanasPeriodo) val = semanasPeriodo
                                 handleSemanasChange(val)
                               }}
                             />

@@ -23,8 +23,10 @@ import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatal
  */
 export function StepInvestigacionProyeccion({
   catalogoActividades,
+  semanasPeriodo,
 }: {
   catalogoActividades: ActividadCatalogoOption[]
+  semanasPeriodo: number
 }) {
   const { control } = useFormContext<AgendaWizardFormData>()
 
@@ -67,6 +69,7 @@ export function StepInvestigacionProyeccion({
               arrayName="actividadesInvestigacion"
               catalogo={catalogoActividades}
               categoria="INVESTIGACION"
+              semanasPeriodo={semanasPeriodo}
               onRemove={() => removeInv(index)}
             />
           ))}
@@ -108,6 +111,7 @@ export function StepInvestigacionProyeccion({
               arrayName="actividadesProyeccionSocial"
               catalogo={catalogoActividades}
               categoria="PROYECCION_SOCIAL"
+              semanasPeriodo={semanasPeriodo}
               onRemove={() => removePro(index)}
             />
           ))}

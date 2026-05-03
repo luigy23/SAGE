@@ -40,8 +40,10 @@ import { CalculadoraActividad } from "@/components/agenda/CalculadoraActividad"
  */
 export function StepGestion({
   cargoAdministrativo,
+  semanasPeriodo,
 }: {
   cargoAdministrativo: boolean
+  semanasPeriodo: number
 }) {
   const { control, formState: { errors } } = useFormContext<AgendaWizardFormData>()
 
@@ -186,7 +188,7 @@ export function StepGestion({
                         <Input
                           type="number"
                           min={0}
-                          max={22}
+                          max={semanasPeriodo}
                           step={1}
                           name={f.name}
                           ref={f.ref}
@@ -198,7 +200,7 @@ export function StepGestion({
                             if (raw === "") { f.onChange(0); return }
                             let val = parseInt(raw, 10)
                             if (isNaN(val)) val = 0
-                            if (val > 22) val = 22
+                            if (val > semanasPeriodo) val = semanasPeriodo
                             f.onChange(val)
                           }}
                         />

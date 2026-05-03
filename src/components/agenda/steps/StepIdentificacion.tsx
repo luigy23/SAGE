@@ -33,10 +33,12 @@ export function StepIdentificacion({
   docente,
   maxHoras,
   esEstricto,
+  semanasPeriodo,
 }: {
   docente: Docente
   maxHoras: number
   esEstricto: boolean
+  semanasPeriodo: number
 }) {
   // Derive limit from modality + sede — single source of truth
   const { maxHoras: maxHorasCalc } = getMaxHoras(docente.modalidad, docente.sedeBase)
@@ -163,15 +165,15 @@ export function StepIdentificacion({
             <Clock className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
             <div>
               <p className="text-sm font-semibold">
-                Carga del semestre: {maxHorasCalc * 22} horas
+                Carga del semestre: {maxHorasCalc * semanasPeriodo} horas
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  ({maxHorasCalc} h/sem × 22 semanas)
+                  ({maxHorasCalc} h/sem × {semanasPeriodo} semanas)
                 </span>
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {esEstricto
-                  ? `Su modalidad (${docente.modalidad}) tiene un límite estricto de ${maxHorasCalc * 22} horas en el semestre. No podrá enviar la agenda si lo excede.`
-                  : `Su modalidad (${docente.modalidad}) tiene un techo de referencia de ${maxHorasCalc * 22} horas en el semestre. Si lo excede, verá una advertencia pero podrá enviar la agenda.`}
+                  ? `Su modalidad (${docente.modalidad}) tiene un límite estricto de ${maxHorasCalc * semanasPeriodo} horas en el semestre. No podrá enviar la agenda si lo excede.`
+                  : `Su modalidad (${docente.modalidad}) tiene un techo de referencia de ${maxHorasCalc * semanasPeriodo} horas en el semestre. Si lo excede, verá una advertencia pero podrá enviar la agenda.`}
               </p>
             </div>
           </div>

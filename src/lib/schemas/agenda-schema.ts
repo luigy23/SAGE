@@ -39,94 +39,108 @@ export const horarioCursoSchema = z.object({
 
 export type HorarioCursoFormData = z.infer<typeof horarioCursoSchema>
 
-export const cursoAgendaSchema = z.object({
-  numeroCurso: z.string().min(1, "El número de curso es obligatorio"),
-  nombreCurso: z.string().min(1, "El nombre del curso es obligatorio"),
-  subgrupo: z.string().optional().default(""),
-  sede: z.string().optional().default(""),
-  horasPresenciales: z.coerce
-    .number()
-    .int("Debe ser un número entero")
-    .min(0, "No puede ser negativo")
-    .max(40, "No puede exceder las 40 horas semanales legales."),
-  creditos: z.coerce
-    .number()
-    .int("Debe ser un número entero")
-    .min(0, "No puede ser negativo")
-    .max(15, "Revise el valor. Un curso no suele exceder 15 créditos."),
-  semanas: z.coerce
-    .number()
-    .int("Debe ser un número entero")
-    .min(0, "No puede ser negativo")
-    .max(22, "El Acuerdo 048 establece un máximo de 22 semanas por semestre."),
-  
-  dedicacionPeriodo: z.coerce.number().optional().default(0),
-  
-  horarios: horarioCursoSchema.default({
-    lunes: null,
-    martes: null,
-    miercoles: null,
-    jueves: null,
-    viernes: null,
-    sabado: null,
-    domingo: null,
-  }),
-}).transform((data) => {
-  const factorPreparacion = 1.5;
-  const horasTutoria = 1;
-  const horasSemanalesCalculadas = (data.horasPresenciales * factorPreparacion) + horasTutoria;
-  const calculoLegalTotal = horasSemanalesCalculadas * data.semanas;
+// Default semestral: 22 semanas (Acuerdo 048). Se sobreescribe vía
+// SUPERADMIN al crear el schema dinámico con `createAgendaSchema(...)`.
+export const DEFAULT_SEMANAS_PERIODO = 22
 
-  return {
-    ...data,
-    dedicacionPeriodo: calculoLegalTotal
-  };
-})
+export function createCursoAgendaSchema(semanasPeriodo: number = DEFAULT_SEMANAS_PERIODO) {
+  return z.object({
+    numeroCurso: z.string().min(1, "El número de curso es obligatorio"),
+    nombreCurso: z.string().min(1, "El nombre del curso es obligatorio"),
+    subgrupo: z.string().optional().default(""),
+    sede: z.string().optional().default(""),
+    horasPresenciales: z.coerce
+      .number()
+      .int("Debe ser un número entero")
+      .min(0, "No puede ser negativo")
+      .max(40, "No puede exceder las 40 horas semanales legales."),
+    creditos: z.coerce
+      .number()
+      .int("Debe ser un número entero")
+      .min(0, "No puede ser negativo")
+      .max(15, "Revise el valor. Un curso no suele exceder 15 créditos."),
+    semanas: z.coerce
+      .number()
+      .int("Debe ser un número entero")
+      .min(0, "No puede ser negativo")
+      .max(semanasPeriodo, `Máximo ${semanasPeriodo} semanas por semestre.`),
 
+    dedicacionPeriodo: z.coerce.number().optional().default(0),
+
+    horarios: horarioCursoSchema.default({
+      lunes: null,
+      martes: null,
+      miercoles: null,
+      jueves: null,
+      viernes: null,
+      sabado: null,
+      domingo: null,
+    }),
+  }).transform((data) => {
+    const factorPreparacion = 1.5;
+    const horasTutoria = 1;
+    const horasSemanalesCalculadas = (data.horasPresenciales * factorPreparacion) + horasTutoria;
+    const calculoLegalTotal = horasSemanalesCalculadas * data.semanas;
+
+    return {
+      ...data,
+      dedicacionPeriodo: calculoLegalTotal
+    };
+  })
+}
+
+// Schema con default — usado para inferencia de tipos y como fallback
+export const cursoAgendaSchema = createCursoAgendaSchema()
 export type CursoAgendaFormData = z.infer<typeof cursoAgendaSchema>
 
-export const actividadSchema = z.object({
-  nombre: z.string().min(1, "El nombre de la actividad es obligatorio"),
-  descripcion: z.string().optional().default(""),
-  horasSemanales: z.coerce
-    .number()
-    .min(0, "No puede ser negativo")
-    .max(40, "No puede exceder las 40 horas semanales.")
-    .default(0),
-  semanas: z.coerce
-    .number()
-    .int("Debe ser un número entero")
-    .min(0, "No puede ser negativo")
-    .max(22, "El Acuerdo 048 establece un máximo de 22 semanas por semestre.")
-    .default(0),
-  dedicacionPeriodo: z.coerce
-    .number()
-    .min(0, "No puede ser negativo")
-    .max(880, "No puede exceder 880 horas en el semestre.")
-    .default(0),
-}).transform((data) => {
-  // Si el usuario llenó h/sem × semanas, ese cálculo gana; si no, se preserva
-  // el `dedicacionPeriodo` ingresado directamente (modo "total semestre").
-  const calculadoPorSemana =
-    data.horasSemanales > 0 && data.semanas > 0
-      ? data.horasSemanales * data.semanas
-      : null
-  return {
-    ...data,
-    dedicacionPeriodo: calculadoPorSemana ?? data.dedicacionPeriodo,
-  }
-})
+export function createActividadSchema(semanasPeriodo: number = DEFAULT_SEMANAS_PERIODO) {
+  return z.object({
+    nombre: z.string().min(1, "El nombre de la actividad es obligatorio"),
+    descripcion: z.string().optional().default(""),
+    horasSemanales: z.coerce
+      .number()
+      .min(0, "No puede ser negativo")
+      .max(40, "No puede exceder las 40 horas semanales.")
+      .default(0),
+    semanas: z.coerce
+      .number()
+      .int("Debe ser un número entero")
+      .min(0, "No puede ser negativo")
+      .max(semanasPeriodo, `Máximo ${semanasPeriodo} semanas por semestre.`)
+      .default(0),
+    dedicacionPeriodo: z.coerce
+      .number()
+      .min(0, "No puede ser negativo")
+      .max(880, "No puede exceder 880 horas en el semestre.")
+      .default(0),
+  }).transform((data) => {
+    // Si el usuario llenó h/sem × semanas, ese cálculo gana; si no, se preserva
+    // el `dedicacionPeriodo` ingresado directamente (modo "total semestre").
+    const calculadoPorSemana =
+      data.horasSemanales > 0 && data.semanas > 0
+        ? data.horasSemanales * data.semanas
+        : null
+    return {
+      ...data,
+      dedicacionPeriodo: calculadoPorSemana ?? data.dedicacionPeriodo,
+    }
+  })
+}
 
+export const actividadSchema = createActividadSchema()
 export type ActividadFormData = z.infer<typeof actividadSchema>
 
-export const agendaWizardBaseSchema = z.object({
-  cursos: z.array(cursoAgendaSchema).default([]),
-  otrasActividadesDocencia: z.array(actividadSchema).default([]),
-  actividadesInvestigacion: z.array(actividadSchema).default([]),
-  actividadesProyeccionSocial: z.array(actividadSchema).default([]),
-  actividadesGestion: z.array(actividadSchema).default([]),
-})
+export function createAgendaWizardBaseSchema(semanasPeriodo: number = DEFAULT_SEMANAS_PERIODO) {
+  return z.object({
+    cursos: z.array(createCursoAgendaSchema(semanasPeriodo)).default([]),
+    otrasActividadesDocencia: z.array(createActividadSchema(semanasPeriodo)).default([]),
+    actividadesInvestigacion: z.array(createActividadSchema(semanasPeriodo)).default([]),
+    actividadesProyeccionSocial: z.array(createActividadSchema(semanasPeriodo)).default([]),
+    actividadesGestion: z.array(createActividadSchema(semanasPeriodo)).default([]),
+  })
+}
 
+export const agendaWizardBaseSchema = createAgendaWizardBaseSchema()
 export type AgendaWizardFormData = z.infer<typeof agendaWizardBaseSchema>
 
 export function calcularTotalHoras(data: AgendaWizardFormData): number {
@@ -154,12 +168,13 @@ export function createAgendaSchema(
   esEstricto: boolean,
   flags: DocenteFlags,
   minDocencia: number = 0,
+  semanasPeriodo: number = DEFAULT_SEMANAS_PERIODO,
 ) {
-  return agendaWizardBaseSchema.superRefine((data, ctx) => {
+  return createAgendaWizardBaseSchema(semanasPeriodo).superRefine((data, ctx) => {
     const totalHorasSemestrales = calcularTotalHoras(data);
-    const maxHorasSemestrales = maxHoras * 22; // tope semestral derivado del semanal
+    const maxHorasSemestrales = maxHoras * semanasPeriodo; // tope semestral derivado del semanal
     const TOLERANCIA_SEMANAL = 0.5;
-    const maxPermitido = (maxHoras + TOLERANCIA_SEMANAL) * 22;
+    const maxPermitido = (maxHoras + TOLERANCIA_SEMANAL) * semanasPeriodo;
 
     // 1. TOPE MÁXIMO (Acuerdo 048 Arts. 4a/4b/4c/4d)
     // `maxHoras` es el límite superior contractual, NO una obligación de

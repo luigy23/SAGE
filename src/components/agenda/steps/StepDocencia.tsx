@@ -247,12 +247,14 @@ function SilentDedicacionCalc({ cursoIndex }: { cursoIndex: number }) {
 function CursoCardRow({
   index,
   cursosMaestros,
+  semanasPeriodo,
   onSelect,
   onClear,
   onRemove,
 }: {
   index: number
   cursosMaestros: CursoMaestroOption[]
+  semanasPeriodo: number
   onSelect: (curso: CursoMaestroOption) => void
   onClear: () => void
   onRemove: () => void
@@ -387,18 +389,18 @@ function CursoCardRow({
                       <Input
                         type="number"
                         min={0}
-                        max={22}
+                        max={semanasPeriodo}
                         name={f.name}
                         ref={f.ref}
                         onBlur={f.onBlur}
                         value={f.value === 0 ? "" : f.value}
-                        placeholder="22"
+                        placeholder={String(semanasPeriodo)}
                         onChange={(e) => {
                           const raw = e.target.value
                           if (raw === "") { f.onChange(0); return }
                           let val = parseInt(raw, 10)
                           if (isNaN(val)) val = 0
-                          if (val > 22) val = 22
+                          if (val > semanasPeriodo) val = semanasPeriodo
                           f.onChange(val)
                         }}
                       />
@@ -438,11 +440,13 @@ function CursoCardRow({
 export function StepDocencia({
   cursosMaestros,
   catalogoActividades,
+  semanasPeriodo,
 }: {
   cursosMaestros: CursoMaestroOption[]
   catalogoActividades: ActividadCatalogoOption[]
   modalidad: string
   sedeBase?: string | null
+  semanasPeriodo: number
 }) {
   const { control, setValue } = useFormContext<AgendaWizardFormData>()
 
@@ -464,8 +468,8 @@ export function StepDocencia({
     setValue(`cursos.${index}.nombreCurso`, curso.nombre, { shouldValidate: true })
     setValue(`cursos.${index}.creditos`, curso.creditos)
     setValue(`cursos.${index}.horasPresenciales`, horasPresenciales)
-    // Default: semestre estándar de 22 semanas (Acuerdo 048 Art. 4)
-    setValue(`cursos.${index}.semanas`, 22)
+    // Default semestral: parametrizable por SUPERADMIN (semanas_periodo). Acuerdo 048 Art. 4 = 22.
+    setValue(`cursos.${index}.semanas`, semanasPeriodo)
   }
 
   function handleCursoMaestroClear(index: number) {
@@ -506,6 +510,7 @@ export function StepDocencia({
               key={field.id}
               index={index}
               cursosMaestros={cursosMaestros}
+              semanasPeriodo={semanasPeriodo}
               onSelect={(curso) => handleCursoMaestroSelect(index, curso)}
               onClear={() => handleCursoMaestroClear(index)}
               onRemove={() => removeCurso(index)}
@@ -549,6 +554,7 @@ export function StepDocencia({
               arrayName="otrasActividadesDocencia"
               catalogo={catalogoActividades}
               categoria="DOCENCIA"
+              semanasPeriodo={semanasPeriodo}
               onRemove={() => removeActDocencia(index)}
             />
           ))}

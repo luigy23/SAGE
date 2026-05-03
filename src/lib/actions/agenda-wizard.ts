@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import {
   createAgendaSchema,
-  agendaWizardBaseSchema,
+  createAgendaWizardBaseSchema,
   type AgendaWizardPayload,
   type AgendaWizardFormData,
 } from "@/lib/schemas/agenda-schema"
@@ -65,8 +65,8 @@ export async function upsertAgendaCompletaAction(
   // Borradores: solo validación estructural (tipos y transformaciones)
   // Envío final: validación completa con reglas de negocio resueltas
   const schema = enviar
-    ? createAgendaSchema(limits.maxHorasSemanales, limits.esEstricto, flags, limits.minDocencia)
-    : agendaWizardBaseSchema
+    ? createAgendaSchema(limits.maxHorasSemanales, limits.esEstricto, flags, limits.minDocencia, limits.semanas)
+    : createAgendaWizardBaseSchema(limits.semanas)
 
   const parseResult = schema.safeParse(data)
 

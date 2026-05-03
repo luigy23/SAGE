@@ -30,11 +30,13 @@ export function NuevaAgendaView({
   cursosMaestros,
   catalogoActividades,
   periodo,
+  semanasPeriodo,
 }: {
   docente: Docente
   cursosMaestros: CursoMaestroOption[]
   catalogoActividades: ActividadCatalogoOption[]
   periodo: string
+  semanasPeriodo: number
 }) {
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
 
@@ -48,6 +50,7 @@ export function NuevaAgendaView({
         cursosMaestros={cursosMaestros}
         catalogoActividades={catalogoActividades}
         periodo={periodo}
+        semanasPeriodo={semanasPeriodo}
       />
     )
   }

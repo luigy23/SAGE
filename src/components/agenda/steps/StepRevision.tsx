@@ -39,10 +39,12 @@ export function StepRevision({
   docente,
   maxHoras,
   esEstricto,
+  semanasPeriodo,
 }: {
   docente: Docente
   maxHoras: number
   esEstricto: boolean
+  semanasPeriodo: number
 }) {
   // Observar el estado del formulario globalmente
   const { formState: { errors } } = useFormContext<AgendaWizardFormData>()
@@ -69,8 +71,7 @@ export function StepRevision({
   // =========================================================
   // Comparación Semestral — granTotal vs límite legal del periodo
   // =========================================================
-  const SEMANAS_REFERENCIA = 22
-  const horasSemestrales = maxHoras * SEMANAS_REFERENCIA
+  const horasSemestrales = maxHoras * semanasPeriodo
   const excedidoSemestral = granTotal > horasSemestrales
   const porcentajeUso = horasSemestrales > 0 ? Math.round((granTotal / horasSemestrales) * 100) : 0
 

@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
 import { AgendaReadOnly } from "@/components/agenda/AgendaReadOnly"
+import { resolveGlobales } from "@/lib/rules/resolver"
 import type { AgendaConRelaciones } from "@/lib/types/agenda"
 
 /**
@@ -40,9 +41,19 @@ export default async function AgendaDetailPage({
     notFound()
   }
 
+  // Resolver semanasPeriodo del período de esta agenda (no del período activo)
+  const periodoRow = await prisma.periodoAcademico.findUnique({
+    where: { nombre: agenda.periodo },
+    select: { id: true },
+  })
+  const globales = await resolveGlobales(periodoRow?.id ?? null)
+
   return (
     <div className="space-y-6">
-      <AgendaReadOnly agenda={agenda as AgendaConRelaciones} />
+      <AgendaReadOnly
+        agenda={agenda as AgendaConRelaciones}
+        semanasPeriodo={globales.semanasPeriodo}
+      />
     </div>
   )
 }
