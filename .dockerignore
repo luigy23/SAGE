@@ -34,7 +34,6 @@ yarn-error.log*
 .cache
 .turbo
 *.tsbuildinfo
-.nixpacks
 
 # Env / secrets
 .env
