@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useState, useEffect } from "react"
+import { useActionState, useState } from "react"
 import Link from "next/link"
 import { registerAction } from "@/lib/actions/auth"
 import { Button } from "@/components/ui/button"
@@ -94,44 +94,23 @@ export default function RegisterPage() {
   const [state, formAction, pending] = useActionState(registerAction, null)
   const v = state?.values // Valores preservados del intento anterior
 
-  // Patrón "override + fallback":
-  // - Las ediciones locales del usuario son la fuente efímera (override).
-  // - Cuando el server action retorna error, `v` queda como respaldo de lectura.
-  // - El useEffect resetea los overrides en cada nueva respuesta del servidor,
-  //   garantizando que la próxima renderización siempre muestre lo que viajó al backend.
-  const [localFacultad, setLocalFacultad] = useState<string | null>(null)
-  const [localPrograma, setLocalPrograma] = useState<string | null>(null)
-  const [localSede, setLocalSede] = useState<string | null>(null)
-  const [localModalidad, setLocalModalidad] = useState<string | null>(null)
-
-  const selectedFacultad = localFacultad ?? v?.facultad ?? ""
-  const selectedPrograma = localPrograma ?? v?.programa ?? ""
-  const selectedSede = localSede ?? v?.sede ?? ""
-  const selectedModalidad = localModalidad ?? v?.modalidad ?? ""
+  const [selectedFacultad, setSelectedFacultad] = useState<string>("")
+  const [selectedPrograma, setSelectedPrograma] = useState<string>("")
+  const [selectedSede, setSelectedSede] = useState<string>("")
+  const [selectedModalidad, setSelectedModalidad] = useState<string>("")
 
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
 
-  // Cada vez que el servidor responde, descartamos los overrides locales
-  // para que `v?.X` (los valores que viajaron al backend) sean lo visible.
-  useEffect(() => {
-    if (state) {
-      setLocalFacultad(null)
-      setLocalPrograma(null)
-      setLocalSede(null)
-      setLocalModalidad(null)
-    }
-  }, [state])
-
   const isFormInvalid = pending || password !== confirmPassword || !password
 
   const programas = selectedFacultad ? FACULTAD_PROGRAMAS[selectedFacultad] || [] : []
 
   const handleFacultadChange = (value: string) => {
-    setLocalFacultad(value)
-    setLocalPrograma("") // Reset programa al cambiar facultad
+    setSelectedFacultad(value)
+    setSelectedPrograma("")
   }
 
   // Estilos reutilizables coherente con login
@@ -297,7 +276,7 @@ export default function RegisterPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="sede" className={labelStyle}>Sede</Label>
-              <Select name="sede" required value={selectedSede} onValueChange={setLocalSede}>
+              <Select value={selectedSede} onValueChange={setSelectedSede}>
                 <SelectTrigger id="sede" className={inputStyle}>
                   <SelectValue placeholder="Seleccionar sede" />
                 </SelectTrigger>
@@ -310,7 +289,7 @@ export default function RegisterPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="modalidad" className={labelStyle}>Modalidad de vinculación</Label>
-              <Select name="modalidad" required value={selectedModalidad} onValueChange={setLocalModalidad}>
+              <Select value={selectedModalidad} onValueChange={setSelectedModalidad}>
                 <SelectTrigger id="modalidad" className={inputStyle}>
                   <SelectValue placeholder="Seleccionar modalidad" />
                 </SelectTrigger>
@@ -328,8 +307,6 @@ export default function RegisterPage() {
             <div className="space-y-2">
               <Label htmlFor="facultad" className={labelStyle}>Facultad</Label>
               <Select
-                name="facultad"
-                required
                 value={selectedFacultad}
                 onValueChange={handleFacultadChange}
               >
@@ -348,11 +325,9 @@ export default function RegisterPage() {
                 Programa académico
               </Label>
               <Select
-                name="programa"
-                required
                 disabled={!selectedFacultad}
                 value={selectedPrograma}
-                onValueChange={setLocalPrograma}
+                onValueChange={setSelectedPrograma}
               >
                 <SelectTrigger
                   id="programa"
@@ -368,6 +343,12 @@ export default function RegisterPage() {
               </Select>
             </div>
           </div>
+
+          {/* Inputs ocultos: bypasan el <select> nativo de Radix UI que no sincroniza con React state en server actions */}
+          <input type="hidden" name="sede" value={selectedSede} />
+          <input type="hidden" name="modalidad" value={selectedModalidad} />
+          <input type="hidden" name="facultad" value={selectedFacultad} />
+          <input type="hidden" name="programa" value={selectedPrograma} />
 
           {/* ── Botón de envío ── */}
           <Button
