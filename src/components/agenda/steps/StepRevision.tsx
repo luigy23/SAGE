@@ -19,6 +19,7 @@ import {
   GraduationCap,
   AlertTriangle,
   XCircle,
+  CheckCircle2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -40,11 +41,13 @@ export function StepRevision({
   maxHoras,
   esEstricto,
   semanasPeriodo,
+  minDocencia,
 }: {
   docente: Docente
   maxHoras: number
   esEstricto: boolean
   semanasPeriodo: number
+  minDocencia: number
 }) {
   // Observar el estado del formulario globalmente
   const { formState: { errors } } = useFormContext<AgendaWizardFormData>()
@@ -308,13 +311,12 @@ export function StepRevision({
             : "border-primary/30 bg-primary/5"
         )}
       >
-        <CardContent className="py-6 space-y-4">
+        <CardContent className="py-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between">
             <div>
               <h3 className="text-xl font-bold uppercase">Dedicación del Semestre</h3>
               <p className="text-sm text-muted-foreground print:text-gray-500">
-                Modalidad <strong>{docente.modalidad}</strong>: carga semestral de <strong>{horasSemestrales} horas</strong>
-                {esEstricto && " (estricto)"}
+                Modalidad <strong>{docente.modalidad}</strong>: tope máximo de <strong>{horasSemestrales} horas</strong>
               </p>
             </div>
             <div className="mt-2 sm:mt-0 text-right">
@@ -325,18 +327,98 @@ export function StepRevision({
                 {granTotal} / {horasSemestrales}h
               </p>
               <p className="text-xs text-muted-foreground print:text-gray-500">
-                {porcentajeUso}% de la carga del semestre
+                {porcentajeUso}% del tope contractual
               </p>
             </div>
           </div>
+        </CardContent>
+      </Card>
 
-          {/* Validation Hook Alert tied to Zod */}
-          {(errors as Record<string, any>)._horasExcedidas && (
-            <div className="mt-4 flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+      {/* ==========================================
+          PANEL DE VALIDACIÓN DE REQUISITOS (Acuerdo 048)
+          ========================================== */}
+      <Card>
+        <CardContent className="py-5 space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Validación de Requisitos — Acuerdo 048
+          </p>
+
+          {/* Requisito 1: Mínimo de docencia (Art. 3) */}
+          {minDocencia > 0 && (() => {
+            const cumple = totalDocencia >= minDocencia
+            const diff = Math.round(Math.abs(minDocencia - totalDocencia) * 10) / 10
+            return (
+              <div className={cn(
+                "flex items-start gap-3 rounded-lg border p-3 text-sm",
+                cumple
+                  ? "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300"
+                  : "border-destructive/40 bg-destructive/5 text-destructive"
+              )}>
+                {cumple
+                  ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                  : <XCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+                <div>
+                  <p className="font-medium">
+                    Docencia mínima: {totalDocencia}h de {minDocencia}h requeridas
+                  </p>
+                  <p className="mt-0.5 text-xs opacity-75">
+                    {cumple
+                      ? `${diff}h por encima del mínimo legal (Art. 3).`
+                      : `Faltan ${diff}h para alcanzar el mínimo legal (Art. 3). Regrese al Paso 2 y complete las horas de docencia.`}
+                  </p>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Requisito 2: Tope máximo (Art. 4) — solo informativo hacia arriba */}
+          {(() => {
+            const margen = horasSemestrales - granTotal
+            return (
+              <div className={cn(
+                "flex items-start gap-3 rounded-lg border p-3 text-sm",
+                excedidoSemestral
+                  ? "border-destructive/40 bg-destructive/5 text-destructive"
+                  : "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300"
+              )}>
+                {!excedidoSemestral
+                  ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                  : <XCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+                <div>
+                  <p className="font-medium">
+                    Tope contractual: {granTotal}h de {horasSemestrales}h máximas
+                  </p>
+                  <p className="mt-0.5 text-xs opacity-75">
+                    {!excedidoSemestral
+                      ? `${margen}h de margen disponible. El tope es un límite superior — no es obligatorio llegar a ${horasSemestrales}h (Art. 4).`
+                      : `Excede el tope en ${Math.abs(margen)}h. Debe reducir actividades para poder enviar (Art. 4).`}
+                  </p>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Errores Zod del formulario (visibles solo tras intento de envío) */}
+          {(errors as Record<string, any>)._minDocenciaInsuficiente && (
+            <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
               <div>
                 <p className="text-sm font-semibold text-destructive">
-                  Validación Contractual Estricta
+                  Mínimo de Docencia No Cumplido
+                </p>
+                <p className="mt-1 text-sm text-destructive/80">
+                  {String((errors as Record<string, any>)._minDocenciaInsuficiente.message)}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {(errors as Record<string, any>)._horasExcedidas && (
+            <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+              <div>
+                <p className="text-sm font-semibold text-destructive">
+                  Tope Contractual Excedido
                 </p>
                 <p className="mt-1 text-sm text-destructive/80">
                   {String((errors as Record<string, any>)._horasExcedidas.message)}

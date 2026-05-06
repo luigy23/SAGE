@@ -203,8 +203,8 @@ export function createAgendaSchema(
         const deficit = Math.round((minDocencia - horasDocencia) * 10) / 10;
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `Sus horas de docencia (${horasDocencia}h) están ${deficit}h por debajo del mínimo legal (${minDocencia}h, Art. 3 Acuerdo 048).`,
-          path: ["cursos"],
+          message: `Sus horas de docencia (${horasDocencia}h) están ${deficit}h por debajo del mínimo legal (${minDocencia}h). Revisar Paso 2 (Art. 3 Acuerdo 048).`,
+          path: ["_minDocenciaInsuficiente"],
         });
       }
     }

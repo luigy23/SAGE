@@ -331,7 +331,14 @@ export function AgendaWizardForm({
 
     const valid = await form.trigger()
     if (!valid) {
-      toast.error("Hay errores en el formulario. Revise todos los pasos.")
+      const errs = form.formState.errors as Record<string, { message?: string }>
+      if (errs._minDocenciaInsuficiente?.message) {
+        toast.error(errs._minDocenciaInsuficiente.message)
+      } else if (errs._horasExcedidas?.message) {
+        toast.error(errs._horasExcedidas.message)
+      } else {
+        toast.error("Hay errores en el formulario. Revise todos los pasos.")
+      }
       return
     }
 
@@ -397,6 +404,7 @@ export function AgendaWizardForm({
             maxHoras={maxHoras}
             esEstricto={esEstricto}
             semanasPeriodo={semanasPeriodo}
+            minDocencia={minDocencia}
           />
         )
       default:

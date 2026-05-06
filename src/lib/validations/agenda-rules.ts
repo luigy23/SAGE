@@ -235,11 +235,11 @@ export function validateAgenda(
     docente.modalidad !== "CATEDRA" &&
     totals.granTotal < limits.horasTotalesPeriodo
   ) {
-    const diff = limits.horasTotalesPeriodo - totals.granTotal
+    const margin = limits.horasTotalesPeriodo - totals.granTotal
     items.push({
-      severity: "warning",
-      message: `Faltan ${diff}h para completar las ${limits.horasTotalesPeriodo}h del periodo. Total actual: ${totals.granTotal}h.`,
-      rule: "Art. 4",
+      severity: "info",
+      message: `Tiene ${margin}h de margen disponible sobre el tope contractual (${limits.horasTotalesPeriodo}h). El tope es un límite superior, no una carga obligatoria.`,
+      rule: "Art. 4 — tope máximo",
     })
   }
 
