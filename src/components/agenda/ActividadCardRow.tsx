@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import { useFormContext, useWatch } from "react-hook-form"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import {
@@ -19,13 +18,7 @@ import {
   FormMessage,
   FormDescription,
 } from "@/components/ui/form"
-import {
-  Trash2,
-  AlertTriangle,
-  Calculator,
-  ChevronDown,
-  ChevronUp,
-} from "lucide-react"
+import { Trash2, AlertTriangle } from "lucide-react"
 
 type ArrayFieldName =
   | "actividadesInvestigacion"
@@ -34,14 +27,8 @@ type ArrayFieldName =
   | "otrasActividadesDocencia"
 
 /**
- * Card de una actividad. Selector del catálogo + input directo de horas
- * totales del semestre, con opción colapsable de calcular por semana.
- *
- * Modelo:
- * - Input principal: `dedicacionPeriodo` (horas totales del semestre)
- * - Modo auxiliar: `horasSemanales × semanas` → al editarlos, sobreescribe `dedicacionPeriodo`
- *
- * El schema Zod (agenda-schema.ts) preserva `dedicacionPeriodo` directo si h×s están en 0.
+ * Card de una actividad. Selector del catálogo + input manual de horas
+ * totales del semestre (`dedicacionPeriodo`).
  */
 export function ActividadCardRow({
   index,
@@ -62,8 +49,6 @@ export function ActividadCardRow({
 
   const nombre = useWatch({ name: `${arrayName}.${index}.nombre` }) as string
   const dedicacionPeriodo = useWatch({ name: `${arrayName}.${index}.dedicacionPeriodo` }) as number
-  const horasSemanales = useWatch({ name: `${arrayName}.${index}.horasSemanales` }) as number
-  const semanas = useWatch({ name: `${arrayName}.${index}.semanas` }) as number
 
   const actividadCatalogo = catalogo.find(
     (a) => a.categoria === categoria && a.nombre === nombre
@@ -74,49 +59,13 @@ export function ActividadCardRow({
     actividadCatalogo?.topeSemestralH !== undefined &&
     dedicacionPeriodo > actividadCatalogo.topeSemestralH
 
-  // El modo "calcular por semana" arranca abierto si el usuario tiene valores
-  // previos en h/s (típicamente al editar borradores antiguos).
-  const [calcOpen, setCalcOpen] = useState(
-    () => (horasSemanales || 0) > 0 || (semanas || 0) > 0
-  )
-
   function handleSelect(act: ActividadCatalogoOption) {
     setValue(`${arrayName}.${index}.nombre`, act.nombre, { shouldValidate: true })
-    // Sugerir total semestral según el tope
-    if (act.topeSemestralH !== null) {
-      setValue(`${arrayName}.${index}.dedicacionPeriodo`, act.topeSemestralH)
-    } else if (act.topeSemanalHPorUnidad !== null) {
-      // Por unidad — pre-poblar con 1 unidad (semanasPeriodo × 1 × topeSemanalHPorUnidad)
-      setValue(
-        `${arrayName}.${index}.dedicacionPeriodo`,
-        Math.round(act.topeSemanalHPorUnidad * semanasPeriodo * 10) / 10
-      )
-    }
-    // Limpiar h/s — si el docente quiere puede re-ingresarlas en modo cálculo
-    setValue(`${arrayName}.${index}.horasSemanales`, 0)
-    setValue(`${arrayName}.${index}.semanas`, 0)
-    setCalcOpen(false)
   }
 
   function handleClear() {
     setValue(`${arrayName}.${index}.nombre`, "", { shouldValidate: true })
     setValue(`${arrayName}.${index}.dedicacionPeriodo`, 0)
-    setValue(`${arrayName}.${index}.horasSemanales`, 0)
-    setValue(`${arrayName}.${index}.semanas`, 0)
-  }
-
-  function handleHsemChange(newHsem: number) {
-    setValue(`${arrayName}.${index}.horasSemanales`, newHsem)
-    if (newHsem > 0 && semanas > 0) {
-      setValue(`${arrayName}.${index}.dedicacionPeriodo`, newHsem * semanas)
-    }
-  }
-
-  function handleSemanasChange(newSem: number) {
-    setValue(`${arrayName}.${index}.semanas`, newSem)
-    if (newSem > 0 && horasSemanales > 0) {
-      setValue(`${arrayName}.${index}.dedicacionPeriodo`, horasSemanales * newSem)
-    }
   }
 
   return (
@@ -156,7 +105,7 @@ export function ActividadCardRow({
                 name={`${arrayName}.${index}.dedicacionPeriodo`}
                 render={({ field: f }) => (
                   <FormItem>
-                    <FormLabel>Total semestre (h) *</FormLabel>
+                    <FormLabel>Total semestre (h) </FormLabel>
                     <FormControl>
                       <Input
                         type="number"
@@ -175,12 +124,6 @@ export function ActividadCardRow({
                           if (isNaN(val)) val = 0
                           if (val > 880) val = 880
                           f.onChange(val)
-                          // Al editar el total directamente, limpiamos h/s
-                          // para indicar que el valor es manual, no calculado.
-                          if (calcOpen) {
-                            setValue(`${arrayName}.${index}.horasSemanales`, 0)
-                            setValue(`${arrayName}.${index}.semanas`, 0)
-                          }
                         }}
                       />
                     </FormControl>
@@ -219,109 +162,6 @@ export function ActividadCardRow({
                 </p>
               )}
             </div>
-          </div>
-
-          {/* Modo cálculo por semana (colapsable) */}
-          <div className="rounded-md border bg-muted/20">
-            <button
-              type="button"
-              onClick={() => setCalcOpen(!calcOpen)}
-              className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <span className="flex items-center gap-1.5">
-                <Calculator className="h-3.5 w-3.5" />
-                Calcular por semana (opcional)
-              </span>
-              {calcOpen ? (
-                <ChevronUp className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronDown className="h-3.5 w-3.5" />
-              )}
-            </button>
-
-            {calcOpen && (
-              <div className="border-t px-3 py-3 space-y-3">
-                <p className="text-xs text-muted-foreground">
-                  Si llenás horas/semana × semanas, el total semestral se actualiza automáticamente.
-                </p>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div>
-                    <FormField
-                      control={control}
-                      name={`${arrayName}.${index}.horasSemanales`}
-                      render={({ field: f }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs">Horas/semana</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={40}
-                              step="0.5"
-                              name={f.name}
-                              ref={f.ref}
-                              onBlur={f.onBlur}
-                              value={f.value === 0 ? "" : f.value}
-                              placeholder="0"
-                              onChange={(e) => {
-                                const raw = e.target.value
-                                if (raw === "") { handleHsemChange(0); return }
-                                let val = parseFloat(raw)
-                                if (isNaN(val)) val = 0
-                                if (val > 40) val = 40
-                                handleHsemChange(val)
-                              }}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <div>
-                    <FormField
-                      control={control}
-                      name={`${arrayName}.${index}.semanas`}
-                      render={({ field: f }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs">Semanas</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={semanasPeriodo}
-                              step={1}
-                              name={f.name}
-                              ref={f.ref}
-                              onBlur={f.onBlur}
-                              value={f.value === 0 ? "" : f.value}
-                              placeholder={String(semanasPeriodo)}
-                              onChange={(e) => {
-                                const raw = e.target.value
-                                if (raw === "") { handleSemanasChange(0); return }
-                                let val = parseInt(raw, 10)
-                                if (isNaN(val)) val = 0
-                                if (val > semanasPeriodo) val = semanasPeriodo
-                                handleSemanasChange(val)
-                              }}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <div className="w-full rounded-md border bg-card px-3 py-2">
-                      <p className="text-xs text-muted-foreground">= Total</p>
-                      <p className="text-sm font-semibold tabular-nums">
-                        {Math.round(((horasSemanales || 0) * (semanas || 0)) * 10) / 10}h
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Descripción */}

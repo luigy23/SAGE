@@ -1,6 +1,6 @@
 "use client"
 
-import { useFormContext, useFieldArray } from "react-hook-form"
+import { useFormContext, useFieldArray, useWatch } from "react-hook-form"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import { EMPTY_ACTIVIDAD } from "@/lib/schemas/agenda-schema"
 import { Button } from "@/components/ui/button"
@@ -41,22 +41,36 @@ import { CalculadoraActividad } from "@/components/agenda/CalculadoraActividad"
 export function StepGestion({
   cargoAdministrativo,
   semanasPeriodo,
+  maxHoras,
 }: {
   cargoAdministrativo: boolean
   semanasPeriodo: number
+  maxHoras: number
 }) {
   const { control, formState: { errors } } = useFormContext<AgendaWizardFormData>()
 
-  // Extraer el error a nivel de array
-  const gestionError = 
-    errors.actividadesGestion?.root?.message || 
-    errors.actividadesGestion?.message
+  // Todos los hooks deben llamarse antes de cualquier return condicional (regla de hooks de React)
+  const actividadesGestionLive = useWatch<AgendaWizardFormData, "actividadesGestion">({
+    control,
+    name: "actividadesGestion",
+  }) ?? []
 
   const {
     fields: gestionFields,
     append: appendGestion,
     remove: removeGestion,
   } = useFieldArray({ control, name: "actividadesGestion" })
+
+  // Extraer el error a nivel de array (del validador Zod tras intento de envío)
+  const gestionError =
+    errors.actividadesGestion?.root?.message ||
+    errors.actividadesGestion?.message
+
+  // Cálculo en tiempo real del límite Art. 10 (20% de la carga semestral)
+  const limiteGestionSemestral = Math.floor(maxHoras * semanasPeriodo * 0.20)
+  const totalGestionActual = (actividadesGestionLive as { dedicacionPeriodo?: number }[])
+    .reduce((acc, a) => acc + (Number(a?.dedicacionPeriodo) || 0), 0)
+  const excedeLimiteGestion = totalGestionActual > limiteGestionSemestral
 
   // Renderizado condicional estricto: si no tiene cargo, no renderiza nada
   if (!cargoAdministrativo) return null
@@ -80,6 +94,23 @@ export function StepGestion({
               </p>
               <p className="mt-1 text-sm text-destructive/80">
                 {gestionError}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Alerta en tiempo real: límite del 20% de gestión (Art. 10) */}
+        {excedeLimiteGestion && (
+          <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+            <div>
+              <p className="text-sm font-semibold text-destructive">
+                Excede el límite de gestión permitido (Máximo: {limiteGestionSemestral}h)
+              </p>
+              <p className="mt-1 text-sm text-destructive/80">
+                Total registrado: <strong>{totalGestionActual}h</strong> — exceso de{" "}
+                <strong>{totalGestionActual - limiteGestionSemestral}h</strong> sobre el 20% de la carga
+                semestral. Reduzca las horas de gestión antes de continuar (Art. 10, Acuerdo 048).
               </p>
             </div>
           </div>

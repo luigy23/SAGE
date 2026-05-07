@@ -1,6 +1,6 @@
 "use client"
 
-import { useFormContext, useFieldArray } from "react-hook-form"
+import { useFormContext, useFieldArray, useWatch } from "react-hook-form"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import { EMPTY_ACTIVIDAD } from "@/lib/schemas/agenda-schema"
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card"
-import { Plus } from "lucide-react"
+import { Plus, AlertTriangle } from "lucide-react"
 import { ActividadCardRow } from "@/components/agenda/ActividadCardRow"
 import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatalogoSelector"
 
@@ -28,7 +28,12 @@ export function StepInvestigacionProyeccion({
   catalogoActividades: ActividadCatalogoOption[]
   semanasPeriodo: number
 }) {
-  const { control } = useFormContext<AgendaWizardFormData>()
+  const { control, formState: { errors } } = useFormContext<AgendaWizardFormData>()
+  const actividadesInvLive = useWatch({ control, name: "actividadesInvestigacion" }) ?? []
+  const hasActividades = actividadesInvLive.length > 0
+  const invError =
+    (errors.actividadesInvestigacion as { root?: { message?: string }; message?: string } | undefined)?.root?.message ||
+    (errors.actividadesInvestigacion as { root?: { message?: string }; message?: string } | undefined)?.message
 
   const {
     fields: invFields,
@@ -56,6 +61,18 @@ export function StepInvestigacionProyeccion({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {invError && !hasActividades && (
+            <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+              <div>
+                <p className="text-sm font-semibold text-destructive">
+                  Alerta de Cumplimiento Normativo (Doctorado)
+                </p>
+                <p className="mt-1 text-sm text-destructive/80">{invError}</p>
+              </div>
+            </div>
+          )}
+
           {invFields.length === 0 && (
             <p className="py-4 text-center text-sm text-muted-foreground">
               No ha agregado actividades de investigación.

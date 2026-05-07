@@ -285,7 +285,10 @@ export function AgendaWizardForm({
         currentFields as (keyof AgendaWizardFormData)[]
       )
       if (!valid) {
-        toast.error("Corrija los errores antes de continuar.")
+        const errs = form.formState.errors as Record<string, { message?: string; root?: { message?: string } }>
+        if (!errs.actividadesInvestigacion?.message && !errs.actividadesInvestigacion?.root?.message) {
+          toast.error("Corrija los errores antes de continuar.")
+        }
         return
       }
     }
@@ -331,11 +334,13 @@ export function AgendaWizardForm({
 
     const valid = await form.trigger()
     if (!valid) {
-      const errs = form.formState.errors as Record<string, { message?: string }>
+      const errs = form.formState.errors as Record<string, { message?: string; root?: { message?: string } }>
       if (errs._minDocenciaInsuficiente?.message) {
         toast.error(errs._minDocenciaInsuficiente.message)
       } else if (errs._horasExcedidas?.message) {
         toast.error(errs._horasExcedidas.message)
+      } else if (errs.actividadesInvestigacion?.message || errs.actividadesInvestigacion?.root?.message) {
+        toast.error(errs.actividadesInvestigacion.message ?? errs.actividadesInvestigacion.root?.message)
       } else {
         toast.error("Hay errores en el formulario. Revise todos los pasos.")
       }
@@ -395,6 +400,7 @@ export function AgendaWizardForm({
           <StepGestion
             cargoAdministrativo={docente.cargoAdministrativo}
             semanasPeriodo={semanasPeriodo}
+            maxHoras={maxHoras}
           />
         )
       case "revision":

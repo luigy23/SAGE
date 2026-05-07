@@ -390,8 +390,39 @@ export function StepRevision({
                   </p>
                   <p className="mt-0.5 text-xs opacity-75">
                     {!excedidoSemestral
-                      ? `${margen}h de margen disponible. El tope es un límite superior — no es obligatorio llegar a ${horasSemestrales}h (Art. 4).`
+                      ? `${margen}h de margen disponible. Este valor representa el valor máximo de su contratación, no un requisito de cumplimiento obligatorio (Art. 4).`
                       : `Excede el tope en ${Math.abs(margen)}h. Debe reducir actividades para poder enviar (Art. 4).`}
+                  </p>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Requisito 3: Límite de gestión Art. 10 — solo si el docente tiene cargo administrativo */}
+          {docente.cargoAdministrativo && (() => {
+            const limiteGestionSemestral = Math.floor(maxHoras * semanasPeriodo * 0.20)
+            const excedeGestion = totalGestion > limiteGestionSemestral
+            const diff = Math.round(Math.abs(limiteGestionSemestral - totalGestion) * 10) / 10
+            return (
+              <div className={cn(
+                "flex items-start gap-3 rounded-lg border p-3 text-sm",
+                excedeGestion
+                  ? "border-destructive/40 bg-destructive/5 text-destructive"
+                  : "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300"
+              )}>
+                {!excedeGestion
+                  ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                  : <XCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+                <div>
+                  <p className="font-medium">
+                    Gestión Académica: {totalGestion}h de {limiteGestionSemestral}h permitidas (20%)
+                  </p>
+                  <p className="mt-0.5 text-xs opacity-75">
+                    {!excedeGestion
+                      ? totalGestion === 0
+                        ? `Sin actividades de gestión registradas. Límite disponible: ${limiteGestionSemestral}h (Art. 10).`
+                        : `${diff}h de margen disponible sobre el límite del 20% (Art. 10).`
+                      : `Excede en ${diff}h el límite del 20% de gestión. Regrese al Paso 4 y reduzca las actividades administrativas (Art. 10).`}
                   </p>
                 </div>
               </div>
@@ -426,6 +457,25 @@ export function StepRevision({
               </div>
             </div>
           )}
+
+          {(() => {
+            const invError =
+              (errors.actividadesInvestigacion as any)?.root?.message ||
+              (errors.actividadesInvestigacion as any)?.message
+            return docente.doctorado && invError ? (
+              <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+                <div>
+                  <p className="text-sm font-semibold text-destructive">
+                    Requisito de Doctorado Incumplido
+                  </p>
+                  <p className="mt-1 text-sm text-destructive/80">
+                    {String(invError)}
+                  </p>
+                </div>
+              </div>
+            ) : null
+          })()}
         </CardContent>
       </Card>
     </div>

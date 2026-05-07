@@ -219,7 +219,7 @@ function HorarioChipToggles({ cursoIndex }: { cursoIndex: number }) {
 // ==========================================
 // Sub-componente: Silent Acuerdo 048 calculator
 // ==========================================
-function SilentDedicacionCalc({ cursoIndex }: { cursoIndex: number }) {
+function SilentDedicacionCalc({ cursoIndex, semanasPeriodo }: { cursoIndex: number; semanasPeriodo: number }) {
   const { setValue } = useFormContext<AgendaWizardFormData>()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -228,14 +228,16 @@ function SilentDedicacionCalc({ cursoIndex }: { cursoIndex: number }) {
   const semanas = useWatch({ name: `cursos.${cursoIndex}.semanas` as any }) as number
 
   useEffect(() => {
+    // Corrige borradores con semanas desactualizadas respecto al periodo institucional vigente
+    if (Number(semanas) !== semanasPeriodo) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setValue(`cursos.${cursoIndex}.semanas` as any, semanasPeriodo)
+    }
     const horas = Number(horasPresenciales) || 0
-    const sem = Number(semanas) || 0
     // Acuerdo 048: ((Horas directas × 1.5 preparación) + 1 hora tutoría) × semanas
     const semanales = horas > 0 ? (horas * 1.5) + 1 : 0
-    const totalLegal = semanales * sem
-
-    setValue(`cursos.${cursoIndex}.dedicacionPeriodo`, totalLegal, { shouldValidate: true })
-  }, [horasPresenciales, semanas, cursoIndex, setValue])
+    setValue(`cursos.${cursoIndex}.dedicacionPeriodo`, semanales * semanasPeriodo, { shouldValidate: true })
+  }, [horasPresenciales, semanas, semanasPeriodo, cursoIndex, setValue])
 
   // Renders nothing — purely a side-effect hook
   return null
@@ -292,11 +294,11 @@ function CursoCardRow({
 
       <CardContent className="p-4 pt-5 space-y-5">
         {/* Silent Acuerdo 048 calculator — renders nothing */}
-        <SilentDedicacionCalc cursoIndex={index} />
+        <SilentDedicacionCalc cursoIndex={index} semanasPeriodo={semanasPeriodo} />
 
         {/* Selector del catálogo maestro (siempre visible) */}
         <div className="space-y-2">
-          <FormLabel>Curso del Catálogo Oficial *</FormLabel>
+          <FormLabel>Curso del Catálogo Oficial </FormLabel>
           <CursoMaestroSelector
             cursosMaestros={cursosMaestros}
             selectedCodigo={numeroCurso}
@@ -372,39 +374,6 @@ function CursoCardRow({
                         ))}
                       </SelectContent>
                     </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="col-span-12 md:col-span-4">
-              <FormField
-                control={control}
-                name={`cursos.${index}.semanas`}
-                render={({ field: f }) => (
-                  <FormItem>
-                    <FormLabel>Semanas del periodo</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={semanasPeriodo}
-                        name={f.name}
-                        ref={f.ref}
-                        onBlur={f.onBlur}
-                        value={f.value === 0 ? "" : f.value}
-                        placeholder={String(semanasPeriodo)}
-                        onChange={(e) => {
-                          const raw = e.target.value
-                          if (raw === "") { f.onChange(0); return }
-                          let val = parseInt(raw, 10)
-                          if (isNaN(val)) val = 0
-                          if (val > semanasPeriodo) val = semanasPeriodo
-                          f.onChange(val)
-                        }}
-                      />
-                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -520,7 +489,7 @@ export function StepDocencia({
           <Button
             type="button"
             variant="outline"
-            onClick={() => appendCurso({ ...EMPTY_CURSO })}
+            onClick={() => appendCurso({ ...EMPTY_CURSO, semanas: semanasPeriodo })}
             className="w-full border-dashed"
           >
             <Plus className="mr-2 h-4 w-4" />

@@ -228,6 +228,22 @@ export function createAgendaSchema(
         path: ["actividadesGestion"],
       });
     }
+
+    // 4. ART. 4, PAR. 3: Docentes con Doctorado deben registrar investigación
+    if (flags.doctorado) {
+      const horasInvestigacion = data.actividadesInvestigacion.reduce(
+        (acc, a) => acc + (Number(a.dedicacionPeriodo) || 0),
+        0
+      );
+      if (horasInvestigacion <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "Por normativa institucional, los docentes con título de Doctorado deben registrar tiempo de investigación.",
+          path: ["actividadesInvestigacion"],
+        });
+      }
+    }
   });
 }
 
