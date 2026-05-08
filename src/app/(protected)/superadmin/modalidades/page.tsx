@@ -80,7 +80,14 @@ export default async function ParametrosModalidadPage() {
                       {p.horasSemanalMax}
                     </TableCell>
                     <TableCell className="text-center font-mono">
-                      {p.horasSemestralMax}
+                      {p.horasSemestralMax ?? (
+                        <span
+                          className="text-xs text-muted-foreground"
+                          title="Derivado: h/sem × semanas del período"
+                        >
+                          {p.horasSemanalMax}×sem
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="text-center">
                       {p.horasSemestralEstricto ? "✓" : "—"}

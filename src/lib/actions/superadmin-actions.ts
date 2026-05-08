@@ -75,7 +75,8 @@ export async function updateParametrosModalidad(
   id: string,
   data: {
     horasSemanalMax: number
-    horasSemestralMax: number
+    /** null = derivado en runtime (horasSemanalMax × semanasPeriodo). */
+    horasSemestralMax: number | null
     horasSemestralEstricto: boolean
     minDocencia: number | null
     minDocenciaConProyectos: number | null
@@ -86,10 +87,17 @@ export async function updateParametrosModalidad(
   await ensureSuperadmin()
 
   // Sanity check
-  if (data.horasSemanalMax < 0 || data.horasSemestralMax < 0) {
+  if (data.horasSemanalMax < 0) {
     return { error: "Las horas no pueden ser negativas." }
   }
-  if (data.minDocencia !== null && data.minDocencia > data.horasSemestralMax) {
+  if (data.horasSemestralMax !== null && data.horasSemestralMax < 0) {
+    return { error: "Las horas no pueden ser negativas." }
+  }
+  if (
+    data.minDocencia !== null &&
+    data.horasSemestralMax !== null &&
+    data.minDocencia > data.horasSemestralMax
+  ) {
     return { error: "El mínimo de docencia no puede superar la carga semestral." }
   }
 

@@ -23,7 +23,8 @@ type ParametroModalidad = {
   modalidad: string
   sedeAplicable: string | null
   horasSemanalMax: number
-  horasSemestralMax: number
+  /** null = derivado en runtime (horasSemanalMax × semanasPeriodo). */
+  horasSemestralMax: number | null
   horasSemestralEstricto: boolean
   minDocencia: number | null
   minDocenciaConProyectos: number | null
@@ -41,7 +42,7 @@ export function EditModalidadDialog({ parametro }: { parametro: ParametroModalid
   const [open, setOpen] = useState(false)
   const [pending, startTransition] = useTransition()
   const [horasSemanalMax, setHorasSemanalMax] = useState(parametro.horasSemanalMax.toString())
-  const [horasSemestralMax, setHorasSemestralMax] = useState(parametro.horasSemestralMax.toString())
+  const [horasSemestralMax, setHorasSemestralMax] = useState(parametro.horasSemestralMax?.toString() ?? "")
   const [estricto, setEstricto] = useState(parametro.horasSemestralEstricto)
   const [minDocencia, setMinDocencia] = useState(parametro.minDocencia?.toString() ?? "")
   const [minDocenciaProy, setMinDocenciaProy] = useState(parametro.minDocenciaConProyectos?.toString() ?? "")
@@ -52,7 +53,8 @@ export function EditModalidadDialog({ parametro }: { parametro: ParametroModalid
     startTransition(async () => {
       const res = await updateParametrosModalidad(parametro.id, {
         horasSemanalMax: parseInt(horasSemanalMax, 10),
-        horasSemestralMax: parseInt(horasSemestralMax, 10),
+        horasSemestralMax:
+          horasSemestralMax.trim() === "" ? null : parseInt(horasSemestralMax, 10),
         horasSemestralEstricto: estricto,
         minDocencia: minDocencia.trim() === "" ? null : parseInt(minDocencia, 10),
         minDocenciaConProyectos: minDocenciaProy.trim() === "" ? null : parseInt(minDocenciaProy, 10),
@@ -94,7 +96,17 @@ export function EditModalidadDialog({ parametro }: { parametro: ParametroModalid
           </div>
           <div className="space-y-2">
             <Label htmlFor="hsemestre">Horas/semestre máx.</Label>
-            <Input id="hsemestre" type="number" value={horasSemestralMax} onChange={(e) => setHorasSemestralMax(e.target.value)} />
+            <Input
+              id="hsemestre"
+              type="number"
+              placeholder="(derivado: h/sem × semanas)"
+              value={horasSemestralMax}
+              onChange={(e) => setHorasSemestralMax(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Vacío = se calcula como horas semanales × semanas del período (Art. 4c/4d/4e/4f).
+              Solo PLANTA TC/MT lo tienen fijo por norma (Art. 4a/4b).
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="mindoc">Mín. docencia</Label>

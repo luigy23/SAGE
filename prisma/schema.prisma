@@ -439,7 +439,9 @@ model ParametrosModalidad {
   sedeAplicable Sede? // null = todas las sedes
 
   horasSemanalMax        Int // Art. 4 carga semanal
-  horasSemestralMax      Int // Art. 4 carga semestral
+  /// Tope semestral fijo por norma (PLANTA_TC=880, PLANTA_MT=440 — Art. 4a/4b).
+  /// Si es null, se deriva en runtime: horasSemanalMax * semanasPeriodo (Art. 4c/4d/4e).
+  horasSemestralMax      Int?
   horasSemestralEstricto Boolean @default(true) // bloqueo duro al envío
 
   minDocencia             Int? // Art. 3 — mínimo sin proyectos

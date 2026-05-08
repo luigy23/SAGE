@@ -26,7 +26,12 @@ import type { AgendaLimits } from "@/lib/validations/agenda-rules"
 
 export type ResolvedModalidad = {
   horasSemanalMax: number
-  horasSemestralMax: number
+  /**
+   * Tope semestral fijo por norma. `null` significa derivado en runtime:
+   * `horasSemanalMax * semanasPeriodo` (Art. 4c/4d/4e/4f).
+   * Solo PLANTA_TC (880) y PLANTA_MT (440) lo tienen fijado por el Art. 4a/4b.
+   */
+  horasSemestralMax: number | null
   horasSemestralEstricto: boolean
   minDocencia: number | null
   minDocenciaConProyectos: number | null
@@ -41,7 +46,7 @@ function fallbackModalidad(
 ): ResolvedModalidad {
   switch (modalidad) {
     case "PLANTA_TC":
-    case "OCASIONAL_TC":
+      // Art. 4a: "deben laborar 880 horas en 22 semanas" — tope fijo por norma
       return {
         horasSemanalMax: 40,
         horasSemestralMax: 880,
@@ -52,7 +57,7 @@ function fallbackModalidad(
         fuente: "fallback-048",
       }
     case "PLANTA_MT":
-    case "OCASIONAL_MT":
+      // Art. 4b: "deben laborar 440 horas en 22 semanas" — tope fijo por norma
       return {
         horasSemanalMax: 20,
         horasSemestralMax: 440,
@@ -62,7 +67,30 @@ function fallbackModalidad(
         maxInvProySocSemanal: null,
         fuente: "fallback-048",
       }
+    case "OCASIONAL_TC":
+      // Art. 4c: "40 horas semanales durante el período de su vinculación" — derivado
+      return {
+        horasSemanalMax: 40,
+        horasSemestralMax: null,
+        horasSemestralEstricto: true,
+        minDocencia: 432,
+        minDocenciaConProyectos: 288,
+        maxInvProySocSemanal: null,
+        fuente: "fallback-048",
+      }
+    case "OCASIONAL_MT":
+      // Art. 4c: "20 horas semanales durante el período de su vinculación" — derivado
+      return {
+        horasSemanalMax: 20,
+        horasSemestralMax: null,
+        horasSemestralEstricto: true,
+        minDocencia: 240,
+        minDocenciaConProyectos: 144,
+        maxInvProySocSemanal: null,
+        fuente: "fallback-048",
+      }
     case "CATEDRA": {
+      // Art. 4d: "podrán laborar HASTA 16 (Neiva) / 19 (regional) horas semanales" — tope máximo derivado
       const isRegional =
         sedeBase === "PITALITO" ||
         sedeBase === "GARZON" ||
@@ -70,7 +98,7 @@ function fallbackModalidad(
       const horasSemanalMax = isRegional ? 19 : 16
       return {
         horasSemanalMax,
-        horasSemestralMax: horasSemanalMax * 22,
+        horasSemestralMax: null,
         horasSemestralEstricto: true,
         minDocencia: null,
         minDocenciaConProyectos: null,
@@ -79,19 +107,21 @@ function fallbackModalidad(
       }
     }
     case "VISITANTE":
+      // Art. 4e: "según tipo de dedicación" — derivado del semanal
       return {
         horasSemanalMax: 40,
-        horasSemestralMax: 880,
+        horasSemestralMax: null,
         horasSemestralEstricto: false,
-        minDocencia: 528, // 60% de 880
-        minDocenciaConProyectos: 528,
+        minDocencia: null,
+        minDocenciaConProyectos: null,
         maxInvProySocSemanal: null,
         fuente: "fallback-048",
       }
     case "INVITADO":
+      // Art. 4f: "hasta 100% según vinculación" — derivado del semanal
       return {
         horasSemanalMax: 40,
-        horasSemestralMax: 880,
+        horasSemestralMax: null,
         horasSemestralEstricto: false,
         minDocencia: null,
         minDocenciaConProyectos: null,
@@ -312,7 +342,10 @@ export async function resolveAgendaLimits(
     resolveGlobales(periodoId),
   ])
 
-  const horasTotalesPeriodo = modalidad.horasSemestralMax
+  // Si la norma fija el tope semestral (PLANTA_TC=880, PLANTA_MT=440 — Art. 4a/4b)
+  // se usa tal cual. Si no, se deriva: horasSemanalMax × semanasPeriodo (Art. 4c/4d/4e/4f).
+  const horasTotalesPeriodo =
+    modalidad.horasSemestralMax ?? modalidad.horasSemanalMax * globales.semanasPeriodo
 
   // Mínimo de docencia: si tiene proyectos activos, usa el reducido
   const minDocencia = docente.proyectosActivos

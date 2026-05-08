@@ -107,66 +107,70 @@ const parametrosGlobales = [
 // 2. PARÁMETROS POR MODALIDAD (default permanente)
 // =====================================================================
 
+// `horasSemestralMax: null` significa derivado en runtime (horasSemanalMax × semanasPeriodo).
+// Solo PLANTA_TC/MT lo tienen fijado por norma (Art. 4a/4b: "880/440 horas en 22 semanas").
 const parametrosModalidad = [
-  // Tiempo Completo (Planta y Ocasional) — Art. 4a/4c
+  // Planta TC — Art. 4a: tope semestral fijo por norma
   {
     modalidad: "PLANTA_TC" as const,
     sedeAplicable: null,
     horasSemanalMax: 40,
-    horasSemestralMax: 880,
+    horasSemestralMax: 880 as number | null,
     horasSemestralEstricto: true,
     minDocencia: 432,
     minDocenciaConProyectos: 288,
     maxInvProySocSemanal: null,
   },
-  {
-    modalidad: "OCASIONAL_TC" as const,
-    sedeAplicable: null,
-    horasSemanalMax: 40,
-    horasSemestralMax: 880,
-    horasSemestralEstricto: true,
-    minDocencia: 432,
-    minDocenciaConProyectos: 288,
-    maxInvProySocSemanal: null,
-  },
-  // Medio Tiempo — Art. 4b/4c
+  // Planta MT — Art. 4b: tope semestral fijo por norma
   {
     modalidad: "PLANTA_MT" as const,
     sedeAplicable: null,
     horasSemanalMax: 20,
-    horasSemestralMax: 440,
+    horasSemestralMax: 440 as number | null,
     horasSemestralEstricto: true,
     minDocencia: 240,
     minDocenciaConProyectos: 144,
     maxInvProySocSemanal: null,
   },
+  // Ocasional TC — Art. 4c: "40 h/sem durante el período" (derivado)
+  {
+    modalidad: "OCASIONAL_TC" as const,
+    sedeAplicable: null,
+    horasSemanalMax: 40,
+    horasSemestralMax: null as number | null,
+    horasSemestralEstricto: true,
+    minDocencia: 432,
+    minDocenciaConProyectos: 288,
+    maxInvProySocSemanal: null,
+  },
+  // Ocasional MT — Art. 4c (derivado)
   {
     modalidad: "OCASIONAL_MT" as const,
     sedeAplicable: null,
     horasSemanalMax: 20,
-    horasSemestralMax: 440,
+    horasSemestralMax: null as number | null,
     horasSemestralEstricto: true,
     minDocencia: 240,
     minDocenciaConProyectos: 144,
     maxInvProySocSemanal: null,
   },
-  // Cátedra Neiva (sede central) — Art. 4d
+  // Cátedra Neiva — Art. 4d: "HASTA 16 h/sem" (tope máximo derivado)
   {
     modalidad: "CATEDRA" as const,
     sedeAplicable: "NEIVA" as const,
     horasSemanalMax: 16,
-    horasSemestralMax: 352, // 16 × 22
+    horasSemestralMax: null as number | null,
     horasSemestralEstricto: true,
     minDocencia: null,
     minDocenciaConProyectos: null,
     maxInvProySocSemanal: 4, // Art. 3 Par. 2
   },
-  // Cátedra sedes regionales — Art. 4d (Pitalito, Garzón, La Plata)
+  // Cátedra sedes regionales — Art. 4d: "HASTA 19 h/sem" (derivado)
   {
     modalidad: "CATEDRA" as const,
     sedeAplicable: "PITALITO" as const,
     horasSemanalMax: 19,
-    horasSemestralMax: 418, // 19 × 22
+    horasSemestralMax: null as number | null,
     horasSemestralEstricto: true,
     minDocencia: null,
     minDocenciaConProyectos: null,
@@ -176,7 +180,7 @@ const parametrosModalidad = [
     modalidad: "CATEDRA" as const,
     sedeAplicable: "GARZON" as const,
     horasSemanalMax: 19,
-    horasSemestralMax: 418,
+    horasSemestralMax: null as number | null,
     horasSemestralEstricto: true,
     minDocencia: null,
     minDocenciaConProyectos: null,
@@ -186,30 +190,30 @@ const parametrosModalidad = [
     modalidad: "CATEDRA" as const,
     sedeAplicable: "LA_PLATA" as const,
     horasSemanalMax: 19,
-    horasSemestralMax: 418,
+    horasSemestralMax: null as number | null,
     horasSemestralEstricto: true,
     minDocencia: null,
     minDocenciaConProyectos: null,
     maxInvProySocSemanal: 4,
   },
-  // Visitante — Art. 4e + Art. 3 Par. 3
+  // Visitante — Art. 4e: "según tipo de dedicación" (derivado).
+  // El mínimo 60 % docencia (Art. 3 Par. 3) se calcula sobre el total derivado, no aquí.
   {
     modalidad: "VISITANTE" as const,
     sedeAplicable: null,
     horasSemanalMax: 40,
-    horasSemestralMax: 880,
+    horasSemestralMax: null as number | null,
     horasSemestralEstricto: false,
-    // Mínimo 60% en docencia se calcula como porcentaje, no aquí
-    minDocencia: 528, // 60% de 880, default conservador
-    minDocenciaConProyectos: 528,
+    minDocencia: null,
+    minDocenciaConProyectos: null,
     maxInvProySocSemanal: null,
   },
-  // Invitado — Art. 4f
+  // Invitado — Art. 4f: "hasta 100% según vinculación" (derivado)
   {
     modalidad: "INVITADO" as const,
     sedeAplicable: null,
     horasSemanalMax: 40,
-    horasSemestralMax: 880,
+    horasSemestralMax: null as number | null,
     horasSemestralEstricto: false,
     minDocencia: null,
     minDocenciaConProyectos: null,
