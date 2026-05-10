@@ -43,3 +43,6 @@ next-env.d.ts
 /src/generated/prisma
 
 /.claude/*
+
+# scratch dir for PDF calibration outputs, etc.
+/tmp/

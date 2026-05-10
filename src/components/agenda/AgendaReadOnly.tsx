@@ -183,12 +183,14 @@ export function AgendaReadOnly({
             ENVIADO
           </Badge>
           <Button
+            asChild
             variant="outline"
-            onClick={() => window.print()}
             className="gap-2 print:hidden"
           >
-            <Printer className="h-4 w-4" />
-            Descargar PDF / Imprimir
+            <a href={`/api/agenda/${agenda.id}/pdf`} download>
+              <Printer className="h-4 w-4" />
+              Descargar PDF (FO-19)
+            </a>
           </Button>
         </div>
       </div>
