@@ -62,6 +62,8 @@ const MODALIDADES = [
   { value: "PLANTA_MT", label: "Medio Tiempo Planta" },
   { value: "OCASIONAL_MT", label: "Medio Tiempo Ocasional" },
   { value: "CATEDRA", label: "Cátedra" },
+  { value: "VISITANTE", label: "Visitante" },
+  { value: "INVITADO", label: "Invitado" },
 ]
 
 // =============================================
