@@ -1,3 +1,7 @@
+import { auth } from "@/lib/auth"
+import { prisma } from "@/lib/prisma"
+import { redirect } from "next/navigation"
+import Link from "next/link"
 import {
   Card,
   CardContent,
@@ -5,127 +9,263 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Button } from "@/components/ui/button"
-import { ClipboardCheck, Save, Send } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import {
+  ClipboardCheck,
+  ClipboardList,
+  ArrowRight,
+  AlertCircle,
+  CheckCircle2,
+  Pencil,
+} from "lucide-react"
+import { StartMonitoreoButton } from "@/components/monitoreo/StartMonitoreoButton"
 
-export default function MonitoreoPage() {
+/**
+ * Página principal de Monitoreo (FO-20).
+ *
+ * Server Component que clasifica las agendas ENVIADAS en 3 grupos:
+ *  - Pendientes: agenda enviada sin monitoreo aún → CTA "Iniciar Monitoreo"
+ *  - En curso:   monitoreo BORRADOR → CTA "Continuar"
+ *  - Enviados:   monitoreo ENVIADO → CTA "Ver"
+ *
+ * Solo se puede monitorear una agenda que ya fue ENVIADA (Art. 12 Acuerdo 048).
+ */
+export default async function MonitoreoPage() {
+  const session = await auth()
+  if (!session?.user?.id) redirect("/auth/login")
+
+  // Traer todas las agendas ENVIADAS del docente, ordenadas por periodo desc
+  const agendas = await prisma.agendaSemestral.findMany({
+    where: {
+      docenteId: session.user.id,
+      estado: "ENVIADO",
+    },
+    orderBy: { periodo: "desc" },
+    select: {
+      id: true,
+      periodo: true,
+      updatedAt: true,
+      _count: {
+        select: {
+          cursos: true,
+          otrasActividadesDocencia: true,
+          actividadesInvestigacion: true,
+          actividadesProyeccionSocial: true,
+          actividadesGestion: true,
+        },
+      },
+    },
+  })
+
+  // Traer todos los monitoreos del docente, indexados por agendaId
+  const monitoreos = await prisma.monitoreo.findMany({
+    where: { docenteId: session.user.id },
+    select: {
+      id: true,
+      estado: true,
+      agendaId: true,
+      updatedAt: true,
+    },
+  })
+  const monitoreoPorAgenda = new Map(monitoreos.map((m) => [m.agendaId, m]))
+
+  // Clasificar
+  const pendientes: typeof agendas = []
+  const enCurso: typeof agendas = []
+  const enviados: typeof agendas = []
+
+  for (const a of agendas) {
+    const m = monitoreoPorAgenda.get(a.id)
+    if (!m) pendientes.push(a)
+    else if (m.estado === "BORRADOR") enCurso.push(a)
+    else enviados.push(a)
+  }
+
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-10">
-      
-      {/* Encabezado Principal */}
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <ClipboardCheck className="h-8 w-8 text-primary" />
-          Monitoreo de Agenda Académica (FO-20)
+    <div className="space-y-6 pb-10">
+      {/* Encabezado */}
+      <div>
+        <h1 className="flex items-center gap-2 text-2xl font-bold sm:text-3xl">
+          <ClipboardCheck className="h-7 w-7 text-primary" />
+          Monitoreo (FO-20)
         </h1>
-        <p className="text-muted-foreground">
-          Reporte de ejecución de actividades planificadas en el semestre.
+        <p className="mt-1 text-sm text-muted-foreground">
+          Reporte de ejecución al cierre del semestre. Confirme cuántas horas
+          realmente dedicó a cada actividad planificada en su agenda y adjunte
+          las evidencias.
         </p>
       </div>
 
-      {/* Tarjeta de Información del Docente (Precargada visualmente) */}
-      <Card className="bg-muted/50">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Información General</CardTitle>
-          <CardDescription>Estos datos se asocian automáticamente a su perfil.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-1">
-            <Label>Período Académico</Label>
-            <Input disabled value="2026-1" className="bg-background" />
-          </div>
-          <div className="space-y-1">
-            <Label>Estado del Reporte</Label>
-            <Input disabled value="Borrador" className="bg-background" />
-          </div>
-          <div className="space-y-1">
-            <Label>Fecha de Actualización</Label>
-            <Input disabled value={new Date().toLocaleDateString()} className="bg-background" />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Sección I: Actividades Académicas Básicas */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Sección I - Actividades Académicas Básicas</CardTitle>
-          <CardDescription>
-            Detalle la ejecución de sus clases teóricas, prácticas y asesorías. (Se precargará desde la FO-19).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 p-4 border rounded-lg bg-card">
-            <div className="space-y-2">
-              <Label htmlFor="act-basica-1">Actividades Desarrolladas</Label>
-              {/* Aquí simulamos que ya se trajo el dato de la Agenda */}
-              <Textarea 
-                id="act-basica-1" 
-                defaultValue="Curso: Arquitectura de Sistemas (Subgrupo A) - 4 horas presenciales/semana." 
-                className="min-h-[80px]"
-              />
+      {/* Banner explicativo cuando no hay nada que monitorear */}
+      {agendas.length === 0 && (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+            <AlertCircle className="h-10 w-10 text-muted-foreground" />
+            <div>
+              <p className="font-medium">
+                Aún no tiene agendas enviadas para monitorear
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                El monitoreo (FO-20) se realiza al final del semestre sobre
+                agendas (FO-19) que ya fueron enviadas formalmente.
+              </p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="periodo-1">Período de Ejecución</Label>
-                <Input id="periodo-1" placeholder="Ej: Febrero - Junio" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="obs-1">Observaciones / Novedades</Label>
-                <Input id="obs-1" placeholder="Novedades sobre la asistencia o temario..." />
-              </div>
-            </div>
+            <Link
+              href="/agenda"
+              className="mt-2 text-sm font-medium text-primary underline-offset-4 hover:underline"
+            >
+              Ir a Agenda Semestral →
+            </Link>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Pendientes — agendas ENVIADAS sin monitoreo */}
+      {pendientes.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold">Pendientes de monitoreo</h2>
+            <Badge variant="secondary">{pendientes.length}</Badge>
           </div>
-          
-          <Button variant="outline" className="w-full border-dashed">
-            + Añadir otra actividad básica manualmente
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Sección II: Actividades Complementarias */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Sección II - Actividades Académicas Complementarias</CardTitle>
-          <CardDescription>
-            Reporte de preparación de clases, evaluación, y atención a estudiantes.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-           {/* Estructura vacía para que el profesor llene */}
-          <div className="grid gap-4 p-4 border rounded-lg bg-card">
-             <div className="space-y-2">
-              <Label>Actividades Desarrolladas</Label>
-              <Textarea placeholder="Describa las actividades realizadas..." className="min-h-[80px]" />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               <div className="space-y-2">
-                <Label>Período de Ejecución</Label>
-                <Input placeholder="Ej: Semestre completo" />
-              </div>
-               <div className="space-y-2">
-                <Label>Observaciones</Label>
-                <Input placeholder="Comentarios adicionales" />
-              </div>
-            </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {pendientes.map((a) => (
+              <Card
+                key={a.id}
+                className="border-amber-500/30 bg-amber-50/40 dark:bg-amber-950/10"
+              >
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center justify-between text-base">
+                    <span>Agenda {a.periodo}</span>
+                    <Badge
+                      variant="outline"
+                      className="border-amber-500 text-xs text-amber-700 dark:text-amber-300"
+                    >
+                      Por iniciar
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    {a._count.cursos} cursos ·{" "}
+                    {a._count.otrasActividadesDocencia +
+                      a._count.actividadesInvestigacion +
+                      a._count.actividadesProyeccionSocial +
+                      a._count.actividadesGestion}{" "}
+                    actividades
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <StartMonitoreoButton agendaId={a.id} />
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </CardContent>
-      </Card>
+        </section>
+      )}
 
-      {/* Botones de Acción (Guardar/Enviar) */}
-      <div className="flex justify-end gap-4 pt-4">
-        <Button variant="secondary" className="gap-2">
-          <Save className="h-4 w-4" />
-          Guardar Borrador
-        </Button>
-        <Button className="gap-2">
-          <Send className="h-4 w-4" />
-          Enviar Reporte Definitivo
-        </Button>
-      </div>
+      {/* En curso — monitoreos BORRADOR */}
+      {enCurso.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold">En progreso</h2>
+            <Badge variant="secondary">{enCurso.length}</Badge>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {enCurso.map((a) => {
+              const m = monitoreoPorAgenda.get(a.id)!
+              return (
+                <Link key={a.id} href={`/monitoreo/${m.id}`}>
+                  <Card className="border-yellow-500/30 bg-yellow-50/40 transition-colors hover:border-yellow-500/60 dark:bg-yellow-950/10">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center justify-between text-base">
+                        <span>Monitoreo {a.periodo}</span>
+                        <Badge
+                          variant="outline"
+                          className="border-yellow-500 text-xs text-yellow-700 dark:text-yellow-300"
+                        >
+                          <Pencil className="mr-1 h-3 w-3" />
+                          Borrador
+                        </Badge>
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Última edición:{" "}
+                        {new Date(m.updatedAt).toLocaleDateString("es-CO", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center justify-between text-sm font-medium text-primary">
+                        Continuar editando
+                        <ArrowRight className="h-4 w-4" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
+      {/* Enviados — monitoreos ENVIADO */}
+      {enviados.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold">Monitoreos enviados</h2>
+            <Badge variant="secondary">{enviados.length}</Badge>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {enviados.map((a) => {
+              const m = monitoreoPorAgenda.get(a.id)!
+              return (
+                <Link key={a.id} href={`/monitoreo/${m.id}`}>
+                  <Card className="transition-colors hover:border-primary/40">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center justify-between text-base">
+                        <span>Monitoreo {a.periodo}</span>
+                        <Badge className="bg-green-600 text-xs hover:bg-green-600">
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                          Enviado
+                        </Badge>
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Enviado:{" "}
+                        {new Date(m.updatedAt).toLocaleDateString("es-CO", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center justify-between text-sm font-medium text-muted-foreground">
+                        Ver reporte
+                        <ArrowRight className="h-4 w-4" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Footer informativo */}
+      {agendas.length > 0 && (
+        <Card className="border-dashed bg-muted/30">
+          <CardContent className="flex items-start gap-3 py-4 text-xs text-muted-foreground">
+            <ClipboardList className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>
+              <strong>Acuerdo 048/2018 Art. 12:</strong> al culminar cada
+              período académico, los docentes deben entregar un informe digital
+              del cumplimiento de su agenda con copia digital de los productos
+              y resultados de sus planes de trabajo.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
