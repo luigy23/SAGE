@@ -15,7 +15,7 @@ import {
   Crown,
   Sliders,
   GitBranch,
-  RefreshCw,
+  Search,
 } from "lucide-react"
 import {
   Sidebar,
@@ -85,8 +85,20 @@ export function AppSidebar({
                   </SidebarMenuButton>
                   <SidebarMenuSub>
                     <SidebarMenuSubItem>
-                      <SidebarMenuSubButton 
-                        asChild 
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={pathname.startsWith("/admin/revision")}
+                      >
+                        <Link href="/admin/revision">
+                          <Search />
+                          <span>Revisión</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
                         isActive={pathname.startsWith("/admin/docentes")}
                       >
                         <Link href="/admin/docentes">
@@ -151,18 +163,6 @@ export function AppSidebar({
                         <Link href="/superadmin/modalidades">
                           <GitBranch />
                           <span>Modalidades</span>
-                        </Link>
-                      </SidebarMenuSubButton>
-                    </SidebarMenuSubItem>
-
-                    <SidebarMenuSubItem>
-                      <SidebarMenuSubButton
-                        asChild
-                        isActive={pathname.startsWith("/superadmin/agendas")}
-                      >
-                        <Link href="/superadmin/agendas">
-                          <RefreshCw />
-                          <span>Rehabilitar Agendas</span>
                         </Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>

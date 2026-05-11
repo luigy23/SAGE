@@ -531,11 +531,11 @@ model CargoAdministrativo {
   @@map("cargos_administrativos")
 }
 
-/// Audit trail de rehabilitaciones de agendas enviadas (SUPERADMIN)
+/// Audit trail de rehabilitaciones de agendas enviadas (ADMIN/SUPERADMIN)
 model RehabilitacionAgenda {
   id              String           @id @default(cuid())
   agendaId        String
-  rehabilitadoPor String // ID del SUPERADMIN
+  rehabilitadoPor String // ID del admin/superadmin actor
   motivo          String // obligatorio
   estadoOriginal  EstadoFormulario
   fecha           DateTime         @default(now())
@@ -546,6 +546,56 @@ model RehabilitacionAgenda {
   @@index([agendaId])
   @@index([rehabilitadoPor])
   @@map("rehabilitaciones_agenda")
+}
+
+/// Audit trail de rehabilitaciones de monitoreos enviados (ADMIN/SUPERADMIN)
+model RehabilitacionMonitoreo {
+  id              String           @id @default(cuid())
+  monitoreoId     String
+  rehabilitadoPor String // ID del admin/superadmin actor
+  motivo          String
+  estadoOriginal  EstadoFormulario
+  fecha           DateTime         @default(now())
+  observaciones   String?
+
+  monitoreo Monitoreo @relation(fields: [monitoreoId], references: [id], onDelete: Cascade)
+
+  @@index([monitoreoId])
+  @@index([rehabilitadoPor])
+  @@map("rehabilitaciones_monitoreo")
+}
+
+/// Recurso sobre el que un admin ejecuta una sesión de edición administrativa
+enum TipoRecurso {
+  AGENDA
+  MONITOREO
+}
+
+/// Tipo de acción dentro de una sesión de edición administrativa
+enum AccionEdicion {
+  ABRIR
+  CAMBIO
+  CERRAR
+}
+
+/// Audit log de ediciones administrativas en modo impersonación (Fase 2).
+/// Una sesión comienza con accion=ABRIR, registra CAMBIO por cada mutación,
+/// y termina con accion=CERRAR.
+model EdicionAdministrativa {
+  id            String        @id @default(cuid())
+  tipo          TipoRecurso
+  recursoId     String // agendaId | monitoreoId
+  editorId      String // ID del admin/superadmin actor
+  accion        AccionEdicion
+  campo         String? // ej: "cursos[].horasSemanales"
+  antes         Json?
+  despues       Json?
+  observaciones String?
+  fecha         DateTime      @default(now())
+
+  @@index([tipo, recursoId])
+  @@index([editorId])
+  @@map("ediciones_administrativas")
 }
 
 // ==========================================
@@ -563,6 +613,11 @@ model Monitoreo {
   // REGLA CRÍTICA: Relación 1:1 obligatoria con AgendaSemestral.
   agendaId String @unique
 
+  // Rehabilitación (ADMIN/SUPERADMIN puede devolver un monitoreo ENVIADO a BORRADOR)
+  rehabilitada         Boolean   @default(false)
+  rehabilitadaCount    Int       @default(0)
+  ultimaRehabilitacion DateTime?
+
   // Reportes por sección — auditan lo prometido en la FO-19
   reportesDocencia          ReporteDocencia[]
   reportesActividadDocencia ReporteActividadDocencia[]
@@ -571,8 +626,9 @@ model Monitoreo {
   reportesGestion           ReporteGestion[]
 
   // Relaciones
-  docente Docente         @relation(fields: [docenteId], references: [id], onDelete: Cascade)
-  agenda  AgendaSemestral @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+  docente          Docente                   @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+  agenda           AgendaSemestral           @relation(fields: [agendaId], references: [id], onDelete: Cascade)
+  rehabilitaciones RehabilitacionMonitoreo[]
 
   // Un docente solo puede tener un monitoreo por periodo
   @@unique([docenteId, periodo])
