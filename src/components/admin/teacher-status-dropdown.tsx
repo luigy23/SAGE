@@ -34,9 +34,13 @@ export function TeacherStatusDropdown({
 
     startTransition(async () => {
       try {
-        await cambiarEstadoDocente(docenteId, newStatus)
-        toast.success(`Estado actualizado a ${newStatus}`)
-        router.refresh()
+        const result = await cambiarEstadoDocente(docenteId, newStatus)
+        if (result && "error" in result) {
+          toast.error(result.error)
+        } else {
+          toast.success(`Estado actualizado a ${newStatus}`)
+          router.refresh()
+        }
       } catch (error: any) {
         toast.error(error.message || "Error al actualizar el estado")
       } finally {

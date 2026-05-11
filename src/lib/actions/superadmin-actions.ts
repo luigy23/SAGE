@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { invalidate } from "@/lib/rules/cache"
 import type { EstadoCuenta, Rol } from "@/generated/prisma/client"
+import { assertNoEsUltimoSuperadmin, assertPuedeMutarUsuario } from "@/lib/rbac"
 
 // =====================================================================
 // Guard
@@ -208,10 +209,19 @@ export async function listUsuarios() {
 export async function cambiarRolUsuario(usuarioId: string, nuevoRol: Rol) {
   const user = await ensureSuperadmin()
 
-  if (usuarioId === user.id && nuevoRol !== "SUPERADMIN") {
-    return {
-      error: "No puedes cambiar tu propio rol de SUPERADMIN. Otro SUPERADMIN debe hacerlo.",
-    }
+  // RBAC: prevenir auto-modificación + escalada lateral (SUPERADMIN→SUPERADMIN peer).
+  const check = await assertPuedeMutarUsuario(
+    { id: user.id, rol: user.rol as Rol },
+    usuarioId,
+  )
+  if ("error" in check) return check
+
+  // Anti lock-out: degradar al último SUPERADMIN dejaría el sistema sin admins máximos.
+  // (Solo aplica si el target era SUPERADMIN y el nuevo rol no lo es — pero como
+  // `puedeAdministrar` ya bloquea SUPERADMIN→SUPERADMIN, este caso es defensivo.)
+  if (check.targetRol === "SUPERADMIN" && nuevoRol !== "SUPERADMIN") {
+    const lockout = await assertNoEsUltimoSuperadmin(usuarioId)
+    if (lockout) return lockout
   }
 
   await prisma.docente.update({
@@ -229,8 +239,18 @@ export async function cambiarEstadoCuenta(
 ) {
   const user = await ensureSuperadmin()
 
-  if (usuarioId === user.id && nuevoEstado === "INACTIVO") {
-    return { error: "No puedes desactivar tu propia cuenta." }
+  // RBAC: prevenir auto-modificación + escalada lateral entre SUPERADMINs.
+  const check = await assertPuedeMutarUsuario(
+    { id: user.id, rol: user.rol as Rol },
+    usuarioId,
+  )
+  if ("error" in check) return check
+
+  // Anti lock-out: no permitir desactivar al último SUPERADMIN activo.
+  // (Defensivo — `puedeAdministrar` ya bloquea SUPERADMIN→SUPERADMIN.)
+  if (check.targetRol === "SUPERADMIN" && nuevoEstado === "INACTIVO") {
+    const lockout = await assertNoEsUltimoSuperadmin(usuarioId)
+    if (lockout) return lockout
   }
 
   await prisma.docente.update({

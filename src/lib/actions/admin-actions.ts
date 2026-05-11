@@ -3,10 +3,13 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
-import { EstadoCuenta } from "@/generated/prisma/client"
+import { EstadoCuenta, type Rol } from "@/generated/prisma/client"
+import { assertNoEsUltimoSuperadmin, assertPuedeMutarUsuario } from "@/lib/rbac"
 
 /**
  * Solo administradores pueden ejecutar estas acciones.
+ * Retorna el usuario autenticado para que el caller pueda aplicar reglas RBAC
+ * adicionales (ej. impedir escalada lateral a peers o superiores).
  */
 async function ensureAdmin() {
   const session = await auth()
@@ -15,6 +18,7 @@ async function ensureAdmin() {
   if (!session?.user || (rol !== "ADMIN" && rol !== "SUPERADMIN")) {
     throw new Error("No autorizado. Se requieren privilegios de Administrador.")
   }
+  return session.user
 }
 
 /**
@@ -48,14 +52,27 @@ export async function getDocentesAdmin() {
  * Cambiar el estado de cuenta de un docente
  */
 export async function cambiarEstadoDocente(docenteId: string, nuevoEstado: EstadoCuenta) {
-  await ensureAdmin()
+  const actor = await ensureAdmin()
+
+  // RBAC: prevenir auto-modificación + escalada lateral/vertical.
+  const check = await assertPuedeMutarUsuario(
+    { id: actor.id, rol: actor.rol as Rol },
+    docenteId,
+  )
+  if ("error" in check) return check
+
+  // Anti lock-out: no permitir desactivar al último SUPERADMIN activo.
+  if (check.targetRol === "SUPERADMIN" && nuevoEstado === "INACTIVO") {
+    const lockout = await assertNoEsUltimoSuperadmin(docenteId)
+    if (lockout) return lockout
+  }
 
   try {
     await prisma.docente.update({
       where: { id: docenteId },
       data: { estadoCuenta: nuevoEstado },
     })
-    
+
     // Revalidar la vista de admin
     revalidatePath("/admin/docentes")
     return { success: true }
