@@ -19,6 +19,7 @@ import type {
   TipoCurso,
 } from "@/generated/prisma/client"
 import type { AgendaLimits } from "@/lib/validations/agenda-rules"
+import { esCargoExentoGestion20 } from "@/lib/utils/cargo"
 
 // ========================================
 // Parámetros por modalidad
@@ -325,6 +326,9 @@ type DocenteParaResolver = {
   doctorado: boolean
   cargoAdministrativo: boolean
   proyectosActivos: boolean
+  // Texto libre del cargo. Necesario para resolver la exención del 20%
+  // de gestión (Art. 10). Puede ser null si no tiene cargo registrado.
+  tipoCargo: string | null
 }
 
 /**
@@ -352,8 +356,10 @@ export async function resolveAgendaLimits(
     ? modalidad.minDocenciaConProyectos ?? modalidad.minDocencia ?? 0
     : modalidad.minDocencia ?? 0
 
-  // Máx gestión: 20% del total, salvo cargo administrativo
-  const maxGestion = docente.cargoAdministrativo
+  // Art. 10: 20% del total, EXCEPTO los 5 cargos exentos del Art. 11
+  // (Jefe de Programa/Departamento, Asesor de Vicerrectoría/Rectoría, Decano).
+  // Cualquier otro cargo administrativo aplica el 20%.
+  const maxGestion = esCargoExentoGestion20(docente.tipoCargo)
     ? horasTotalesPeriodo
     : Math.floor(horasTotalesPeriodo * globales.limiteGestionPorcentaje)
 

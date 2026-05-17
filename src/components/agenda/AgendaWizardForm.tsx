@@ -9,9 +9,12 @@ import type { Docente } from "@/generated/prisma/client"
 import {
   createAgendaSchema,
   DEFAULT_FORM_VALUES,
+  topesKey,
   type AgendaWizardFormData,
+  type TopesActividadesMap,
 } from "@/lib/schemas/agenda-schema"
 import { getMaxHoras, getMinDocencia } from "@/lib/utils/periodo"
+import { esCargoExentoGestion20 } from "@/lib/utils/cargo"
 import {
   upsertAgendaCompletaAction,
 } from "@/lib/actions/agenda-wizard"
@@ -189,6 +192,27 @@ export function AgendaWizardForm({
     [docente.modalidad, docente.proyectosActivos]
   )
 
+  // Art. 10 + Art. 11: si el docente ocupa uno de los 5 cargos exentos
+  // (Jefe de Programa/Departamento, Asesor de Vicerrectoría/Rectoría, Decano)
+  // queda eximido del tope del 20% en gestión.
+  const excluyeTopeGestion20 = useMemo(
+    () => esCargoExentoGestion20(docente.tipoCargo),
+    [docente.tipoCargo]
+  )
+
+  // Art. 11: map de topes individuales por actividad. Se construye una sola vez
+  // desde el catálogo precargado en el servidor, para validar cada actividad
+  // contra su tope `topeSemestralH` en la UI antes del envío.
+  const topesActividades = useMemo<TopesActividadesMap>(() => {
+    const map: TopesActividadesMap = {}
+    for (const act of catalogoActividades) {
+      if (act.topeSemestralH !== null && act.topeSemestralH !== undefined) {
+        map[topesKey(act.categoria, act.nombre)] = act.topeSemestralH
+      }
+    }
+    return map
+  }, [catalogoActividades])
+
   const schema = useMemo(
     () => createAgendaSchema(
       maxHoras,
@@ -197,11 +221,13 @@ export function AgendaWizardForm({
         doctorado: docente.doctorado,
         cargoAdministrativo: docente.cargoAdministrativo,
         proyectosActivos: docente.proyectosActivos,
+        excluyeTopeGestion20,
       },
       minDocencia,
       semanasPeriodo,
+      topesActividades,
     ),
-    [maxHoras, esEstricto, minDocencia, semanasPeriodo, docente.doctorado, docente.cargoAdministrativo, docente.proyectosActivos]
+    [maxHoras, esEstricto, minDocencia, semanasPeriodo, docente.doctorado, docente.cargoAdministrativo, docente.proyectosActivos, excluyeTopeGestion20, topesActividades]
   )
 
   const steps = useMemo(
@@ -285,10 +311,7 @@ export function AgendaWizardForm({
         currentFields as (keyof AgendaWizardFormData)[]
       )
       if (!valid) {
-        const errs = form.formState.errors as Record<string, { message?: string; root?: { message?: string } }>
-        if (!errs.actividadesInvestigacion?.message && !errs.actividadesInvestigacion?.root?.message) {
-          toast.error("Corrija los errores antes de continuar.")
-        }
+        toast.error("Corrija los errores antes de continuar.")
         return
       }
     }
@@ -339,8 +362,6 @@ export function AgendaWizardForm({
         toast.error(errs._minDocenciaInsuficiente.message)
       } else if (errs._horasExcedidas?.message) {
         toast.error(errs._horasExcedidas.message)
-      } else if (errs.actividadesInvestigacion?.message || errs.actividadesInvestigacion?.root?.message) {
-        toast.error(errs.actividadesInvestigacion.message ?? errs.actividadesInvestigacion.root?.message)
       } else {
         toast.error("Hay errores en el formulario. Revise todos los pasos.")
       }
@@ -393,6 +414,7 @@ export function AgendaWizardForm({
           <StepInvestigacionProyeccion
             catalogoActividades={catalogoActividades}
             semanasPeriodo={semanasPeriodo}
+            doctorado={docente.doctorado}
           />
         )
       case "gestion":
@@ -401,6 +423,8 @@ export function AgendaWizardForm({
             cargoAdministrativo={docente.cargoAdministrativo}
             semanasPeriodo={semanasPeriodo}
             maxHoras={maxHoras}
+            excluyeTopeGestion20={excluyeTopeGestion20}
+            catalogoActividades={catalogoActividades}
           />
         )
       case "revision":
@@ -411,6 +435,7 @@ export function AgendaWizardForm({
             esEstricto={esEstricto}
             semanasPeriodo={semanasPeriodo}
             minDocencia={minDocencia}
+            excluyeTopeGestion20={excluyeTopeGestion20}
           />
         )
       default:

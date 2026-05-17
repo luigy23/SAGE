@@ -582,6 +582,98 @@ const catalogoActividades = [
     topeSemestralH: 220,
     articuloOrigen: "Art. 11 — Proyección Social",
   },
+
+  // ========== GESTIÓN ACADÉMICO-ADMINISTRATIVA (Art. 11 — Administrativas) ==========
+  // Cargos directivos exentos del tope del 20% (Art. 10 + Art. 11):
+  {
+    categoria: "GESTION" as const,
+    nombre: "Rectoría / Decanatura / Vicerrectoría",
+    topeSemestralH: 880,
+    descripcion: "Dedicación completa según Art. 11 (Rector, Decanos y Vicerrectores).",
+    articuloOrigen: "Art. 11 — Administrativas",
+  },
+  {
+    categoria: "GESTION" as const,
+    nombre: "Asesoría de Vicerrectoría",
+    topeSemestralH: 440,
+    descripcion: "Hasta 440 horas por dependencia.",
+    articuloOrigen: "Art. 11 — Administrativas",
+  },
+  {
+    categoria: "GESTION" as const,
+    nombre: "Asesoría de Rectoría",
+    topeSemestralH: 880,
+    requiereResolucionRector: true,
+    descripcion: "Supeditado a resolución del Rector. Tope máximo institucional como referencia.",
+    articuloOrigen: "Art. 11 — Administrativas",
+  },
+  {
+    categoria: "GESTION" as const,
+    nombre: "Jefatura de Programa",
+    topeSemestralH: 660,
+    articuloOrigen: "Art. 11 — Administrativas",
+  },
+  {
+    categoria: "GESTION" as const,
+    nombre: "Jefatura de Departamento",
+    topeSemestralH: 330,
+    articuloOrigen: "Art. 11 — Administrativas",
+  },
+
+  // Coordinaciones administrativas (NO exentas del 20%):
+  {
+    categoria: "GESTION" as const,
+    nombre: "Coordinación de programas en Sedes Regionales",
+    topeSemestralH: 132,
+    articuloOrigen: "Art. 11 — Administrativas",
+  },
+  {
+    categoria: "GESTION" as const,
+    nombre: "Coordinación de la Granja Experimental USCO",
+    topeSemestralH: 440,
+    articuloOrigen: "Art. 11 — Administrativas",
+  },
+
+  // Representaciones en cuerpos colegiados (separadas — cada una tiene su propio tope):
+  {
+    categoria: "GESTION" as const,
+    nombre: "Representación al Consejo Académico",
+    topeSemestralH: 132,
+    articuloOrigen: "Art. 11 — Administrativas",
+  },
+  {
+    categoria: "GESTION" as const,
+    nombre: "Representación al Consejo Superior Universitario",
+    topeSemestralH: 132,
+    articuloOrigen: "Art. 11 — Administrativas",
+  },
+  {
+    categoria: "GESTION" as const,
+    nombre: "Representación al Consejo de Facultad",
+    topeSemestralH: 64,
+    articuloOrigen: "Art. 11 — Administrativas",
+  },
+  {
+    categoria: "GESTION" as const,
+    nombre: "Representación al CSED",
+    topeSemestralH: 64,
+    articuloOrigen: "Art. 11 — Administrativas",
+  },
+  {
+    categoria: "GESTION" as const,
+    nombre: "Representación al CAP",
+    topeSemestralH: 64,
+    articuloOrigen: "Art. 11 — Administrativas",
+  },
+
+  // Genérico (flexibilidad para casos no listados explícitamente):
+  {
+    categoria: "GESTION" as const,
+    nombre: "Otras Actividades Académico-Administrativas",
+    topeSemestralH: null,
+    descripcion: "Actividades administrativas no listadas en el Art. 11. Sujetas a revisión del jefe de programa durante el monitoreo.",
+    articuloOrigen: "Art. 10 (genérico)",
+  },
 ] as const
 
 // =====================================================================

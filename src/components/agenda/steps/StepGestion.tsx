@@ -4,8 +4,6 @@ import { useFormContext, useFieldArray, useWatch } from "react-hook-form"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import { EMPTY_ACTIVIDAD } from "@/lib/schemas/agenda-schema"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Card,
   CardContent,
@@ -13,16 +11,9 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card"
-import {
-  FormField,
-  FormItem,
-  FormLabel,
-  FormControl,
-  FormDescription,
-  FormMessage,
-} from "@/components/ui/form"
-import { Plus, Trash2, AlertCircle } from "lucide-react"
-import { CalculadoraActividad } from "@/components/agenda/CalculadoraActividad"
+import { Plus, AlertCircle } from "lucide-react"
+import { ActividadCardRow } from "@/components/agenda/ActividadCardRow"
+import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatalogoSelector"
 
 /**
  * Paso 4 — Sección 4: Gestión Académico-Administrativa (CONDICIONAL)
@@ -31,21 +22,31 @@ import { CalculadoraActividad } from "@/components/agenda/CalculadoraActividad"
  * - Si cargoAdministrativo === true → renderiza el useFieldArray
  * - Si cargoAdministrativo === false → retorna null (no existe en el DOM)
  *
- * El stepper en AgendaWizardForm salta este paso automáticamente
- * cuando cargoAdministrativo es false.
+ * El stepper en AgendaWizardForm salta este paso automáticamente cuando
+ * cargoAdministrativo es false.
  *
- * Cada actividad captura: nombre, horasSemanales, semanas, descripcion.
- * La dedicacionPeriodo se calcula silenciosamente (horasSemanales × semanas)
- * mediante el componente CalculadoraActividad.
+ * El docente selecciona del catálogo Art. 11 (Acuerdo 048/2018) y solo digita
+ * el total semestral de horas. La validación del tope individual de cada
+ * actividad la realiza el schema Zod en el envío; la UI muestra feedback
+ * inmediato vía ActividadCardRow.
+ *
+ * El tope global del 20% (Art. 10) NO aplica a docentes cuyo cargo está
+ * en la lista de exentos (Jefes de Programa/Departamento, Asesores de
+ * Vicerrectoría/Rectoría, Decanos): para ellos `excluyeTopeGestion20=true`
+ * y la alerta del 20% no se muestra.
  */
 export function StepGestion({
   cargoAdministrativo,
   semanasPeriodo,
   maxHoras,
+  excluyeTopeGestion20,
+  catalogoActividades,
 }: {
   cargoAdministrativo: boolean
   semanasPeriodo: number
   maxHoras: number
+  excluyeTopeGestion20: boolean
+  catalogoActividades: ActividadCatalogoOption[]
 }) {
   const { control, formState: { errors } } = useFormContext<AgendaWizardFormData>()
 
@@ -67,10 +68,11 @@ export function StepGestion({
     errors.actividadesGestion?.message
 
   // Cálculo en tiempo real del límite Art. 10 (20% de la carga semestral)
+  // Solo aplica si el cargo NO está en la lista de exentos del Art. 10/11.
   const limiteGestionSemestral = Math.floor(maxHoras * semanasPeriodo * 0.20)
   const totalGestionActual = (actividadesGestionLive as { dedicacionPeriodo?: number }[])
     .reduce((acc, a) => acc + (Number(a?.dedicacionPeriodo) || 0), 0)
-  const excedeLimiteGestion = totalGestionActual > limiteGestionSemestral
+  const excedeLimiteGestion = !excluyeTopeGestion20 && totalGestionActual > limiteGestionSemestral
 
   // Renderizado condicional estricto: si no tiene cargo, no renderiza nada
   if (!cargoAdministrativo) return null
@@ -80,8 +82,9 @@ export function StepGestion({
       <CardHeader>
         <CardTitle>4. Gestión Académico-Administrativa</CardTitle>
         <CardDescription>
-          Actividades administrativas como coordinación de programa, comités
-          académicos, representación institucional, cargos directivos, etc.
+          Seleccione del catálogo oficial (Art. 11 del Acuerdo 048/2018) el cargo
+          o actividad administrativa que ejerce este semestre. Cada actividad
+          trae su tope individual precargado.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -99,7 +102,8 @@ export function StepGestion({
           </div>
         )}
 
-        {/* Alerta en tiempo real: límite del 20% de gestión (Art. 10) */}
+        {/* Alerta en tiempo real: tope global del 20% (Art. 10).
+            No se muestra para los 5 cargos exentos (Art. 11). */}
         {excedeLimiteGestion && (
           <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
             <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
@@ -123,147 +127,15 @@ export function StepGestion({
         )}
 
         {gestionFields.map((field, index) => (
-          <div
+          <ActividadCardRow
             key={field.id}
-            className="relative rounded-lg border p-4"
-          >
-            {/* Silent calculator — renders nothing */}
-            <CalculadoraActividad
-              arrayName="actividadesGestion"
-              index={index}
-            />
-
-            <div className="mb-3 flex items-center justify-between">
-              <h4 className="text-sm font-semibold text-muted-foreground">
-                Actividad #{index + 1}
-              </h4>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={() => removeGestion(index)}
-                className="h-8 w-8 text-destructive hover:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-12">
-              {/* Nombre — 6 columnas */}
-              <div className="sm:col-span-6">
-                <FormField
-                  control={control}
-                  name={`actividadesGestion.${index}.nombre`}
-                  render={({ field: f }) => (
-                    <FormItem>
-                      <FormLabel>Nombre de la actividad *</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...f}
-                          placeholder="Ej: Coordinación del programa de Ingeniería"
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Nombre del cargo o actividad administrativa
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* Horas semanales — 3 columnas */}
-              <div className="sm:col-span-3">
-                <FormField
-                  control={control}
-                  name={`actividadesGestion.${index}.horasSemanales`}
-                  render={({ field: f }) => (
-                    <FormItem>
-                      <FormLabel>Horas/semana *</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={40}
-                          step="0.5"
-                          name={f.name}
-                          ref={f.ref}
-                          onBlur={f.onBlur}
-                          value={f.value === 0 ? "" : f.value}
-                          placeholder="0"
-                          onChange={(e) => {
-                            const raw = e.target.value
-                            if (raw === "") { f.onChange(0); return }
-                            let val = parseFloat(raw)
-                            if (isNaN(val)) val = 0
-                            if (val > 40) val = 40
-                            f.onChange(val)
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* Semanas — 3 columnas */}
-              <div className="sm:col-span-3">
-                <FormField
-                  control={control}
-                  name={`actividadesGestion.${index}.semanas`}
-                  render={({ field: f }) => (
-                    <FormItem>
-                      <FormLabel>Semanas *</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={semanasPeriodo}
-                          step={1}
-                          name={f.name}
-                          ref={f.ref}
-                          onBlur={f.onBlur}
-                          value={f.value === 0 ? "" : f.value}
-                          placeholder="0"
-                          onChange={(e) => {
-                            const raw = e.target.value
-                            if (raw === "") { f.onChange(0); return }
-                            let val = parseInt(raw, 10)
-                            if (isNaN(val)) val = 0
-                            if (val > semanasPeriodo) val = semanasPeriodo
-                            f.onChange(val)
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* Descripción — 12 columnas (full width) */}
-              <div className="sm:col-span-12">
-                <FormField
-                  control={control}
-                  name={`actividadesGestion.${index}.descripcion`}
-                  render={({ field: f }) => (
-                    <FormItem>
-                      <FormLabel>Descripción</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          {...f}
-                          rows={2}
-                          placeholder="Descripción de las funciones y responsabilidades (opcional)"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
-          </div>
+            index={index}
+            arrayName="actividadesGestion"
+            catalogo={catalogoActividades}
+            categoria="GESTION"
+            semanasPeriodo={semanasPeriodo}
+            onRemove={() => removeGestion(index)}
+          />
         ))}
 
         <Button

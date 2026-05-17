@@ -42,12 +42,14 @@ export function StepRevision({
   esEstricto,
   semanasPeriodo,
   minDocencia,
+  excluyeTopeGestion20,
 }: {
   docente: Docente
   maxHoras: number
   esEstricto: boolean
   semanasPeriodo: number
   minDocencia: number
+  excluyeTopeGestion20: boolean
 }) {
   // Observar el estado del formulario globalmente
   const { formState: { errors } } = useFormContext<AgendaWizardFormData>()
@@ -398,8 +400,30 @@ export function StepRevision({
             )
           })()}
 
-          {/* Requisito 3: Límite de gestión Art. 10 — solo si el docente tiene cargo administrativo */}
+          {/* Requisito 3: Gestión (Art. 10) — solo si el docente tiene cargo administrativo.
+              Los cargos exentos (Jefe de Programa/Departamento, Asesor de Vicerrectoría/
+              Rectoría, Decano) se rigen por el Art. 11 y no tienen tope porcentual. */}
           {docente.cargoAdministrativo && (() => {
+            // Caso A: cargo exento del Art. 11 → sin tope porcentual.
+            if (excluyeTopeGestion20) {
+              return (
+                <div className={cn(
+                  "flex items-start gap-3 rounded-lg border p-3 text-sm",
+                  "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300"
+                )}>
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <p className="font-medium">
+                      Gestión Académica: {totalGestion}h registradas — sin tope porcentual
+                    </p>
+                    <p className="mt-0.5 text-xs opacity-75">
+                      Su cargo se rige por los tiempos del Art. 11 del Acuerdo 048 y está exento del límite del 20% de gestión (Art. 10).
+                    </p>
+                  </div>
+                </div>
+              )
+            }
+            // Caso B: cargo NO exento → aplica el 20%.
             const limiteGestionSemestral = Math.floor(maxHoras * semanasPeriodo * 0.20)
             const excedeGestion = totalGestion > limiteGestionSemestral
             const diff = Math.round(Math.abs(limiteGestionSemestral - totalGestion) * 10) / 10
@@ -458,24 +482,19 @@ export function StepRevision({
             </div>
           )}
 
-          {(() => {
-            const invError =
-              (errors.actividadesInvestigacion as any)?.root?.message ||
-              (errors.actividadesInvestigacion as any)?.message
-            return docente.doctorado && invError ? (
-              <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
-                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
-                <div>
-                  <p className="text-sm font-semibold text-destructive">
-                    Requisito de Doctorado Incumplido
-                  </p>
-                  <p className="mt-1 text-sm text-destructive/80">
-                    {String(invError)}
-                  </p>
-                </div>
-              </div>
-            ) : null
-          })()}
+          {/* Nota informativa sutil para docentes con doctorado (Art. 4 Par. 3).
+              No bloquea el envío — el jefe de programa revisará en monitoreo. */}
+          {docente.doctorado && (
+            <div className="flex items-start gap-2 rounded-md bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
+              <GraduationCap className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" />
+              <p className="leading-relaxed">
+                Su perfil registra título de <span className="font-medium text-foreground/80">Doctorado</span>.
+                El Art. 4, Par. 3 del Acuerdo 048 establece que los docentes con doctorado deben estar vinculados a un
+                grupo de investigación avalado. Si participa de alguno, recuerde registrar las horas correspondientes
+                en la Sección 2.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

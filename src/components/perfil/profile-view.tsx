@@ -8,7 +8,8 @@ import {
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { GraduationCap, Briefcase, FolderOpen } from "lucide-react"
+import { GraduationCap, Briefcase, FolderOpen, ShieldCheck } from "lucide-react"
+import { esCargoExentoGestion20 } from "@/lib/utils/cargo"
 
 const modalidadLabels: Record<string, string> = {
   PLANTA_TC: "Tiempo Completo Planta",
@@ -20,21 +21,61 @@ const modalidadLabels: Record<string, string> = {
   INVITADO: "Invitado",
 }
 
+/**
+ * Formatea valores legacy/importados de `tipoCargo` que vienen en SCREAMING_SNAKE_CASE
+ * (ej. `JEFE_DEPARTAMENTO`) a sentence case en español (`Jefe departamento`).
+ * Si el valor ya viene con formato legible (mezcla de mayúsculas/minúsculas o sin
+ * guiones bajos), se respeta tal cual fue digitado por el docente.
+ *
+ * Decisión: sentence case en lugar de Title Case para respetar la ortografía
+ * española de conectores ("de", "del", "la", etc.).
+ */
+function formatearTipoCargo(raw: string): string {
+  const trimmed = raw.trim()
+  if (trimmed === "") return trimmed
+  const esLegacy = trimmed.includes("_") || trimmed === trimmed.toUpperCase()
+  if (!esLegacy) return trimmed
+  const limpio = trimmed.replace(/_/g, " ").toLowerCase().replace(/\s+/g, " ").trim()
+  return limpio.charAt(0).toUpperCase() + limpio.slice(1)
+}
+
 export function ProfileView({ docente }: { docente: Docente }) {
+  // El campo `tipoCargo` solo aplica si el docente tiene cargo administrativo activo.
+  // El cleanup en profile-actions garantiza que se setea a null cuando se desactiva el cargo,
+  // pero defendemos contra cadenas vacías legacy con .trim().
+  const tipoCargoActivo =
+    docente.cargoAdministrativo && docente.tipoCargo?.trim()
+      ? docente.tipoCargo.trim()
+      : null
+
+  // Art. 10 + Art. 11: detecta los 5 cargos exentos del tope del 20% de gestión.
+  // El helper trabaja sobre el valor crudo (regex tolerante a tildes/mayúsculas),
+  // así que normalizamos el display por separado sin afectar la detección.
+  const exentoDel20 = tipoCargoActivo ? esCargoExentoGestion20(tipoCargoActivo) : false
+  const tipoCargoLabel = tipoCargoActivo ? formatearTipoCargo(tipoCargoActivo) : null
+
   const condiciones = [
     {
+      key: "doctorado",
       label: "Doctorado",
       value: docente.doctorado,
       icon: GraduationCap,
       description: "Art. 4 Par. 3 — Vinculación a grupo de investigación",
     },
     {
+      key: "cargoAdministrativo",
       label: "Cargo Administrativo",
       value: docente.cargoAdministrativo,
       icon: Briefcase,
-      description: "Art. 10 — Gestión no puede exceder 20% del tiempo laboral",
+      // Descripción dinámica: si el cargo es exento (Art. 11), reemplazamos la
+      // regla del 20% por la del tope individual para evitar contradicción
+      // visual con el badge de exención.
+      description: exentoDel20
+        ? "Art. 11 — Exento del límite del 20%. Se rige por el tope semestral individual del cargo."
+        : "Art. 10 — Gestión no puede exceder 20% del tiempo laboral",
     },
     {
+      key: "proyectosActivos",
       label: "Proyectos Activos",
       value: docente.proyectosActivos,
       icon: FolderOpen,
@@ -100,6 +141,18 @@ export function ProfileView({ docente }: { docente: Docente }) {
                 </Badge>
               </dd>
             </div>
+            <div>
+              <dt className="text-sm font-medium text-muted-foreground">
+                Cargo Administrativo
+              </dt>
+              <dd className="text-sm">
+                {tipoCargoLabel ? (
+                  <Badge variant="secondary">{tipoCargoLabel}</Badge>
+                ) : (
+                  <span className="italic text-muted-foreground">Ninguno</span>
+                )}
+              </dd>
+            </div>
           </dl>
         </CardContent>
       </Card>
@@ -117,9 +170,12 @@ export function ProfileView({ docente }: { docente: Docente }) {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {condiciones.map((cond) => {
               const Icon = cond.icon
+              // Solo la caja de "Cargo Administrativo" muestra detalle adicional
+              // (nombre del cargo + insignia de exención cuando aplica).
+              const showCargoDetail = cond.key === "cargoAdministrativo" && cond.value && tipoCargoLabel
               return (
                 <div
-                  key={cond.label}
+                  key={cond.key}
                   className={`flex flex-col gap-2 rounded-lg border p-4 transition-colors ${
                     cond.value
                       ? "border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950"
@@ -146,6 +202,22 @@ export function ProfileView({ docente }: { docente: Docente }) {
                       {cond.value ? "Sí" : "No"}
                     </Badge>
                   </div>
+                  {showCargoDetail && (
+                    <div className="flex flex-wrap items-center gap-1.5 pl-7">
+                      <span className="text-sm font-medium text-foreground">
+                        {tipoCargoLabel}
+                      </span>
+                      {exentoDel20 && (
+                        <Badge
+                          variant="outline"
+                          className="gap-1 border-emerald-300 bg-emerald-100/80 text-[10px] font-medium text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200"
+                        >
+                          <ShieldCheck className="h-3 w-3" />
+                          Exento tope 20% (Art. 11)
+                        </Badge>
+                      )}
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     {cond.description}
                   </p>

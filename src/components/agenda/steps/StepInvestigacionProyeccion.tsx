@@ -1,6 +1,6 @@
 "use client"
 
-import { useFormContext, useFieldArray, useWatch } from "react-hook-form"
+import { useFormContext, useFieldArray } from "react-hook-form"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import { EMPTY_ACTIVIDAD } from "@/lib/schemas/agenda-schema"
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card"
-import { Plus, AlertTriangle } from "lucide-react"
+import { Plus, GraduationCap } from "lucide-react"
 import { ActividadCardRow } from "@/components/agenda/ActividadCardRow"
 import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatalogoSelector"
 
@@ -20,20 +20,21 @@ import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatal
  *
  * El docente selecciona del catálogo Art. 11 (Acuerdo 048/2018) y solo escribe
  * la descripción específica del caso. Las horas se sugieren del tope normativo.
+ *
+ * Para docentes con doctorado se muestra una nota sutil informativa sobre el
+ * Art. 4 Par. 3 (vinculación a grupo de investigación). NO bloquea el envío;
+ * la revisión final la realiza el jefe de programa en el monitoreo.
  */
 export function StepInvestigacionProyeccion({
   catalogoActividades,
   semanasPeriodo,
+  doctorado,
 }: {
   catalogoActividades: ActividadCatalogoOption[]
   semanasPeriodo: number
+  doctorado: boolean
 }) {
-  const { control, formState: { errors } } = useFormContext<AgendaWizardFormData>()
-  const actividadesInvLive = useWatch({ control, name: "actividadesInvestigacion" }) ?? []
-  const hasActividades = actividadesInvLive.length > 0
-  const invError =
-    (errors.actividadesInvestigacion as { root?: { message?: string }; message?: string } | undefined)?.root?.message ||
-    (errors.actividadesInvestigacion as { root?: { message?: string }; message?: string } | undefined)?.message
+  const { control } = useFormContext<AgendaWizardFormData>()
 
   const {
     fields: invFields,
@@ -61,15 +62,18 @@ export function StepInvestigacionProyeccion({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {invError && !hasActividades && (
-            <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
-              <div>
-                <p className="text-sm font-semibold text-destructive">
-                  Alerta de Cumplimiento Normativo (Doctorado)
-                </p>
-                <p className="mt-1 text-sm text-destructive/80">{invError}</p>
-              </div>
+          {/* Nota sutil informativa para docentes con doctorado.
+              Diseño deliberadamente tenue: sin bordes destructivos ni colores
+              de alerta, solo un recordatorio del Art. 4 Par. 3 que el jefe
+              de programa revisará en monitoreo. */}
+          {doctorado && (
+            <div className="flex items-start gap-2 rounded-md bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
+              <GraduationCap className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" />
+              <p className="leading-relaxed">
+                Su perfil registra título de <span className="font-medium text-foreground/80">Doctorado</span>.
+                El Art. 4, Par. 3 del Acuerdo 048 establece que los docentes con doctorado deben estar vinculados a un
+                grupo de investigación avalado. Si participa de alguno, registre las horas correspondientes en esta sección.
+              </p>
             </div>
           )}
 

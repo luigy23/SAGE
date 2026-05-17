@@ -161,6 +161,25 @@ export type DocenteFlags = {
   doctorado: boolean;
   cargoAdministrativo: boolean;
   proyectosActivos: boolean;
+  // Art. 10 + Art. 11 Acuerdo 048: cargos exentos del tope del 20% de gestión.
+  // Derivado de `Docente.tipoCargo` vía `esCargoExentoGestion20()`.
+  excluyeTopeGestion20: boolean;
+}
+
+/**
+ * Mapa de topes individuales por actividad (Art. 11 Acuerdo 048).
+ * Clave: `${categoria}::${nombre}` (ej: "GESTION::Jefatura de Programa").
+ * Valor: tope semestral en horas (`topeSemestralH` del catálogo).
+ *
+ * Si una actividad no está en el mapa o tiene tope null, se omite la
+ * validación individual para esa entrada (comportamiento permisivo:
+ * compatible con borradores legacy con nombres libres y con la opción
+ * genérica "Otras Actividades Académico-Administrativas").
+ */
+export type TopesActividadesMap = Record<string, number>
+
+export function topesKey(categoria: "DOCENCIA" | "INVESTIGACION" | "PROYECCION_SOCIAL" | "GESTION", nombre: string): string {
+  return `${categoria}::${nombre}`
 }
 
 export function createAgendaSchema(
@@ -169,6 +188,7 @@ export function createAgendaSchema(
   flags: DocenteFlags,
   minDocencia: number = 0,
   semanasPeriodo: number = DEFAULT_SEMANAS_PERIODO,
+  topesActividades?: TopesActividadesMap,
 ) {
   return createAgendaWizardBaseSchema(semanasPeriodo).superRefine((data, ctx) => {
     const totalHorasSemestrales = calcularTotalHoras(data);
@@ -211,6 +231,8 @@ export function createAgendaSchema(
 
     // 3. ARTÍCULO 10: Gestión Académico Administrativa
     const horasGestion = data.actividadesGestion.reduce((acc, item) => acc + (Number(item.dedicacionPeriodo) || 0), 0);
+
+    // Sin cargo administrativo no se pueden registrar horas de gestión.
     if (horasGestion > 0 && !flags.cargoAdministrativo) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -219,30 +241,57 @@ export function createAgendaSchema(
       });
     }
 
-    // El límite del 20% para gestión se calcula sobre la dedicación total del semestre
-    const limiteGestionSemestral = maxHorasSemestrales * 0.20;
-    if (flags.cargoAdministrativo && horasGestion > limiteGestionSemestral) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `Las horas de gestión semestrales (${horasGestion}h) no pueden exceder el 20% de su carga laboral (${limiteGestionSemestral}h).`,
-        path: ["actividadesGestion"],
-      });
-    }
-
-    // 4. ART. 4, PAR. 3: Docentes con Doctorado deben registrar investigación
-    if (flags.doctorado) {
-      const horasInvestigacion = data.actividadesInvestigacion.reduce(
-        (acc, a) => acc + (Number(a.dedicacionPeriodo) || 0),
-        0
-      );
-      if (horasInvestigacion <= 0) {
+    // Art. 10: el límite del 20% aplica a TODOS los cargos administrativos
+    // EXCEPTO Jefes de Programa, Jefes de Departamento, Asesores de Vicerrectoría,
+    // Asesores de Rectoría y Decanos (esos se rigen por el Art. 11).
+    if (flags.cargoAdministrativo && !flags.excluyeTopeGestion20) {
+      const limiteGestionSemestral = maxHorasSemestrales * 0.20;
+      if (horasGestion > limiteGestionSemestral) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message:
-            "Por normativa institucional, los docentes con título de Doctorado deben registrar tiempo de investigación.",
-          path: ["actividadesInvestigacion"],
+          message: `Las horas de gestión semestrales (${horasGestion}h) no pueden exceder el 20% de su carga laboral (${limiteGestionSemestral}h).`,
+          path: ["actividadesGestion"],
         });
       }
+    }
+
+    // NOTA: El Art. 4 Par. 3 (vinculación a grupo de investigación para
+    // docentes con doctorado) es informativo en SAGE — se muestra como nota
+    // sutil en la UI, no bloquea el envío. La revisión final la realiza el
+    // jefe de programa en el monitoreo.
+
+    // 4. ART. 11: Topes individuales por actividad del catálogo.
+    // Solo aplica a las 4 categorías de actividades del Art. 11 (los cursos
+    // tienen su propio catálogo en CursoMaestro, no aplican aquí).
+    // Si la actividad no está en el mapa (texto libre legacy o genérico sin
+    // tope), se omite la validación — permisivo por diseño.
+    if (topesActividades) {
+      const validarTopesArray = (
+        arr: { nombre?: string; dedicacionPeriodo?: number }[],
+        arrayName: "otrasActividadesDocencia" | "actividadesInvestigacion" | "actividadesProyeccionSocial" | "actividadesGestion",
+        categoria: "DOCENCIA" | "INVESTIGACION" | "PROYECCION_SOCIAL" | "GESTION",
+      ) => {
+        arr.forEach((act, idx) => {
+          const nombre = act.nombre?.trim()
+          if (!nombre) return
+          const tope = topesActividades[topesKey(categoria, nombre)]
+          if (tope === undefined || tope === null) return
+          const dedicacion = Number(act.dedicacionPeriodo) || 0
+          if (dedicacion > tope) {
+            const exceso = Math.round((dedicacion - tope) * 10) / 10
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `"${nombre}" excede su tope individual del Art. 11 (máx ${tope}h). Actual: ${dedicacion}h. Reduzca las horas en ${exceso}h o seleccione otra actividad.`,
+              path: [arrayName, idx, "dedicacionPeriodo"],
+            })
+          }
+        })
+      }
+
+      validarTopesArray(data.otrasActividadesDocencia, "otrasActividadesDocencia", "DOCENCIA")
+      validarTopesArray(data.actividadesInvestigacion, "actividadesInvestigacion", "INVESTIGACION")
+      validarTopesArray(data.actividadesProyeccionSocial, "actividadesProyeccionSocial", "PROYECCION_SOCIAL")
+      validarTopesArray(data.actividadesGestion, "actividadesGestion", "GESTION")
     }
   });
 }

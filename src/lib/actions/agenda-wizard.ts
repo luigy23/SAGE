@@ -6,11 +6,14 @@ import { revalidatePath } from "next/cache"
 import {
   createAgendaSchema,
   createAgendaWizardBaseSchema,
+  topesKey,
   type AgendaWizardPayload,
   type AgendaWizardFormData,
+  type TopesActividadesMap,
 } from "@/lib/schemas/agenda-schema"
 import { resolveAgendaLimits } from "@/lib/rules/resolver"
 import { getPeriodoActivo } from "@/lib/utils/periodo-server"
+import { esCargoExentoGestion20 } from "@/lib/utils/cargo"
 
 async function getAuthenticatedDocente() {
   const session = await auth()
@@ -45,6 +48,8 @@ export async function upsertAgendaCompletaAction(
     where: { nombre: periodoActivo },
     select: { id: true },
   })
+  const excluyeTopeGestion20 = esCargoExentoGestion20(docente.tipoCargo)
+
   const limits = await resolveAgendaLimits(
     {
       modalidad: docente.modalidad,
@@ -52,6 +57,7 @@ export async function upsertAgendaCompletaAction(
       doctorado: docente.doctorado,
       cargoAdministrativo: docente.cargoAdministrativo,
       proyectosActivos: docente.proyectosActivos,
+      tipoCargo: docente.tipoCargo,
     },
     periodoRow?.id ?? null
   )
@@ -60,12 +66,29 @@ export async function upsertAgendaCompletaAction(
     doctorado: docente.doctorado,
     cargoAdministrativo: docente.cargoAdministrativo,
     proyectosActivos: docente.proyectosActivos,
+    excluyeTopeGestion20,
+  }
+
+  // Art. 11: topes individuales por actividad — se cargan solo al ENVIAR
+  // (en borrador, el wizard usa el schema base sin reglas de negocio).
+  let topesActividades: TopesActividadesMap | undefined = undefined
+  if (enviar) {
+    const catalogo = await prisma.catalogoActividad.findMany({
+      where: { activo: true, topeSemestralH: { not: null } },
+      select: { categoria: true, nombre: true, topeSemestralH: true },
+    })
+    topesActividades = {}
+    for (const item of catalogo) {
+      if (item.topeSemestralH !== null) {
+        topesActividades[topesKey(item.categoria, item.nombre)] = item.topeSemestralH
+      }
+    }
   }
 
   // Borradores: solo validación estructural (tipos y transformaciones)
   // Envío final: validación completa con reglas de negocio resueltas
   const schema = enviar
-    ? createAgendaSchema(limits.maxHorasSemanales, limits.esEstricto, flags, limits.minDocencia, limits.semanas)
+    ? createAgendaSchema(limits.maxHorasSemanales, limits.esEstricto, flags, limits.minDocencia, limits.semanas, topesActividades)
     : createAgendaWizardBaseSchema(limits.semanas)
 
   const parseResult = schema.safeParse(data)

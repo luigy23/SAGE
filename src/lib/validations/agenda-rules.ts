@@ -9,6 +9,7 @@
 
 import type { Modalidad, Sede } from "@/generated/prisma/client"
 import type { AgendaConRelaciones } from "@/lib/types/agenda"
+import { esCargoExentoGestion20 } from "@/lib/utils/cargo"
 
 // ========================================
 // Tipos
@@ -20,6 +21,9 @@ type DocenteInfo = {
   cargoAdministrativo: boolean
   proyectosActivos: boolean
   sedeBase: Sede | null
+  // Texto libre del cargo (ej: "Jefe de Programa"). Usado para resolver
+  // la exención del tope del 20% de gestión (Art. 10).
+  tipoCargo: string | null
 }
 
 export type ValidationSeverity = "error" | "warning" | "info"
@@ -142,11 +146,14 @@ function getMinDocencia(docente: DocenteInfo): number {
 }
 
 /**
- * Art. 10: Gestión no puede exceder 20% del total
- * Excepto cargos administrativos (Jefe de Programa, Decano, etc.)
+ * Art. 10: Gestión no puede exceder 20% del total.
+ * Excepto los 5 cargos exentos (Art. 10 + Art. 11):
+ *   Jefes de Programa, Jefes de Departamento, Asesores de Vicerrectoría,
+ *   Asesores de Rectoría y Decanos.
+ * Cualquier otro cargo administrativo sí está sujeto al 20%.
  */
 function getMaxGestion(docente: DocenteInfo): number {
-  if (docente.cargoAdministrativo) {
+  if (esCargoExentoGestion20(docente.tipoCargo)) {
     return getHorasTotalesPeriodo(docente)
   }
   return Math.floor(getHorasTotalesPeriodo(docente) * PORCENTAJE_GESTION_MAX)
@@ -218,6 +225,7 @@ export function validateAgenda(
     cargoAdministrativo: agenda.docente.cargoAdministrativo,
     proyectosActivos: agenda.docente.proyectosActivos,
     sedeBase: agenda.docente.sedeBase,
+    tipoCargo: agenda.docente.tipoCargo ?? null,
   }
 
   const limits = getAgendaLimits(docente)
@@ -260,11 +268,25 @@ export function validateAgenda(
     })
   }
 
-  // 3. Gestión no puede exceder 20%
-  if (!docente.cargoAdministrativo && totals.horasGestion > limits.maxGestion) {
+  // 3. Gestión (Art. 10):
+  //    a) Sin cargo administrativo → no se permite ninguna hora de gestión.
+  //    b) Con cargo NO exento → tope del 20% del total.
+  //    c) Con cargo exento (5 cargos del Art. 11) → sin tope porcentual.
+  const cargoExento = esCargoExentoGestion20(docente.tipoCargo)
+  if (!docente.cargoAdministrativo && totals.horasGestion > 0) {
     items.push({
       severity: "error",
-      message: `Las horas de gestión (${totals.horasGestion}h) exceden el 20% permitido (${limits.maxGestion}h). Art. 10 limita gestión al 20% del tiempo total.`,
+      message: `Tiene ${totals.horasGestion}h de gestión registradas pero no tiene cargo administrativo en su perfil. Art. 10 exige cargo para acumular horas de gestión.`,
+      rule: "Art. 10",
+    })
+  } else if (
+    docente.cargoAdministrativo &&
+    !cargoExento &&
+    totals.horasGestion > limits.maxGestion
+  ) {
+    items.push({
+      severity: "error",
+      message: `Las horas de gestión (${totals.horasGestion}h) exceden el 20% permitido (${limits.maxGestion}h). Art. 10 limita gestión al 20% del tiempo total, salvo los cargos exentos del Art. 11.`,
       rule: "Art. 10",
     })
   }

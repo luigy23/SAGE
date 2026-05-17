@@ -35,6 +35,7 @@ async function main() {
     doctorado: true,
     cargoAdministrativo: false,
     proyectosActivos: true,
+    tipoCargo: null,
   })
   console.log("\n📌 AgendaLimits PLANTA_TC + proyectos:", JSON.stringify(limits, null, 2))
 
