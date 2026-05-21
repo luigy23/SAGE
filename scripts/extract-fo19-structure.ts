@@ -14,7 +14,6 @@ async function main() {
   await mkdir(path.join(root, "tmp"), { recursive: true })
 
   // pdfjs-dist legacy build (CJS-friendly)
-  // @ts-expect-error sin tipos para el legacy build
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
   // Apunta al worker que trae pdfjs-dist
   pdfjs.GlobalWorkerOptions.workerSrc = path.join(
