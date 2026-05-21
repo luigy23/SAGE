@@ -3,6 +3,7 @@
 import { useFormContext, useWatch } from "react-hook-form"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import type { Docente } from "@/generated/prisma/client"
+import { getModalidadLabel, getModalidadLabelLargo } from "@/lib/utils/modalidad"
 import {
   Card,
   CardContent,
@@ -111,7 +112,7 @@ export function StepRevision({
             <div>
               <span className="text-muted-foreground">Modalidad: </span>
               <Badge variant="secondary" className="ml-1">
-                {docente.modalidad}
+                {getModalidadLabel(docente.modalidad)}
               </Badge>
             </div>
             <div>
@@ -318,7 +319,7 @@ export function StepRevision({
             <div>
               <h3 className="text-xl font-bold uppercase">Dedicación del Semestre</h3>
               <p className="text-sm text-muted-foreground print:text-gray-500">
-                Modalidad <strong>{docente.modalidad}</strong>: tope máximo de <strong>{horasSemestrales} horas</strong>
+                <strong>{getModalidadLabelLargo(docente.modalidad)}</strong>: tope máximo de <strong>{horasSemestrales} horas</strong>
               </p>
             </div>
             <div className="mt-2 sm:mt-0 text-right">

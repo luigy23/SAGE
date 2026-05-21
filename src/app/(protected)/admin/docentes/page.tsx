@@ -1,6 +1,7 @@
 import { getDocentesAdmin } from "@/lib/actions/admin-actions"
 import { TeacherStatusDropdown } from "@/components/admin/teacher-status-dropdown"
 import { Badge } from "@/components/ui/badge"
+import { getModalidadLabel } from "@/lib/utils/modalidad"
 import {
   Table,
   TableBody,
@@ -58,8 +59,8 @@ export default async function AdminDocentesPage() {
                     <TableCell>{docente.cedula}</TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1 items-start">
-                        <Badge variant="outline" className="text-[10px] uppercase">
-                          {docente.modalidad.replace("_", " ")}
+                        <Badge variant="outline" className="text-[10px]">
+                          {getModalidadLabel(docente.modalidad)}
                         </Badge>
                         <span className="text-xs text-muted-foreground">{docente.sedeBase}</span>
                       </div>

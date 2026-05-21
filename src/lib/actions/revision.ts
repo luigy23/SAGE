@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
-import type { Prisma } from "@/generated/prisma/client"
+import type { Prisma, Modalidad, Sede } from "@/generated/prisma/client"
 import type { RevisionFilters, RevisionPage } from "@/lib/types/revision"
 
 // =====================================================================
@@ -66,8 +66,8 @@ export type AgendaRow = {
     nombre: string
     email: string
     cedula: string
-    modalidad: string
-    sedeBase: string
+    modalidad: Modalidad
+    sedeBase: Sede
     facultad: string
     programa: string
   }

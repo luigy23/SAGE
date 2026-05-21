@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
+import { getModalidadLabel } from "@/lib/utils/modalidad"
 
 export default async function RevisionMonitoreoDetailPage({
   params,
@@ -82,7 +83,7 @@ export default async function RevisionMonitoreoDetailPage({
               <Badge variant="outline" className="font-mono">
                 {monitoreo.periodo}
               </Badge>
-              <Badge variant="outline">{monitoreo.docente.modalidad}</Badge>
+              <Badge variant="outline">{getModalidadLabel(monitoreo.docente.modalidad)}</Badge>
               <Badge variant="outline">{monitoreo.docente.sedeBase}</Badge>
               <Badge
                 className={

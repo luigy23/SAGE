@@ -10,16 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { GraduationCap, Briefcase, FolderOpen, ShieldCheck } from "lucide-react"
 import { esCargoExentoGestion20 } from "@/lib/utils/cargo"
-
-const modalidadLabels: Record<string, string> = {
-  PLANTA_TC: "Tiempo Completo Planta",
-  PLANTA_MT: "Medio Tiempo Planta",
-  OCASIONAL_TC: "Tiempo Completo Ocasional",
-  OCASIONAL_MT: "Medio Tiempo Ocasional",
-  CATEDRA: "Catedrático",
-  VISITANTE: "Visitante",
-  INVITADO: "Invitado",
-}
+import { getModalidadLabel } from "@/lib/utils/modalidad"
 
 /**
  * Formatea valores legacy/importados de `tipoCargo` que vienen en SCREAMING_SNAKE_CASE
@@ -137,7 +128,7 @@ export function ProfileView({ docente }: { docente: Docente }) {
               </dt>
               <dd>
                 <Badge variant="secondary">
-                  {modalidadLabels[docente.modalidad] || docente.modalidad}
+                  {getModalidadLabel(docente.modalidad)}
                 </Badge>
               </dd>
             </div>

@@ -1,7 +1,7 @@
 "use client"
 
 import type { Docente } from "@/generated/prisma/client"
-import { getMaxHoras } from "@/lib/utils/periodo"
+import { getModalidadLabel, getCargaSemestralCopy } from "@/lib/utils/modalidad"
 import {
   Card,
   CardContent,
@@ -40,19 +40,9 @@ export function StepIdentificacion({
   esEstricto: boolean
   semanasPeriodo: number
 }) {
-  // Derive limit from modality + sede — single source of truth
-  const { maxHoras: maxHorasCalc } = getMaxHoras(docente.modalidad, docente.sedeBase)
-
-  // Mapeo de modalidad a label legible (alineado con enum Prisma)
-  const modalidadLabels: Record<string, string> = {
-    PLANTA_TC: "Tiempo Completo Planta",
-    PLANTA_MT: "Medio Tiempo Planta",
-    OCASIONAL_TC: "Tiempo Completo Ocasional",
-    OCASIONAL_MT: "Medio Tiempo Ocasional",
-    CATEDRA: "Cátedra",
-    VISITANTE: "Visitante",
-    INVITADO: "Invitado",
-  }
+  // Fuente única de copy: matriz dinámica del helper `modalidad.ts`
+  // (Acuerdo 048 Art. 4 — diferencia obligación contractual vs tope permisivo).
+  const carga = getCargaSemestralCopy(docente.modalidad, docente.sedeBase, semanasPeriodo)
 
   return (
     <div className="space-y-6">
@@ -107,7 +97,7 @@ export function StepIdentificacion({
               <Label htmlFor="step1-modalidad">Modalidad</Label>
               <Input
                 id="step1-modalidad"
-                value={`${docente.modalidad} — ${modalidadLabels[docente.modalidad] || docente.modalidad}`}
+                value={getModalidadLabel(docente.modalidad)}
                 disabled
                 className="disabled:opacity-70"
               />
@@ -165,15 +155,13 @@ export function StepIdentificacion({
             <Clock className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
             <div>
               <p className="text-sm font-semibold">
-                Carga del semestre: {maxHorasCalc * semanasPeriodo} horas
+                {carga.titulo}
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  ({maxHorasCalc} h/sem × {semanasPeriodo} semanas)
+                  ({carga.resumen})
                 </span>
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {esEstricto
-                  ? `Su modalidad (${docente.modalidad}) tiene un límite estricto de ${maxHorasCalc * semanasPeriodo} horas en el semestre. No podrá enviar la agenda si lo excede.`
-                  : `Su modalidad (${docente.modalidad}) tiene un techo de referencia de ${maxHorasCalc * semanasPeriodo} horas en el semestre. Si lo excede, verá una advertencia pero podrá enviar la agenda.`}
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                {carga.descripcion}
               </p>
             </div>
           </div>

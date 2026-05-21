@@ -2,6 +2,7 @@
 
 import type { AgendaConRelaciones } from "@/lib/types/agenda"
 import { getMaxHoras } from "@/lib/utils/periodo"
+import { getModalidadLabel } from "@/lib/utils/modalidad"
 import {
   Card,
   CardContent,
@@ -252,7 +253,7 @@ export function AgendaReadOnly({
               <dt className="text-xs font-medium text-muted-foreground print:text-gray-500">
                 Modalidad
               </dt>
-              <dd className="text-sm font-medium">{docente.modalidad}</dd>
+              <dd className="text-sm font-medium">{getModalidadLabel(docente.modalidad)}</dd>
             </div>
           </dl>
 
@@ -499,7 +500,7 @@ export function AgendaReadOnly({
                 Equivalencia Promedio Semanal
               </h3>
               <p className="text-sm text-muted-foreground print:text-gray-500">
-                Límite estricto por modalidad ({docente.modalidad}): <strong>{maxHoras} hrs/semana</strong>
+                Límite máximo estricto por modalidad ({getModalidadLabel(docente.modalidad)}): <strong>{maxHoras} hrs/semana</strong>
               </p>
             </div>
             <span className={cn(
@@ -520,7 +521,7 @@ export function AgendaReadOnly({
                 </p>
                 <p className="mt-1 text-sm text-destructive/80">
                   La carga promedio ({promedioRedondeado} hrs/sem) supera el
-                  límite legal de {maxHoras} hrs/sem para la modalidad {docente.modalidad}.
+                  límite legal de {maxHoras} hrs/sem para la modalidad {getModalidadLabel(docente.modalidad)}.
                   Esta agenda requiere revisión administrativa.
                 </p>
               </div>

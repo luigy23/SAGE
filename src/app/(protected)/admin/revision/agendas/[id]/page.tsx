@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
+import { getModalidadLabel } from "@/lib/utils/modalidad"
 
 export default async function RevisionAgendaDetailPage({
   params,
@@ -81,7 +82,7 @@ export default async function RevisionAgendaDetailPage({
               <Badge variant="outline" className="font-mono">
                 {agenda.periodo}
               </Badge>
-              <Badge variant="outline">{agenda.docente.modalidad}</Badge>
+              <Badge variant="outline">{getModalidadLabel(agenda.docente.modalidad)}</Badge>
               <Badge variant="outline">{agenda.docente.sedeBase}</Badge>
               <Badge
                 className={

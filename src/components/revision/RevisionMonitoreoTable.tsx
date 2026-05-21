@@ -14,6 +14,7 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { Eye } from "lucide-react"
 import type { MonitoreoRow } from "@/lib/actions/revision"
+import { getModalidadLabel } from "@/lib/utils/modalidad"
 
 const estadoBadge = (estado: string): "default" | "secondary" | "destructive" | "outline" => {
   if (estado === "ENVIADO") return "default"
@@ -60,7 +61,7 @@ export function RevisionMonitoreoTable({ items }: { items: MonitoreoRow[] }) {
               </TableCell>
               <TableCell>
                 <Badge variant="outline" className="text-xs">
-                  {m.docente.modalidad}
+                  {getModalidadLabel(m.docente.modalidad)}
                 </Badge>
               </TableCell>
               <TableCell className="text-sm">{m.docente.programa}</TableCell>
