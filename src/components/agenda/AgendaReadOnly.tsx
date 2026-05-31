@@ -1,6 +1,7 @@
 "use client"
 
 import type { AgendaConRelaciones } from "@/lib/types/agenda"
+import type { AgendaLimits } from "@/lib/validations/agenda-rules"
 import { getMaxHoras } from "@/lib/utils/periodo"
 import { getModalidadLabel } from "@/lib/utils/modalidad"
 import {
@@ -20,24 +21,11 @@ import {
   GraduationCap,
   Printer,
   CheckCircle2,
-  Clock,
   XCircle,
   AlertTriangle,
+  Clock3,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-// ==========================================
-// Helper: etiquetas de días para horarios
-// ==========================================
-const DIAS_LABELS: Record<string, string> = {
-  lunes: "Lun",
-  martes: "Mar",
-  miercoles: "Mié",
-  jueves: "Jue",
-  viernes: "Vie",
-  sabado: "Sáb",
-  domingo: "Dom",
-}
 
 // ==========================================
 // Sub-componente reutilizable: Sección de actividades
@@ -47,6 +35,7 @@ interface ActividadItem {
   nombre: string
   descripcion: string | null
   dedicacionPeriodo: number
+  sede?: string | null
 }
 
 function SectionCard({
@@ -80,6 +69,11 @@ function SectionCard({
               >
                 <div>
                   <span className="font-medium">{act.nombre}</span>
+                  {act.sede && (
+                    <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
+                      {act.sede}
+                    </span>
+                  )}
                   {act.descripcion && (
                     <span className="ml-2 text-muted-foreground">
                       — {act.descripcion}
@@ -110,16 +104,25 @@ function SectionCard({
 export function AgendaReadOnly({
   agenda,
   semanasPeriodo,
+  agendaLimits,
+  hideDatosDocente = false,
+  slotPostDatosDocente,
 }: {
   agenda: AgendaConRelaciones
   semanasPeriodo: number
+  agendaLimits?: AgendaLimits
+  hideDatosDocente?: boolean
+  slotPostDatosDocente?: React.ReactNode
 }) {
   const { docente } = agenda
 
   // ==========================================
-  // Dynamic legal limit — Single Source of Truth
+  // Dynamic legal limit — prefers DB-sourced agendaLimits (via resolveAgendaLimits),
+  // falls back to hardcoded getMaxHoras only when prop is absent.
   // ==========================================
-  const { maxHoras, esEstricto } = getMaxHoras(docente.modalidad, docente.sedeBase)
+  const { maxHoras, esEstricto } = agendaLimits
+    ? { maxHoras: agendaLimits.maxHorasSemanales, esEstricto: agendaLimits.esEstricto }
+    : getMaxHoras(docente.modalidad, docente.sedeBase)
 
   // ==========================================
   // Calcular todos los totales una sola vez
@@ -161,55 +164,63 @@ export function AgendaReadOnly({
   return (
     <div className="space-y-6">
       {/* Header: Título, estado y botón de impresión */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold sm:text-3xl">
-            Agenda Semestral — {agenda.periodo}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Enviada el{" "}
-            {new Date(agenda.updatedAt).toLocaleDateString("es-CO", {
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })}
-          </p>
-        </div>
-        <div className="flex items-center gap-3 print:hidden">
-          <Badge
-            variant="default"
-            className="gap-1.5 bg-green-600 px-3 py-1.5 text-sm hover:bg-green-600"
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            ENVIADO
-          </Badge>
-          <Button
-            asChild
-            variant="outline"
-            className="gap-2 print:hidden"
-          >
-            <a href={`/api/agenda/${agenda.id}/pdf`} download>
-              <Printer className="h-4 w-4" />
-              Descargar PDF (FO-19)
-            </a>
-          </Button>
-        </div>
-      </div>
+      {(() => {
+        const estadoConfig = {
+          ENVIADO:   { badgeBg: "bg-yellow-500 hover:bg-yellow-500", Icon: Clock3,       accionTexto: "Enviada el"   },
+          APROBADO:  { badgeBg: "bg-green-600 hover:bg-green-600",   Icon: CheckCircle2, accionTexto: "Aprobada el"  },
+          RECHAZADO: { badgeBg: "bg-red-600 hover:bg-red-600",       Icon: XCircle,      accionTexto: "Rechazada el" },
+        }[agenda.estado as "ENVIADO" | "APROBADO" | "RECHAZADO"] ?? {
+          badgeBg: "", Icon: Clock3, accionTexto: "Actualizada el",
+        }
+        const { badgeBg, Icon, accionTexto } = estadoConfig
 
-      {/* Badge visible solo en impresión */}
-      <div className="hidden print:block print:text-right">
-        <span className="text-sm font-semibold">Estado: ENVIADO ✓</span>
-      </div>
+        return (
+          <>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h1 className="text-2xl font-bold sm:text-3xl">
+                  Agenda Semestral — {agenda.periodo}
+                </h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {accionTexto}{" "}
+                  {new Date(agenda.updatedAt).toLocaleDateString("es-CO", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </p>
+              </div>
+              <div className="flex items-center gap-3 print:hidden">
+                <Badge
+                  variant="default"
+                  className={`gap-1.5 px-3 py-1.5 text-sm ${badgeBg}`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {agenda.estado}
+                </Badge>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="gap-2 print:hidden"
+                >
+                  <a href={`/api/agenda/${agenda.id}/pdf`} download>
+                    <Printer className="h-4 w-4" />
+                    Descargar PDF (FO-19)
+                  </a>
+                </Button>
+              </div>
+            </div>
 
-      {/* Aviso de solo lectura */}
-      <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950 print:border print:border-gray-300 print:bg-white">
-        <p className="text-sm font-medium text-green-700 dark:text-green-300 print:text-black">
-          ✅ Esta agenda ha sido enviada y se encuentra en estado de solo
-          lectura. No puede ser modificada.
-        </p>
-      </div>
+            {/* Badge visible solo en impresión */}
+            <div className="hidden print:block print:text-right">
+              <span className="text-sm font-semibold">Estado: {agenda.estado} ✓</span>
+            </div>
+          </>
+        )
+      })()}
 
       {/* Datos del Docente */}
+      {!hideDatosDocente && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -277,6 +288,9 @@ export function AgendaReadOnly({
           </div>
         </CardContent>
       </Card>
+      )}
+
+      {slotPostDatosDocente}
 
       {/* Sección 1: Docencia */}
       <Card>
@@ -299,7 +313,6 @@ export function AgendaReadOnly({
                     <tr className="border-b text-left text-xs font-medium text-muted-foreground">
                       <th className="pb-2 pr-3">No. Curso</th>
                       <th className="pb-2 pr-3">Nombre</th>
-                      <th className="pb-2 pr-3">Subgrupo</th>
                       <th className="pb-2 pr-3">Sede</th>
                       <th className="pb-2 pr-3 text-right">Hrs. Pres.</th>
                       <th className="pb-2 pr-3 text-right">Créditos</th>
@@ -317,9 +330,6 @@ export function AgendaReadOnly({
                           {curso.numeroCurso}
                         </td>
                         <td className="py-2 pr-3">{curso.nombreCurso}</td>
-                        <td className="py-2 pr-3">
-                          {curso.subgrupo || "—"}
-                        </td>
                         <td className="py-2 pr-3">{curso.sede || "—"}</td>
                         <td className="py-2 pr-3 text-right tabular-nums">
                           {curso.horasPresenciales}
@@ -338,7 +348,7 @@ export function AgendaReadOnly({
                   </tbody>
                   <tfoot>
                     <tr className="border-t font-semibold">
-                      <td colSpan={7} className="py-2 pr-3 text-right">
+                      <td colSpan={6} className="py-2 pr-3 text-right">
                         Subtotal Cursos:
                       </td>
                       <td className="py-2 text-right tabular-nums">
@@ -351,38 +361,6 @@ export function AgendaReadOnly({
             ) : (
               <p className="text-sm text-muted-foreground">Sin cursos</p>
             )}
-
-            {/* Horarios por curso */}
-            {agenda.cursos.map((curso) => {
-              const horario = curso.horarios[0]
-              if (!horario) return null
-
-              const diasConHorario = Object.entries(DIAS_LABELS)
-                .map(([key, label]) => ({
-                  label,
-                  value: (horario as Record<string, string | null>)[key],
-                }))
-                .filter((d) => d.value)
-
-              if (diasConHorario.length === 0) return null
-
-              return (
-                <div
-                  key={`horario-${curso.id}`}
-                  className="ml-4 mt-2 rounded border-l-2 border-primary/30 pl-3"
-                >
-                  <p className="text-xs font-medium text-muted-foreground">
-                    <Clock className="mr-1 inline h-3 w-3" />
-                    Horario de {curso.numeroCurso} — {curso.nombreCurso}:
-                  </p>
-                  <p className="mt-1 text-xs">
-                    {diasConHorario
-                      .map((d) => `${d.label}: ${d.value}`)
-                      .join(" · ")}
-                  </p>
-                </div>
-              )
-            })}
           </div>
 
           <Separator />
@@ -402,6 +380,11 @@ export function AgendaReadOnly({
                   >
                     <div>
                       <span className="font-medium">{act.nombre}</span>
+                      {act.sede && (
+                        <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
+                          {act.sede}
+                        </span>
+                      )}
                       {act.descripcion && (
                         <span className="ml-2 text-muted-foreground">
                           — {act.descripcion}

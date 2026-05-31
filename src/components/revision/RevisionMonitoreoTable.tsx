@@ -74,10 +74,12 @@ export function RevisionMonitoreoTable({ items }: { items: MonitoreoRow[] }) {
                   variant={estadoBadge(m.estado)}
                   className={
                     m.estado === "ENVIADO"
-                      ? "bg-green-600 hover:bg-green-600"
+                      ? "bg-yellow-500 hover:bg-yellow-500"
                       : m.estado === "APROBADO"
-                        ? "bg-blue-600 hover:bg-blue-600"
-                        : ""
+                        ? "bg-green-600 hover:bg-green-600"
+                        : m.estado === "RECHAZADO"
+                          ? "bg-red-600 hover:bg-red-600"
+                          : ""
                   }
                 >
                   {m.estado}

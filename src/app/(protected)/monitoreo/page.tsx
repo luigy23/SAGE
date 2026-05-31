@@ -17,8 +17,13 @@ import {
   AlertCircle,
   CheckCircle2,
   Pencil,
+  CalendarDays,
+  Clock,
+  Clock3,
+  XCircle,
 } from "lucide-react"
 import { StartMonitoreoButton } from "@/components/monitoreo/StartMonitoreoButton"
+import { getPeriodoActivoConFechas } from "@/lib/utils/periodo-server"
 
 /**
  * Página principal de Monitoreo (FO-20).
@@ -34,11 +39,14 @@ export default async function MonitoreoPage() {
   const session = await auth()
   if (!session?.user?.id) redirect("/auth/login")
 
-  // Traer todas las agendas ENVIADAS del docente, ordenadas por periodo desc
+  // Periodo activo + ventana FO-20 para el banner informativo
+  const periodoActivo = await getPeriodoActivoConFechas()
+
+  // Traer todas las agendas APROBADAS del docente, ordenadas por periodo desc
   const agendas = await prisma.agendaSemestral.findMany({
     where: {
       docenteId: session.user.id,
-      estado: "ENVIADO",
+      estado: "APROBADO",
     },
     orderBy: { periodo: "desc" },
     select: {
@@ -65,6 +73,7 @@ export default async function MonitoreoPage() {
       estado: true,
       agendaId: true,
       updatedAt: true,
+      observacionesAdmin: true,
     },
   })
   const monitoreoPorAgenda = new Map(monitoreos.map((m) => [m.agendaId, m]))
@@ -72,13 +81,13 @@ export default async function MonitoreoPage() {
   // Clasificar
   const pendientes: typeof agendas = []
   const enCurso: typeof agendas = []
-  const enviados: typeof agendas = []
+  const procesados: typeof agendas = []
 
   for (const a of agendas) {
     const m = monitoreoPorAgenda.get(a.id)
     if (!m) pendientes.push(a)
     else if (m.estado === "BORRADOR") enCurso.push(a)
-    else enviados.push(a)
+    else procesados.push(a)
   }
 
   return (
@@ -96,6 +105,98 @@ export default async function MonitoreoPage() {
         </p>
       </div>
 
+      {/* Banner estado ventana FO-20 */}
+      {periodoActivo && (() => {
+        const now = new Date()
+        const { monitoreoDesde, monitoreoHasta } = periodoActivo
+        if (!monitoreoDesde || !monitoreoHasta) {
+          return (
+            <Card className="border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                  <CalendarDays className="h-4 w-4 text-blue-600" />
+                  Ventana de monitoreo no configurada
+                </CardTitle>
+                <CardDescription>
+                  El administrador aún no ha definido el período de entrega del Monitoreo (FO-20) para el
+                  semestre <span className="font-mono font-medium">{periodoActivo.nombre}</span>.
+                  Puedes revisar tus monitoreos existentes, pero no iniciar nuevos hasta que se configure la ventana.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )
+        }
+        if (now < monitoreoDesde) {
+          return (
+            <Card className="border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                  <Clock className="h-4 w-4 text-blue-600" />
+                  La ventana de monitoreo aún no está abierta
+                </CardTitle>
+                <CardDescription>
+                  Podrás iniciar el Monitoreo (FO-20) a partir del{" "}
+                  <span className="font-medium text-foreground">
+                    {monitoreoDesde.toLocaleDateString("es-CO", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </span>
+                  .
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )
+        }
+        if (now > monitoreoHasta) {
+          return (
+            <Card className="border-secondary bg-muted/30">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <CalendarDays className="h-4 w-4" />
+                  Ventana de monitoreo cerrada
+                </CardTitle>
+                <CardDescription>
+                  La ventana de entrega del Monitoreo (FO-20) para el semestre{" "}
+                  <span className="font-mono font-medium">{periodoActivo.nombre}</span> cerró el{" "}
+                  <span className="font-medium text-foreground">
+                    {monitoreoHasta.toLocaleDateString("es-CO", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </span>
+                  . Solo puedes consultar monitoreos ya enviados.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )
+        }
+        return (
+          <Card className="border-green-500/30 bg-green-50/50 dark:bg-green-950/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-medium text-green-700 dark:text-green-400">
+                <CheckCircle2 className="h-4 w-4" />
+                Ventana de monitoreo abierta
+              </CardTitle>
+              <CardDescription>
+                Puedes iniciar y entregar el Monitoreo (FO-20) hasta el{" "}
+                <span className="font-medium text-foreground">
+                  {monitoreoHasta.toLocaleDateString("es-CO", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </span>
+                .
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        )
+      })()}
+
       {/* Banner explicativo cuando no hay nada que monitorear */}
       {agendas.length === 0 && (
         <Card className="border-dashed">
@@ -103,11 +204,11 @@ export default async function MonitoreoPage() {
             <AlertCircle className="h-10 w-10 text-muted-foreground" />
             <div>
               <p className="font-medium">
-                Aún no tiene agendas enviadas para monitorear
+                Aún no tiene agendas aprobadas para monitorear
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
                 El monitoreo (FO-20) se realiza al final del semestre sobre
-                agendas (FO-19) que ya fueron enviadas formalmente.
+                agendas (FO-19) que hayan sido <strong>aprobadas</strong> por el administrador.
               </p>
             </div>
             <Link
@@ -208,34 +309,60 @@ export default async function MonitoreoPage() {
         </section>
       )}
 
-      {/* Enviados — monitoreos ENVIADO */}
-      {enviados.length > 0 && (
+      {/* Procesados — monitoreos ENVIADO / APROBADO / RECHAZADO */}
+      {procesados.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold">Monitoreos enviados</h2>
-            <Badge variant="secondary">{enviados.length}</Badge>
+            <Badge variant="secondary">{procesados.length}</Badge>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            {enviados.map((a) => {
+            {procesados.map((a) => {
               const m = monitoreoPorAgenda.get(a.id)!
+              const isRechazado = m.estado === "RECHAZADO"
+              const isAprobado = m.estado === "APROBADO"
               return (
                 <Link key={a.id} href={`/monitoreo/${m.id}`}>
-                  <Card className="transition-colors hover:border-primary/40">
+                  <Card
+                    className={
+                      isRechazado
+                        ? "border-red-200 transition-colors hover:border-red-400 dark:border-red-900"
+                        : isAprobado
+                          ? "border-blue-200 transition-colors hover:border-blue-400 dark:border-blue-900"
+                          : "transition-colors hover:border-primary/40"
+                    }
+                  >
                     <CardHeader className="pb-3">
                       <CardTitle className="flex items-center justify-between text-base">
                         <span>Monitoreo {a.periodo}</span>
-                        <Badge className="bg-green-600 text-xs hover:bg-green-600">
-                          <CheckCircle2 className="mr-1 h-3 w-3" />
-                          Enviado
-                        </Badge>
+                        {isRechazado ? (
+                          <Badge className="bg-red-600 text-xs hover:bg-red-600">
+                            <XCircle className="mr-1 h-3 w-3" />
+                            Rechazado
+                          </Badge>
+                        ) : isAprobado ? (
+                          <Badge className="bg-green-600 text-xs hover:bg-green-600">
+                            <CheckCircle2 className="mr-1 h-3 w-3" />
+                            Aprobado
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-yellow-500 text-xs hover:bg-yellow-500">
+                            <Clock3 className="mr-1 h-3 w-3" />
+                            Enviado
+                          </Badge>
+                        )}
                       </CardTitle>
                       <CardDescription className="text-xs">
-                        Enviado:{" "}
                         {new Date(m.updatedAt).toLocaleDateString("es-CO", {
                           day: "numeric",
                           month: "short",
                           year: "numeric",
                         })}
+                        {isRechazado && m.observacionesAdmin && (
+                          <span className="mt-1 block truncate text-red-600 dark:text-red-400">
+                            Motivo: {m.observacionesAdmin}
+                          </span>
+                        )}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -253,7 +380,7 @@ export default async function MonitoreoPage() {
       )}
 
       {/* Footer informativo */}
-      {agendas.length > 0 && (
+      {(pendientes.length > 0 || enCurso.length > 0 || procesados.length > 0) && (
         <Card className="border-dashed bg-muted/30">
           <CardContent className="flex items-start gap-3 py-4 text-xs text-muted-foreground">
             <ClipboardList className="mt-0.5 h-4 w-4 shrink-0" />

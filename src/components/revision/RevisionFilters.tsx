@@ -20,7 +20,8 @@ const MODALIDADES = [
   "OCASIONAL_TC",
   "OCASIONAL_MT",
   "CATEDRA",
-  "VISITANTE",
+  "VISITANTE_TC",
+  "VISITANTE_MT",
   "INVITADO",
 ]
 const SEDES = ["NEIVA", "PITALITO", "GARZON", "LA_PLATA"]
@@ -28,7 +29,12 @@ const ESTADOS = ["BORRADOR", "ENVIADO", "APROBADO", "RECHAZADO", "TODAS"]
 
 const ANY = "__any__"
 
-export function RevisionFilters() {
+interface PeriodoOption {
+  nombre: string
+  estado: string
+}
+
+export function RevisionFilters({ periodos = [] }: { periodos?: PeriodoOption[] }) {
   const router = useRouter()
   const pathname = usePathname()
   const sp = useSearchParams()
@@ -99,18 +105,31 @@ export function RevisionFilters() {
 
         <div className="md:col-span-2">
           <Label className="text-xs text-muted-foreground">Periodo</Label>
-          <Input
-            placeholder="2026-1"
-            defaultValue={sp.get("periodo") ?? ""}
-            onBlur={(e) => updateParam("periodo", e.target.value.trim() || null)}
-            className="font-mono"
-          />
+          <Select
+            value={sp.get("periodo") ?? ANY}
+            onValueChange={(v) => updateParam("periodo", v)}
+          >
+            <SelectTrigger className="font-mono">
+              <SelectValue placeholder="Todos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ANY}>Todos</SelectItem>
+              {periodos.map((p) => (
+                <SelectItem key={p.nombre} value={p.nombre}>
+                  {p.nombre}
+                  {p.estado === "ABIERTO" && (
+                    <span className="ml-1 text-xs text-green-600"> ●</span>
+                  )}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="md:col-span-2">
           <Label className="text-xs text-muted-foreground">Estado</Label>
           <Select
-            value={sp.get("estado") ?? "ENVIADO"}
+            value={sp.get("estado") ?? "TODAS"}
             onValueChange={(v) => updateParam("estado", v)}
           >
             <SelectTrigger>

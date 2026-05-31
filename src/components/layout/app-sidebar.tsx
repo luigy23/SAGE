@@ -16,6 +16,8 @@ import {
   Sliders,
   GitBranch,
   Search,
+  ShieldAlert,
+  Microscope,
 } from "lucide-react"
 import {
   Sidebar,
@@ -38,6 +40,10 @@ const navItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Agenda Semestral", href: "/agenda", icon: Calendar },
   { title: "Monitoreo", href: "/monitoreo", icon: ClipboardCheck },
+]
+
+const docenteNavItems = [
+  { title: "Mis Proyectos", href: "/proyectos", icon: Microscope },
 ]
 
 const profileItem = { title: "Mi Perfil", href: "/perfil", icon: User }
@@ -75,7 +81,18 @@ export function AppSidebar({
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              
+
+              {user.rol === "DOCENTE" && docenteNavItems.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton asChild isActive={pathname.startsWith(item.href)}>
+                    <Link href={item.href}>
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+
               {/* ADMIN ONLY LINKS - GRUPADOS (también accesible por SUPERADMIN) */}
               {(user.rol === "ADMIN" || user.rol === "SUPERADMIN") && (
                 <SidebarMenuItem>
@@ -175,6 +192,30 @@ export function AppSidebar({
                         <Link href="/superadmin/usuarios">
                           <Users />
                           <span>Usuarios y Roles</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={pathname.startsWith("/superadmin/auditoria")}
+                      >
+                        <Link href="/superadmin/auditoria">
+                          <ShieldAlert />
+                          <span>Auditoría</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={pathname.startsWith("/superadmin/periodos")}
+                      >
+                        <Link href="/superadmin/periodos">
+                          <CalendarDays />
+                          <span>Períodos Académicos</span>
                         </Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>

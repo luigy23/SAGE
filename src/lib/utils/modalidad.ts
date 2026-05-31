@@ -14,6 +14,8 @@
  */
 
 import type { Modalidad, Sede } from "@/generated/prisma/client"
+import { esCatedraConTopeRegional } from "@/lib/validations/agenda-rules"
+import { SEDES_CATEDRA_EXTENDIDA } from "@/lib/utils/sede"
 
 // ============================================================
 // Diccionarios canónicos (fuente única)
@@ -25,7 +27,8 @@ const LABELS_CORTOS: Record<Modalidad, string> = {
   OCASIONAL_TC: "Tiempo Completo Ocasional",
   OCASIONAL_MT: "Medio Tiempo Ocasional",
   CATEDRA: "Cátedra",
-  VISITANTE: "Visitante",
+  VISITANTE_TC: "Visitante Tiempo Completo",
+  VISITANTE_MT: "Visitante Medio Tiempo",
   INVITADO: "Invitado",
 }
 
@@ -35,12 +38,11 @@ const LABELS_LARGOS: Record<Modalidad, string> = {
   OCASIONAL_TC: "Ocasional de Tiempo Completo",
   OCASIONAL_MT: "Ocasional de Medio Tiempo",
   CATEDRA: "Docente Catedrático",
-  VISITANTE: "Docente Visitante",
+  VISITANTE_TC: "Docente Visitante Tiempo Completo",
+  VISITANTE_MT: "Docente Visitante Medio Tiempo",
   INVITADO: "Docente Invitado",
 }
 
-/** Sedes regionales que autorizan 19 h/sem para cátedra (Art. 4d). */
-const SEDES_REGIONALES_CATEDRA: Sede[] = ["PITALITO", "GARZON", "LA_PLATA"]
 
 // ============================================================
 // API pública — etiquetas
@@ -100,6 +102,12 @@ export function getCargaSemestralCopy(
   modalidad: Modalidad,
   sede: Sede | null,
   semanasPeriodo: number,
+  /**
+   * Cursos del docente para evaluar la regla mixta del Art. 4d (catedrático).
+   * Si se pasan, el tope refleja `sedeBase` OR (>50% horas en sedes regionales).
+   * Si se omite, solo `sede` (sedeBase) decide — back-compat con callers viejos.
+   */
+  cursos?: Array<{ sede?: string | null; horasPresenciales: number; semanas: number }>,
 ): CargaSemestralCopy {
   const labelLargo = getModalidadLabelLargo(modalidad)
 
@@ -146,13 +154,19 @@ export function getCargaSemestralCopy(
 
     // ───── CÁTEDRA — tope máximo permisivo, distingue sede ─────
     case "CATEDRA": {
-      const esRegional = sede !== null && SEDES_REGIONALES_CATEDRA.includes(sede)
+      // Regla mixta del Art. 4d: 19h si sedeBase es regional, O si >50%
+      // de las horas presenciales se dictan en sedes regionales.
+      const esRegional = esCatedraConTopeRegional(sede, cursos)
+      const sedeBaseRegional = sede !== null && SEDES_CATEDRA_EXTENDIDA.includes(sede)
+      const elevadoPorCursos = esRegional && !sedeBaseRegional
       const horasSemanales = esRegional ? 19 : 16
       const horasTotales = horasSemanales * semanasPeriodo
       const articulo = esRegional ? "Art. 4d — sede regional" : "Art. 4d"
-      const contextoSede = esRegional
-        ? "Como docente catedrático en sede regional"
-        : "Como docente catedrático en sede principal"
+      const contextoSede = elevadoPorCursos
+        ? "Como catedrático que dicta más del 50% de sus cursos en sedes regionales"
+        : esRegional
+          ? "Como docente catedrático en sede regional"
+          : "Como docente catedrático en sede principal"
       const descripcionExtra = esRegional
         ? "(la norma autoriza 3 horas adicionales por semana frente a la sede principal). "
         : ""
@@ -171,9 +185,10 @@ export function getCargaSemestralCopy(
       }
     }
 
-    // ───── VISITANTE — flexible por contrato ─────
-    case "VISITANTE": {
-      const horasSemanales = 40
+    // ───── VISITANTE TC / MT — flexible por contrato ─────
+    case "VISITANTE_TC":
+    case "VISITANTE_MT": {
+      const horasSemanales = modalidad === "VISITANTE_TC" ? 40 : 20
       const horasTotales = horasSemanales * semanasPeriodo
       return {
         titulo: "Carga de referencia — según su contrato",

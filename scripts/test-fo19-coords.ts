@@ -32,7 +32,7 @@ const COORDS = {
 
     // Tabla 1. DOCENCIA
     // Headers en y~552/562. Las filas de datos van en orden descendente desde y=540.
-    // Altura de fila ~17pt (datos ~5 filas + subtotal). 7 columnas.
+    // Altura de fila ~17pt (datos ~5 filas + subtotal).
     docencia: {
       y_first_row: 537,         // centro Y de la 1a fila
       row_height:  17.6,
@@ -40,7 +40,6 @@ const COORDS = {
       cols: {
         numero:        { x: 80,  width: 50 },   // Nº curso
         nombre:        { x: 175, width: 95 },   // Nombre del Curso
-        subgrupo:      { x: 256, width: 33 },   // Subgrupo
         sede:          { x: 304, width: 35 },   // Sede
         horasPres:     { x: 360, width: 38 },   // Nro. Horas Presenciales
         creditos:      { x: 419, width: 35 },   // Nro. de Créditos
@@ -48,24 +47,6 @@ const COORDS = {
         dedicacion:    { x: 521, width: 50 },   // Dedicación por Periodo
       },
       subtotal: { x: 521, y: 446 }, // celda SUBTOTAL — fila final de la tabla
-    },
-
-    // 1.1 HORARIO DE CLASES — header y~395
-    horario: {
-      y_first_row: 380,
-      row_height:  18,
-      max_rows:    5,
-      cols: {
-        numero:    { x: 80,  width: 50 },
-        nombre:    { x: 165, width: 90 },
-        lunes:     { x: 240, width: 35 },
-        martes:    { x: 287, width: 35 },
-        miercoles: { x: 335, width: 38 },
-        jueves:    { x: 382, width: 35 },
-        viernes:   { x: 430, width: 35 },
-        sabado:    { x: 478, width: 35 },
-        domingo:   { x: 524, width: 40 },
-      },
     },
 
     // 1.2 OTRAS ACTIVIDADES DE DOCENCIA — header y~235
@@ -167,14 +148,6 @@ async function main() {
     }
   }
   dot(page1, p1.docencia.subtotal.x, p1.docencia.subtotal.y, "SUB1")
-
-  // Horario (5 filas)
-  for (let r = 0; r < p1.horario.max_rows; r++) {
-    const y = p1.horario.y_first_row - r * p1.horario.row_height
-    for (const [colName, col] of Object.entries(p1.horario.cols)) {
-      dot(page1, col.x, y, r === 0 ? colName.slice(0, 3) : "")
-    }
-  }
 
   // Otras docencia
   for (let r = 0; r < p1.otrasDocencia.max_rows; r++) {

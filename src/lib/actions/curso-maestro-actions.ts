@@ -33,7 +33,16 @@ export async function getCursosMaestros() {
         creditos: true,
         tipo: true,
         estado: true,
+        componente: true,
+        facultad: true,
+        creditosT: true,
+        creditosP: true,
+        horasSemT: true,
+        horasSemP: true,
+        horasSemI: true,
+        acuerdoOrigen: true,
         createdAt: true,
+        _count: { select: { cursosAgenda: true } },
       },
     })
     return cursos
@@ -43,16 +52,28 @@ export async function getCursosMaestros() {
   }
 }
 
-/**
- * Crear un nuevo curso en el catálogo maestro.
- * Solo ADMIN puede ejecutar esta acción.
- */
-export async function crearCursoMaestro(data: {
+type CursoMaestroFormData = {
   codigo: string
   nombre: string
   creditos: number
   tipo: TipoCurso
-}) {
+  componente?: ComponenteCurricular | null
+  facultad?: string | null
+  creditosT?: number | null
+  creditosP?: number | null
+  horasSemT?: number | null
+  horasSemP?: number | null
+  horasSemI?: number | null
+  acuerdoOrigen?: string | null
+}
+
+/**
+ * Crear un nuevo curso en el catálogo maestro.
+ * Solo ADMIN puede ejecutar esta acción.
+ */
+export async function crearCursoMaestro(
+  data: CursoMaestroFormData
+): Promise<{ success: true } | { error: string }> {
   await ensureAdmin()
 
   try {
@@ -62,6 +83,14 @@ export async function crearCursoMaestro(data: {
         nombre: data.nombre,
         creditos: data.creditos,
         tipo: data.tipo,
+        componente: data.componente ?? null,
+        facultad: data.facultad ?? null,
+        creditosT: data.creditosT ?? null,
+        creditosP: data.creditosP ?? null,
+        horasSemT: data.horasSemT ?? null,
+        horasSemP: data.horasSemP ?? null,
+        horasSemI: data.horasSemI ?? null,
+        acuerdoOrigen: data.acuerdoOrigen ?? null,
       },
     })
 
@@ -69,20 +98,113 @@ export async function crearCursoMaestro(data: {
     return { success: true }
   } catch (error: any) {
     console.error("[crearCursoMaestro] Error:", error)
-
-    // Prisma P2002: unique constraint violation (codigo duplicado)
     if (error?.code === "P2002") {
-      throw new Error(`Ya existe un curso con el código "${data.codigo}".`)
+      return { error: `Ya existe un curso con el código "${data.codigo}".` }
     }
-
-    throw new Error("No se pudo crear el curso.")
+    return { error: "No se pudo crear el curso." }
   }
 }
 
 /**
- * Alternar el estado activo/inactivo de un curso.
+ * Actualizar un curso del catálogo maestro.
  * Solo ADMIN puede ejecutar esta acción.
  */
+export async function actualizarCursoMaestro(
+  id: string,
+  data: CursoMaestroFormData
+): Promise<{ success: true } | { error: string }> {
+  await ensureAdmin()
+
+  try {
+    await prisma.cursoMaestro.update({
+      where: { id },
+      data: {
+        codigo: data.codigo,
+        nombre: data.nombre,
+        creditos: data.creditos,
+        tipo: data.tipo,
+        componente: data.componente ?? null,
+        facultad: data.facultad ?? null,
+        creditosT: data.creditosT ?? null,
+        creditosP: data.creditosP ?? null,
+        horasSemT: data.horasSemT ?? null,
+        horasSemP: data.horasSemP ?? null,
+        horasSemI: data.horasSemI ?? null,
+        acuerdoOrigen: data.acuerdoOrigen ?? null,
+      },
+    })
+
+    revalidatePath("/admin/cursos")
+    return { success: true }
+  } catch (error: any) {
+    console.error("[actualizarCursoMaestro] Error:", error)
+    if (error?.code === "P2002") {
+      return { error: `Ya existe un curso con el código "${data.codigo}".` }
+    }
+    if (error?.code === "P2025") {
+      return { error: "Curso no encontrado." }
+    }
+    return { error: "No se pudo actualizar el curso." }
+  }
+}
+
+/**
+ * Eliminar un curso del catálogo maestro.
+ * SAFEGUARD: bloquea la eliminación si el curso está referenciado en alguna agenda.
+ * En ese caso, el admin debe desactivarlo en su lugar.
+ * Solo ADMIN puede ejecutar esta acción.
+ */
+export async function eliminarCursoMaestro(
+  id: string
+): Promise<{ success: true } | { error: string }> {
+  await ensureAdmin()
+
+  const curso = await prisma.cursoMaestro.findUnique({
+    where: { id },
+    select: {
+      nombre: true,
+      codigo: true,
+      _count: { select: { cursosAgenda: true } },
+    },
+  })
+
+  if (!curso) return { error: "Curso no encontrado." }
+
+  // Capa 1: referencias formales por FK.
+  if (curso._count.cursosAgenda > 0) {
+    return {
+      error: `No se puede eliminar "${curso.nombre}": está referenciado en ${curso._count.cursosAgenda} agenda(s). Desactívalo en su lugar para que no aparezca en nuevas agendas.`,
+    }
+  }
+
+  // Capa 2: huérfanos legacy — CursoAgenda con cursoMaestroId=null pero
+  // numeroCurso=codigo. Ocurre con agendas creadas antes del Paso B del
+  // fix (que cerró el origen del bug). El backfill (`scripts/backfill-
+  // curso-maestro-id.ts`) los convierte en referencias formales; mientras
+  // queden huérfanos, este check los detecta para no borrar el catálogo
+  // de cursos efectivamente en uso.
+  const huerfanosPorCodigo = await prisma.cursoAgenda.count({
+    where: {
+      cursoMaestroId: null,
+      numeroCurso: curso.codigo,
+    },
+  })
+  if (huerfanosPorCodigo > 0) {
+    return {
+      error: `No se puede eliminar "${curso.nombre}": hay ${huerfanosPorCodigo} agenda(s) con código "${curso.codigo}" sin enlace formal al catálogo (registros legacy). Ejecuta el script de backfill (scripts/backfill-curso-maestro-id.ts) o desactiva el curso en su lugar.`,
+    }
+  }
+
+  try {
+    await prisma.cursoMaestro.delete({ where: { id } })
+    revalidatePath("/admin/cursos")
+    return { success: true }
+  } catch (error) {
+    console.error("[eliminarCursoMaestro] Error:", error)
+    return { error: "No se pudo eliminar el curso." }
+  }
+}
+
 // =====================================================================
 // IMPORT BULK desde CSV/Excel
 // =====================================================================

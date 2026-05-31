@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo } from "react"
+import { useEffect } from "react"
 import { useFormContext, useFieldArray, useWatch } from "react-hook-form"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import { EMPTY_CURSO, EMPTY_ACTIVIDAD } from "@/lib/schemas/agenda-schema"
@@ -10,9 +10,9 @@ import {
   type CursoMaestroOption,
 } from "@/components/agenda/CursoMaestroSelector"
 import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatalogoSelector"
+import type { FormulasCursos } from "@/lib/actions/formulas"
 import { ActividadCardRow } from "@/components/agenda/ActividadCardRow"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   Card,
   CardContent,
@@ -42,190 +42,32 @@ import {
   GraduationCap,
 } from "lucide-react"
 
-// ==========================================
-// Días de la semana
-// ==========================================
-const DIAS = [
-  { key: "lunes", label: "Lun", fullLabel: "Lunes" },
-  { key: "martes", label: "Mar", fullLabel: "Martes" },
-  { key: "miercoles", label: "Mié", fullLabel: "Miércoles" },
-  { key: "jueves", label: "Jue", fullLabel: "Jueves" },
-  { key: "viernes", label: "Vie", fullLabel: "Viernes" },
-  { key: "sabado", label: "Sáb", fullLabel: "Sábado" },
-  { key: "domingo", label: "Dom", fullLabel: "Domingo" },
-] as const
-
-type DiaKey = (typeof DIAS)[number]["key"]
-
-// ==========================================
-// Helper: parsea "08:00-10:00" → { inicio, fin }
-// ==========================================
-function parseHorarioString(val: string | null | undefined): {
-  inicio: string
-  fin: string
-} {
-  if (!val) return { inicio: "", fin: "" }
-  const parts = val.split("-")
-  return {
-    inicio: parts[0]?.trim() || "",
-    fin: parts[1]?.trim() || "",
-  }
-}
-
-// ==========================================
-// Sub-componente: Time inputs para un día activo
-// ==========================================
-function ActiveDayTimeInputs({
-  cursoIndex,
-  diaKey,
-  diaLabel,
-}: {
-  cursoIndex: number
-  diaKey: DiaKey
-  diaLabel: string
-}) {
-  const { setValue } = useFormContext<AgendaWizardFormData>()
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const currentValue = useWatch({ name: `cursos.${cursoIndex}.horarios.${diaKey}` as any }) as string | null | undefined
-  const parsed = parseHorarioString(currentValue)
-
-  function handleTimeChange(type: "inicio" | "fin", value: string) {
-    const newInicio = type === "inicio" ? value : parsed.inicio
-    const newFin = type === "fin" ? value : parsed.fin
-
-    if (newInicio && newFin) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setValue(`cursos.${cursoIndex}.horarios.${diaKey}` as any, `${newInicio}-${newFin}`, { shouldDirty: true })
-    } else {
-      const partial = `${newInicio || "00:00"}-${newFin || "00:00"}`
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setValue(`cursos.${cursoIndex}.horarios.${diaKey}` as any, partial, { shouldDirty: true })
-    }
-  }
-
-  const tiempoInvalido = parsed.inicio && parsed.fin && parsed.inicio >= parsed.fin
-
-  return (
-    <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 transition-colors">
-      <span className="text-sm font-medium text-foreground min-w-[4rem]">
-        {diaLabel}
-      </span>
-      <input
-        type="time"
-        value={parsed.inicio}
-        onChange={(e) => handleTimeChange("inicio", e.target.value)}
-        className="h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/40 transition-shadow"
-        aria-label={`Hora inicio ${diaLabel}`}
-      />
-      <span className="text-xs text-muted-foreground font-medium">a</span>
-      <input
-        type="time"
-        value={parsed.fin}
-        min={parsed.inicio || undefined}
-        onChange={(e) => handleTimeChange("fin", e.target.value)}
-        className={`h-8 rounded-md border bg-background px-2 text-sm shadow-sm focus:outline-none focus:ring-2 transition-shadow ${
-          tiempoInvalido
-            ? "border-destructive focus:ring-destructive/40"
-            : "border-input focus:ring-ring/40"
-        }`}
-        aria-label={`Hora fin ${diaLabel}`}
-      />
-      {tiempoInvalido && (
-        <span className="text-xs font-medium text-destructive whitespace-nowrap">
-          Fin debe ser posterior
-        </span>
-      )}
-    </div>
-  )
-}
-
-// ==========================================
-// Sub-componente: Horario con Chips/Toggles horizontales
-// ==========================================
-function HorarioChipToggles({ cursoIndex }: { cursoIndex: number }) {
-  const { setValue } = useFormContext<AgendaWizardFormData>()
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const horarios = useWatch({ name: `cursos.${cursoIndex}.horarios` as any }) as Record<string, string | null | undefined> | undefined
-
-  const activeDays = useMemo(() => {
-    return DIAS.filter((dia) => !!horarios?.[dia.key])
-  }, [horarios])
-
-  function handleToggle(diaKey: DiaKey) {
-    const isActive = !!horarios?.[diaKey]
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const path = `cursos.${cursoIndex}.horarios.${diaKey}` as any
-
-    if (isActive) {
-      setValue(path, null, { shouldDirty: true })
-    } else {
-      setValue(path, "07:00-09:00", { shouldDirty: true })
-    }
-  }
-
-  return (
-    <div className="space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Horario Semanal
-      </p>
-
-      {/* Horizontal toggle chips */}
-      <div className="flex flex-wrap gap-2">
-        {DIAS.map((dia) => {
-          const isActive = !!horarios?.[dia.key]
-          return (
-            <button
-              key={dia.key}
-              type="button"
-              onClick={() => handleToggle(dia.key)}
-              className={`
-                inline-flex items-center rounded-full px-3.5 py-1.5 text-sm font-medium
-                border transition-all duration-150 select-none
-                focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
-                ${
-                  isActive
-                    ? "border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
-                    : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
-                }
-              `}
-              aria-pressed={isActive}
-              aria-label={`${isActive ? "Desactivar" : "Activar"} ${dia.fullLabel}`}
-            >
-              {dia.label}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Time inputs for active days */}
-      {activeDays.length > 0 && (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {activeDays.map((dia) => (
-            <ActiveDayTimeInputs
-              key={dia.key}
-              cursoIndex={cursoIndex}
-              diaKey={dia.key}
-              diaLabel={dia.fullLabel}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
+const FACTOR_FALLBACK: Record<string, { factorHoras: number; constanteSuma: number }> = {
+  TEORICO: { factorHoras: 2, constanteSuma: 1 },
+  TEORICO_PRACTICO: { factorHoras: 1.5, constanteSuma: 1 },
+  PRACTICO: { factorHoras: 1, constanteSuma: 1 },
 }
 
 // ==========================================
 // Sub-componente: Silent Acuerdo 048 calculator
 // ==========================================
-function SilentDedicacionCalc({ cursoIndex, semanasPeriodo }: { cursoIndex: number; semanasPeriodo: number }) {
+export function SilentDedicacionCalc({
+  cursoIndex,
+  semanasPeriodo,
+  formulas,
+}: {
+  cursoIndex: number
+  semanasPeriodo: number
+  formulas: FormulasCursos
+}) {
   const { setValue } = useFormContext<AgendaWizardFormData>()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const horasPresenciales = useWatch({ name: `cursos.${cursoIndex}.horasPresenciales` as any }) as number
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const semanas = useWatch({ name: `cursos.${cursoIndex}.semanas` as any }) as number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tipoCurso = useWatch({ name: `cursos.${cursoIndex}.tipoCurso` as any }) as string | null | undefined
 
   useEffect(() => {
     // Corrige borradores con semanas desactualizadas respecto al periodo institucional vigente
@@ -234,10 +76,11 @@ function SilentDedicacionCalc({ cursoIndex, semanasPeriodo }: { cursoIndex: numb
       setValue(`cursos.${cursoIndex}.semanas` as any, semanasPeriodo)
     }
     const horas = Number(horasPresenciales) || 0
-    // Acuerdo 048: ((Horas directas × 1.5 preparación) + 1 hora tutoría) × semanas
-    const semanales = horas > 0 ? (horas * 1.5) + 1 : 0
+    // Usa formula de DB (o fallback Acuerdo 048 Art. 3 Par. 4) según tipo de curso
+    const f = formulas[tipoCurso as keyof FormulasCursos] ?? FACTOR_FALLBACK[tipoCurso ?? ""] ?? { factorHoras: 1.5, constanteSuma: 1 }
+    const semanales = horas > 0 ? (horas * f.factorHoras) + f.constanteSuma : 0
     setValue(`cursos.${cursoIndex}.dedicacionPeriodo`, semanales * semanasPeriodo, { shouldValidate: true })
-  }, [horasPresenciales, semanas, semanasPeriodo, cursoIndex, setValue])
+  }, [horasPresenciales, semanas, semanasPeriodo, cursoIndex, setValue, tipoCurso, formulas])
 
   // Renders nothing — purely a side-effect hook
   return null
@@ -249,14 +92,16 @@ function SilentDedicacionCalc({ cursoIndex, semanasPeriodo }: { cursoIndex: numb
 function CursoCardRow({
   index,
   cursosMaestros,
-  semanasPeriodo,
+  modalidad,
+  sedeBase,
   onSelect,
   onClear,
   onRemove,
 }: {
   index: number
   cursosMaestros: CursoMaestroOption[]
-  semanasPeriodo: number
+  modalidad: string
+  sedeBase?: string | null
   onSelect: (curso: CursoMaestroOption) => void
   onClear: () => void
   onRemove: () => void
@@ -293,9 +138,6 @@ function CursoCardRow({
       </div>
 
       <CardContent className="p-4 pt-5 space-y-5">
-        {/* Silent Acuerdo 048 calculator — renders nothing */}
-        <SilentDedicacionCalc cursoIndex={index} semanasPeriodo={semanasPeriodo} />
-
         {/* Selector del catálogo maestro (siempre visible) */}
         <div className="space-y-2">
           <FormLabel>Curso del Catálogo Oficial </FormLabel>
@@ -334,54 +176,48 @@ function CursoCardRow({
           </div>
         )}
 
-        {/* Campos editables: subgrupo, sede, semanas, horario */}
+        {/* Campos editables: sede */}
         {selected && (
           <div className="grid grid-cols-12 gap-x-6 gap-y-4">
-            <div className="col-span-12 md:col-span-4">
-              <FormField
-                control={control}
-                name={`cursos.${index}.subgrupo`}
-                render={({ field: f }) => (
-                  <FormItem>
-                    <FormLabel>Subgrupo</FormLabel>
-                    <FormControl>
-                      <Input {...f} placeholder="Ej: A1" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="col-span-12 md:col-span-4">
+            <div className="col-span-12 md:col-span-6">
               <FormField
                 control={control}
                 name={`cursos.${index}.sede`}
-                render={({ field: f }) => (
-                  <FormItem>
-                    <FormLabel>Sede donde se dicta</FormLabel>
-                    <Select value={f.value || ""} onValueChange={f.onChange}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {SEDES.map((s) => (
-                          <SelectItem key={s.value} value={s.value}>
-                            {s.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                render={({ field: f }) => {
+                  const sedeDistinta =
+                    modalidad === "CATEDRA" &&
+                    !!sedeBase &&
+                    !!f.value &&
+                    f.value !== sedeBase
+                  return (
+                    <FormItem>
+                      <FormLabel>Sede donde se dicta</FormLabel>
+                      <Select value={f.value || ""} onValueChange={f.onChange}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {SEDES.map((s) => (
+                            <SelectItem key={s.value} value={s.value}>
+                              {s.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {sedeDistinta && (
+                        <FormDescription>
+                          Si más del 50% de sus horas presenciales quedan en
+                          Pitalito, Garzón o La Plata, su tope semanal sube a
+                          19h (Art. 4d).
+                        </FormDescription>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )
+                }}
               />
-            </div>
-
-            <div className="col-span-12">
-              <HorarioChipToggles cursoIndex={index} />
             </div>
           </div>
         )}
@@ -409,13 +245,17 @@ function CursoCardRow({
 export function StepDocencia({
   cursosMaestros,
   catalogoActividades,
+  modalidad,
+  sedeBase,
   semanasPeriodo,
+  esJefeDePrograma = false,
 }: {
   cursosMaestros: CursoMaestroOption[]
   catalogoActividades: ActividadCatalogoOption[]
   modalidad: string
   sedeBase?: string | null
   semanasPeriodo: number
+  esJefeDePrograma?: boolean
 }) {
   const { control, setValue } = useFormContext<AgendaWizardFormData>()
 
@@ -433,15 +273,21 @@ export function StepDocencia({
 
   function handleCursoMaestroSelect(index: number, curso: CursoMaestroOption) {
     const horasPresenciales = (curso.horasSemT ?? 0) + (curso.horasSemP ?? 0)
+    setValue(`cursos.${index}.cursoMaestroId`, curso.id, { shouldValidate: true })
+    // Art. 3 Par. 4 Acuerdo 048: tipo determina el factor de dedicación
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setValue(`cursos.${index}.tipoCurso` as any, curso.tipo)
     setValue(`cursos.${index}.numeroCurso`, curso.codigo, { shouldValidate: true })
     setValue(`cursos.${index}.nombreCurso`, curso.nombre, { shouldValidate: true })
     setValue(`cursos.${index}.creditos`, curso.creditos)
     setValue(`cursos.${index}.horasPresenciales`, horasPresenciales)
-    // Default semestral: parametrizable por SUPERADMIN (semanas_periodo). Acuerdo 048 Art. 4 = 22.
     setValue(`cursos.${index}.semanas`, semanasPeriodo)
   }
 
   function handleCursoMaestroClear(index: number) {
+    setValue(`cursos.${index}.cursoMaestroId`, null, { shouldValidate: true })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setValue(`cursos.${index}.tipoCurso` as any, null)
     setValue(`cursos.${index}.numeroCurso`, "", { shouldValidate: true })
     setValue(`cursos.${index}.nombreCurso`, "", { shouldValidate: true })
     setValue(`cursos.${index}.creditos`, 0)
@@ -460,11 +306,27 @@ export function StepDocencia({
             <CardTitle>1.0 Cursos Asignados</CardTitle>
           </div>
           <CardDescription>
-            Agregue los cursos que dictará este semestre. Use el buscador (🔍)
+            Agregue los cursos que dictará este semestre. Use el buscador
             para importar datos de sus cursos guardados.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Art. 3 Par. 1 Acuerdo 048: Jefes de Programa deben orientar
+              mínimo un curso. Misma estructura que el aviso de doctorado en
+              StepInvestigacionProyeccion: flex + ícono + texto, tenue, sin
+              borde destructivo. Tinte azul oscuro (no brillante) para
+              diferenciarlo del gris-doctorado y conservar la jerarquía visual. */}
+          {esJefeDePrograma && cursoFields.length === 0 && (
+            <div className="flex items-start gap-2 rounded-md bg-blue-900/10 px-3 py-2.5 text-sm text-blue-950 dark:bg-blue-400/10 dark:text-blue-100">
+              <BookOpen className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
+              <p className="leading-relaxed">
+                Su perfil registra cargo de <span className="font-medium">Jefe de Programa</span>.
+                El Art. 3, Par. 1 del Acuerdo 048 establece que los Jefes de Programa orientarán mínimo
+                un curso por semestre. Agregue al menos uno para poder enviar la agenda.
+              </p>
+            </div>
+          )}
+
           {cursoFields.length === 0 && (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <BookOpen className="h-10 w-10 text-muted-foreground/40 mb-3" />
@@ -479,7 +341,8 @@ export function StepDocencia({
               key={field.id}
               index={index}
               cursosMaestros={cursosMaestros}
-              semanasPeriodo={semanasPeriodo}
+              modalidad={modalidad}
+              sedeBase={sedeBase}
               onSelect={(curso) => handleCursoMaestroSelect(index, curso)}
               onClear={() => handleCursoMaestroClear(index)}
               onRemove={() => removeCurso(index)}
@@ -489,7 +352,7 @@ export function StepDocencia({
           <Button
             type="button"
             variant="outline"
-            onClick={() => appendCurso({ ...EMPTY_CURSO, semanas: semanasPeriodo })}
+            onClick={() => appendCurso({ ...EMPTY_CURSO, semanas: semanasPeriodo, sede: sedeBase ?? "" })}
             className="w-full border-dashed"
           >
             <Plus className="mr-2 h-4 w-4" />
@@ -524,6 +387,7 @@ export function StepDocencia({
               catalogo={catalogoActividades}
               categoria="DOCENCIA"
               semanasPeriodo={semanasPeriodo}
+              sedeBase={sedeBase}
               onRemove={() => removeActDocencia(index)}
             />
           ))}

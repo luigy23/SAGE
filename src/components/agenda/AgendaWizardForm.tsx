@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useRouter } from "next/navigation"
@@ -12,9 +12,11 @@ import {
   topesKey,
   type AgendaWizardFormData,
   type TopesActividadesMap,
+  type ActividadTopeDetalle,
 } from "@/lib/schemas/agenda-schema"
-import { getMaxHoras, getMinDocencia } from "@/lib/utils/periodo"
-import { esCargoExentoGestion20 } from "@/lib/utils/cargo"
+import { getMaxHoras, getMinDocencia, getMaxInvProySocialCatedra } from "@/lib/utils/periodo"
+import type { AgendaLimits } from "@/lib/validations/agenda-rules"
+import { esCargoExentoGestion20, esJefeDePrograma } from "@/lib/utils/cargo"
 import {
   upsertAgendaCompletaAction,
 } from "@/lib/actions/agenda-wizard"
@@ -39,7 +41,15 @@ import { StepDocencia } from "./steps/StepDocencia"
 import { StepInvestigacionProyeccion } from "./steps/StepInvestigacionProyeccion"
 import { StepGestion } from "./steps/StepGestion"
 import { StepRevision } from "./steps/StepRevision"
+import { SilentDedicacionCalc } from "./steps/StepDocencia"
 import { cn } from "@/lib/utils"
+import type { FormulasCursos } from "@/lib/actions/formulas"
+
+const DEFAULT_FORMULAS: FormulasCursos = {
+  TEORICO: { factorHoras: 2, constanteSuma: 1 },
+  TEORICO_PRACTICO: { factorHoras: 1.5, constanteSuma: 1 },
+  PRACTICO: { factorHoras: 1, constanteSuma: 1 },
+}
 import {
   ChevronLeft,
   ChevronRight,
@@ -165,6 +175,10 @@ export function AgendaWizardForm({
   periodo,
   defaultValues,
   semanasPeriodo,
+  semanasMaximas,
+  defaultSemanasAgenda,
+  formulas = DEFAULT_FORMULAS,
+  agendaLimits,
 }: {
   docente: Docente
   cursosMaestros: CursoMaestroOption[]
@@ -172,25 +186,41 @@ export function AgendaWizardForm({
   periodo: string
   defaultValues?: AgendaWizardFormData
   semanasPeriodo: number
+  /** Techo máximo de semanas elegibles (semanasVinculacion o semanasPeriodo global). */
+  semanasMaximas?: number
+  /** Semanas guardadas en el BORRADOR (si existe). */
+  defaultSemanasAgenda?: number
+  formulas?: FormulasCursos
+  agendaLimits?: AgendaLimits
 }) {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState(0)
   const [isPending, startTransition] = useTransition()
   const [isSavingDraft, setIsSavingDraft] = useState(false)
 
-  // =========================================================
-  // Single Source of Truth: Dynamic legal limits (Art. 4)
-  // Cátedra limit depends on docente.sedeBase (16 ó 19 h/sem)
-  // =========================================================
-  const { maxHoras, esEstricto } = useMemo(
-    () => getMaxHoras(docente.modalidad, docente.sedeBase),
-    [docente.modalidad, docente.sedeBase]
+  // Semanas de trabajo elegidas por el docente para esta agenda.
+  // Default: semanas guardadas (BORRADOR) → semanas efectivas del resolver → semanasPeriodo global.
+  const semanasMaximasEfectivas = semanasMaximas ?? agendaLimits?.semanasMaximas ?? semanasPeriodo
+  const [semanasAgenda, setSemanasAgenda] = useState(
+    defaultSemanasAgenda ?? agendaLimits?.semanas ?? semanasPeriodo
   )
 
-  const minDocencia = useMemo(
-    () => getMinDocencia(docente.modalidad, docente.proyectosActivos),
-    [docente.modalidad, docente.proyectosActivos]
-  )
+  // =========================================================
+  // Single Source of Truth: Dynamic legal limits (Art. 4)
+  // Si se pasa agendaLimits (desde DB via resolver), tiene prioridad
+  // sobre las funciones hardcoded de fallback (periodo.ts).
+  // =========================================================
+  const { maxHoras, esEstricto } = useMemo(() => {
+    if (agendaLimits) {
+      return { maxHoras: agendaLimits.maxHorasSemanales, esEstricto: agendaLimits.esEstricto }
+    }
+    return getMaxHoras(docente.modalidad, docente.sedeBase)
+  }, [agendaLimits, docente.modalidad, docente.sedeBase])
+
+  const minDocencia = useMemo(() => {
+    if (agendaLimits) return agendaLimits.minDocencia
+    return getMinDocencia(docente.modalidad, docente.proyectosActivos, semanasPeriodo)
+  }, [agendaLimits, docente.modalidad, docente.proyectosActivos, semanasPeriodo])
 
   // Art. 10 + Art. 11: si el docente ocupa uno de los 5 cargos exentos
   // (Jefe de Programa/Departamento, Asesor de Vicerrectoría/Rectoría, Decano)
@@ -200,14 +230,44 @@ export function AgendaWizardForm({
     [docente.tipoCargo]
   )
 
+  // Art. 3 Par. 1: Jefes de Programa deben orientar mínimo un curso.
+  const esJefeProg = useMemo(
+    () => esJefeDePrograma(docente.tipoCargo),
+    [docente.tipoCargo]
+  )
+
+  // Art. 3 Par. 2: tope semestral de cátedra en Inv + PS combinadas.
+  const maxInvProySocialCatedra = useMemo(() => {
+    if (agendaLimits) return agendaLimits.maxInvProySocialCatedra
+    return getMaxInvProySocialCatedra(docente.modalidad, semanasPeriodo)
+  }, [agendaLimits, docente.modalidad, semanasPeriodo])
+
+  // Art. 10: tope de gestión. Viene del resolver (DB) que aplica limiteGestionPorcentaje
+  // de ParametroGlobal. Fallback: 20% hardcodeado solo si no hay agendaLimits del servidor.
+  const maxGestion = useMemo(() => {
+    if (agendaLimits) return agendaLimits.maxGestion
+    return Math.floor(maxHoras * semanasAgenda * 0.20)
+  }, [agendaLimits, maxHoras, semanasAgenda])
+
   // Art. 11: map de topes individuales por actividad. Se construye una sola vez
   // desde el catálogo precargado en el servidor, para validar cada actividad
-  // contra su tope `topeSemestralH` en la UI antes del envío.
+  // (tope plano, tope por unidad y restricciones contextuales) en la UI.
   const topesActividades = useMemo<TopesActividadesMap>(() => {
     const map: TopesActividadesMap = {}
     for (const act of catalogoActividades) {
-      if (act.topeSemestralH !== null && act.topeSemestralH !== undefined) {
-        map[topesKey(act.categoria, act.nombre)] = act.topeSemestralH
+      if (act.topeSemestralH !== null || act.topeSemanalHPorUnidad !== null) {
+        const detalle: ActividadTopeDetalle = {
+          topeSemestralH: act.topeSemestralH ?? null,
+          topePorUnidad: act.topePorUnidad,
+          topeSemanalHPorUnidad: act.topeSemanalHPorUnidad ?? null,
+          unidadMax: act.unidadMax ?? null,
+          cantidadMaxSimultaneos: act.cantidadMaxSimultaneos ?? null,
+          requiereProyectoAprobado: act.requiereProyectoAprobado,
+          aplicaUnoPorFacultad: act.aplicaUnoPorFacultad,
+          aplicaUnoPorSede: act.aplicaUnoPorSede,
+          requiereResolucionRector: act.requiereResolucionRector ?? false,
+        }
+        map[topesKey(act.categoria, act.nombre)] = detalle
       }
     }
     return map
@@ -222,12 +282,15 @@ export function AgendaWizardForm({
         cargoAdministrativo: docente.cargoAdministrativo,
         proyectosActivos: docente.proyectosActivos,
         excluyeTopeGestion20,
+        esJefeDePrograma: esJefeProg,
       },
       minDocencia,
-      semanasPeriodo,
+      semanasAgenda,
       topesActividades,
+      maxInvProySocialCatedra,
+      maxGestion,
     ),
-    [maxHoras, esEstricto, minDocencia, semanasPeriodo, docente.doctorado, docente.cargoAdministrativo, docente.proyectosActivos, excluyeTopeGestion20, topesActividades]
+    [maxHoras, esEstricto, minDocencia, semanasAgenda, docente.doctorado, docente.cargoAdministrativo, docente.proyectosActivos, excluyeTopeGestion20, esJefeProg, topesActividades, maxInvProySocialCatedra, maxGestion]
   )
 
   const steps = useMemo(
@@ -238,8 +301,8 @@ export function AgendaWizardForm({
   const isLastStep = currentStep === steps.length - 1
   const isFirstStep = currentStep === 0
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const form = useForm<AgendaWizardFormData>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(schema) as any,
     defaultValues: defaultValues || DEFAULT_FORM_VALUES,
     mode: "onTouched",
@@ -253,7 +316,14 @@ export function AgendaWizardForm({
   // proyección social, gestión.
   // =========================================================
   const watchedData = useWatch({ control: form.control })
-  const horasTotalesPeriodo = maxHoras * semanasPeriodo
+  const horasTotalesPeriodo = maxHoras * semanasAgenda
+
+  // Revalidar el formulario cuando el docente cambia las semanas de trabajo.
+  // Esto asegura que los items que ya tenían semanas > semanasAgenda se marquen como inválidos.
+  useEffect(() => {
+    form.trigger()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [semanasAgenda])
 
   const sumPeriodo = (items?: { dedicacionPeriodo?: number }[]) =>
     items?.reduce((acc, item) => acc + (Number(item?.dedicacionPeriodo) || 0), 0) || 0
@@ -265,12 +335,25 @@ export function AgendaWizardForm({
     sumPeriodo(watchedData.actividadesProyeccionSocial as { dedicacionPeriodo?: number }[] | undefined) +
     sumPeriodo(watchedData.actividadesGestion as { dedicacionPeriodo?: number }[] | undefined)
 
+  // Subtotal reactivo de Inv + PS — para evaluar el tope de cátedra (Art. 3 Par. 2).
+  const totalInvPS =
+    sumPeriodo(watchedData.actividadesInvestigacion as { dedicacionPeriodo?: number }[] | undefined) +
+    sumPeriodo(watchedData.actividadesProyeccionSocial as { dedicacionPeriodo?: number }[] | undefined)
+
+  const catedraInvPSExcedido =
+    maxInvProySocialCatedra !== null && totalInvPS > maxInvProySocialCatedra
+
   // =========================================================
   // Envío bloqueado si:
   // - esEstricto AND total semestral excede el límite legal
+  // - O cátedra excede el tope de Inv+PS (Art. 3 Par. 2)
   // - O hay una transición en progreso
   // =========================================================
-  const envioDisabled = (esEstricto && totalSemestral > horasTotalesPeriodo) || isPending || isSavingDraft
+  const envioDisabled =
+    (esEstricto && totalSemestral > horasTotalesPeriodo) ||
+    catedraInvPSExcedido ||
+    isPending ||
+    isSavingDraft
 
   // Elimina filas dinámicas vacías antes de validar/enviar.
   // Una fila se considera "vacía" cuando el usuario tocó "+ Agregar" pero
@@ -339,6 +422,7 @@ export function AgendaWizardForm({
       const result = await upsertAgendaCompletaAction({
         periodo,
         enviar: false,
+        semanasAgenda,
         data,
       })
 
@@ -358,10 +442,14 @@ export function AgendaWizardForm({
     const valid = await form.trigger()
     if (!valid) {
       const errs = form.formState.errors as Record<string, { message?: string; root?: { message?: string } }>
-      if (errs._minDocenciaInsuficiente?.message) {
+      if (errs._jefeProgramaSinCursos?.message) {
+        toast.error(errs._jefeProgramaSinCursos.message)
+      } else if (errs._minDocenciaInsuficiente?.message) {
         toast.error(errs._minDocenciaInsuficiente.message)
       } else if (errs._horasExcedidas?.message) {
         toast.error(errs._horasExcedidas.message)
+      } else if (errs._catedraInvPSExcedido?.message) {
+        toast.error(errs._catedraInvPSExcedido.message)
       } else {
         toast.error("Hay errores en el formulario. Revise todos los pasos.")
       }
@@ -374,6 +462,7 @@ export function AgendaWizardForm({
       const result = await upsertAgendaCompletaAction({
         periodo,
         enviar: true,
+        semanasAgenda,
         data,
       })
 
@@ -396,7 +485,9 @@ export function AgendaWizardForm({
             docente={docente}
             maxHoras={maxHoras}
             esEstricto={esEstricto}
-            semanasPeriodo={semanasPeriodo}
+            semanasPeriodo={semanasAgenda}
+            semanasMaximas={semanasMaximasEfectivas}
+            onSemanasChange={setSemanasAgenda}
           />
         )
       case "docencia":
@@ -406,36 +497,40 @@ export function AgendaWizardForm({
             catalogoActividades={catalogoActividades}
             modalidad={docente.modalidad}
             sedeBase={docente.sedeBase}
-            semanasPeriodo={semanasPeriodo}
+            semanasPeriodo={semanasAgenda}
+            esJefeDePrograma={esJefeProg}
           />
         )
       case "investigacion":
         return (
           <StepInvestigacionProyeccion
             catalogoActividades={catalogoActividades}
-            semanasPeriodo={semanasPeriodo}
+            semanasPeriodo={semanasAgenda}
             doctorado={docente.doctorado}
+            sedeBase={docente.sedeBase}
+            proyectosActivos={docente.proyectosActivos}
           />
         )
       case "gestion":
         return (
           <StepGestion
             cargoAdministrativo={docente.cargoAdministrativo}
-            semanasPeriodo={semanasPeriodo}
-            maxHoras={maxHoras}
+            maxGestion={maxGestion}
             excluyeTopeGestion20={excluyeTopeGestion20}
             catalogoActividades={catalogoActividades}
+            sedeBase={docente.sedeBase}
+            semanasPeriodo={semanasAgenda}
           />
         )
       case "revision":
         return (
           <StepRevision
             docente={docente}
-            maxHoras={maxHoras}
-            esEstricto={esEstricto}
-            semanasPeriodo={semanasPeriodo}
+            horasTotalesPeriodo={horasTotalesPeriodo}
+            maxGestion={maxGestion}
             minDocencia={minDocencia}
             excluyeTopeGestion20={excluyeTopeGestion20}
+            maxInvProySocialCatedra={maxInvProySocialCatedra}
           />
         )
       default:
@@ -445,6 +540,17 @@ export function AgendaWizardForm({
 
   return (
     <Form {...form}>
+      {/* Motores silenciosos: sincronizan dedicacionPeriodo de cada curso
+          con la fórmula de DB (horasPresenciales × factor × semanas) sin
+          importar en qué paso del wizard está el usuario. */}
+      {(watchedData.cursos ?? []).map((_, i) => (
+        <SilentDedicacionCalc
+          key={i}
+          cursoIndex={i}
+          semanasPeriodo={semanasAgenda}
+          formulas={formulas ?? DEFAULT_FORMULAS}
+        />
+      ))}
       <form
         onSubmit={(e) => e.preventDefault()}
         className="space-y-6"

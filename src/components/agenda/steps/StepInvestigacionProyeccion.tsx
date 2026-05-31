@@ -29,10 +29,14 @@ export function StepInvestigacionProyeccion({
   catalogoActividades,
   semanasPeriodo,
   doctorado,
+  sedeBase,
+  proyectosActivos,
 }: {
   catalogoActividades: ActividadCatalogoOption[]
   semanasPeriodo: number
   doctorado: boolean
+  sedeBase?: string | null
+  proyectosActivos?: boolean
 }) {
   const { control } = useFormContext<AgendaWizardFormData>()
 
@@ -67,8 +71,8 @@ export function StepInvestigacionProyeccion({
               de alerta, solo un recordatorio del Art. 4 Par. 3 que el jefe
               de programa revisará en monitoreo. */}
           {doctorado && (
-            <div className="flex items-start gap-2 rounded-md bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
-              <GraduationCap className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" />
+            <div className="flex items-start gap-2 rounded-md bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+              <GraduationCap className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
               <p className="leading-relaxed">
                 Su perfil registra título de <span className="font-medium text-foreground/80">Doctorado</span>.
                 El Art. 4, Par. 3 del Acuerdo 048 establece que los docentes con doctorado deben estar vinculados a un
@@ -91,6 +95,8 @@ export function StepInvestigacionProyeccion({
               catalogo={catalogoActividades}
               categoria="INVESTIGACION"
               semanasPeriodo={semanasPeriodo}
+              sedeBase={sedeBase}
+              proyectosActivos={proyectosActivos}
               onRemove={() => removeInv(index)}
             />
           ))}
@@ -133,6 +139,8 @@ export function StepInvestigacionProyeccion({
               catalogo={catalogoActividades}
               categoria="PROYECCION_SOCIAL"
               semanasPeriodo={semanasPeriodo}
+              sedeBase={sedeBase}
+              proyectosActivos={proyectosActivos}
               onRemove={() => removePro(index)}
             />
           ))}

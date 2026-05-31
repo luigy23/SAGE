@@ -26,7 +26,6 @@ export default async function AgendaDetailPage({
     include: {
       docente: true,
       cursos: {
-        include: { horarios: true },
         orderBy: { numeroCurso: "asc" },
       },
       otrasActividadesDocencia: { orderBy: { nombre: "asc" } },

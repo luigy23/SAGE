@@ -2,7 +2,7 @@ import { z } from "zod"
 
 /**
  * MODALIDADES válidas del Acuerdo 048
- * Prisma enum: PLANTA_TC | PLANTA_MT | OCASIONAL_TC | OCASIONAL_MT | CATEDRA | VISITANTE | INVITADO
+ * Prisma enum: PLANTA_TC | PLANTA_MT | OCASIONAL_TC | OCASIONAL_MT | CATEDRA | VISITANTE_TC | VISITANTE_MT | INVITADO
  */
 export const MODALIDADES_ENUM = [
   "PLANTA_TC",
@@ -10,7 +10,8 @@ export const MODALIDADES_ENUM = [
   "OCASIONAL_TC",
   "OCASIONAL_MT",
   "CATEDRA",
-  "VISITANTE",
+  "VISITANTE_TC",
+  "VISITANTE_MT",
   "INVITADO",
 ] as const
 
@@ -21,6 +22,8 @@ export const TIPOS_CARGO = [
   { value: "JEFE_PROGRAMA", label: "Jefe de Programa" },
   { value: "JEFE_DEPARTAMENTO", label: "Jefe de Departamento" },
   { value: "DECANO", label: "Decano" },
+  { value: "ASESOR_VICERRECTORIA", label: "Asesor de Vicerrectoría" },
+  { value: "ASESOR_RECTORIA", label: "Asesor de Rectoría" },
   { value: "COORD_INVESTIGACION", label: "Coordinador de Centro de Investigación" },
   { value: "COORD_EMPRENDIMIENTO", label: "Coordinador de Emprendimiento e Innovación" },
   { value: "COORD_AUTOEVALUACION", label: "Coordinador de Autoevaluación y Calidad" },
@@ -36,15 +39,21 @@ export const TIPOS_CARGO = [
  * - If cargoAdministrativo === true, tipoCargo MUST be specified.
  * - If all booleans are false, the form validates successfully (no errors).
  */
+const MODALIDADES_TEMPORALES = new Set([
+  "OCASIONAL_TC", "OCASIONAL_MT", "VISITANTE_TC", "VISITANTE_MT", "INVITADO",
+])
+
 export const profileSchema = z
   .object({
     modalidad: z.enum(MODALIDADES_ENUM, {
       message: "Debe seleccionar una modalidad.",
     }),
     doctorado: z.boolean(),
+    tituloDoctorado: z.string().max(200, "Máximo 200 caracteres.").nullable().optional(),
     cargoAdministrativo: z.boolean(),
     tipoCargo: z.string().nullable().optional(),
     proyectosActivos: z.boolean(),
+    semanasVinculacion: z.coerce.number().int().min(1, "Mínimo 1 semana.").max(52).nullish(),
   })
   .superRefine((data, ctx) => {
     // Rule 1: CATEDRA cannot have cargo or proyectos
@@ -75,6 +84,7 @@ export const profileSchema = z
         path: ["tipoCargo"],
       })
     }
+
   })
 
 export type ProfileFormData = z.infer<typeof profileSchema>

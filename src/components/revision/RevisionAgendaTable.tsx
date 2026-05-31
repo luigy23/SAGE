@@ -74,10 +74,12 @@ export function RevisionAgendaTable({ items }: { items: AgendaRow[] }) {
                   variant={estadoBadge(a.estado)}
                   className={
                     a.estado === "ENVIADO"
-                      ? "bg-green-600 hover:bg-green-600"
+                      ? "bg-yellow-500 hover:bg-yellow-500"
                       : a.estado === "APROBADO"
-                        ? "bg-blue-600 hover:bg-blue-600"
-                        : ""
+                        ? "bg-green-600 hover:bg-green-600"
+                        : a.estado === "RECHAZADO"
+                          ? "bg-red-600 hover:bg-red-600"
+                          : ""
                   }
                 >
                   {a.estado}

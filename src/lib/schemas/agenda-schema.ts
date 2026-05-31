@@ -1,53 +1,26 @@
 import { z } from "zod"
 
-const horarioStringSchema = z
-  .string()
-  .nullable()
-  .optional()
-  .transform((val) => {
-    if (!val || val.trim() === "") return null
-    return val
-  })
-  .refine(
-    (val) => {
-      if (val === null || val === undefined) return true
-      return /^\d{1,2}:\d{2}-\d{1,2}:\d{2}$/.test(val)
-    },
-    { message: "Formato inválido. Use HH:MM-HH:MM (ej. 08:00-10:00)" }
-  )
-  .refine(
-    (val) => {
-      if (val === null || val === undefined) return true
-      const parts = val.split("-")
-      const inicio = parts[0]?.trim()
-      const fin = parts[1]?.trim()
-      if (!inicio || !fin) return true
-      return inicio < fin
-    },
-    { message: "La hora de fin debe ser posterior a la hora de inicio" }
-  )
-
-export const horarioCursoSchema = z.object({
-  lunes: horarioStringSchema,
-  martes: horarioStringSchema,
-  miercoles: horarioStringSchema,
-  jueves: horarioStringSchema,
-  viernes: horarioStringSchema,
-  sabado: horarioStringSchema,
-  domingo: horarioStringSchema,
-})
-
-export type HorarioCursoFormData = z.infer<typeof horarioCursoSchema>
-
 // Default semestral: 22 semanas (Acuerdo 048). Se sobreescribe vía
 // SUPERADMIN al crear el schema dinámico con `createAgendaSchema(...)`.
 export const DEFAULT_SEMANAS_PERIODO = 22
 
+const FACTOR_POR_TIPO: Record<string, { factorHoras: number; constanteSuma: number }> = {
+  TEORICO: { factorHoras: 2, constanteSuma: 1 },
+  TEORICO_PRACTICO: { factorHoras: 1.5, constanteSuma: 1 },
+  PRACTICO: { factorHoras: 1, constanteSuma: 1 },
+}
+
 export function createCursoAgendaSchema(semanasPeriodo: number = DEFAULT_SEMANAS_PERIODO) {
   return z.object({
+    // FK al catálogo maestro. null cuando el curso se ingresó a mano (no se eligió del catálogo).
+    // Es la única señal real de "este CursoAgenda usa este CursoMaestro" — sostén del safeguard
+    // de borrado en /admin/cursos.
+    cursoMaestroId: z.string().nullable().optional(),
+    // Tipo de curso del catálogo (TEORICO, TEORICO_PRACTICO, PRACTICO). null para cursos manuales.
+    // Controla el factorHoras según Art. 3 Par. 4 Acuerdo 048.
+    tipoCurso: z.enum(["TEORICO", "TEORICO_PRACTICO", "PRACTICO"]).nullable().optional(),
     numeroCurso: z.string().min(1, "El número de curso es obligatorio"),
     nombreCurso: z.string().min(1, "El nombre del curso es obligatorio"),
-    subgrupo: z.string().optional().default(""),
     sede: z.string().optional().default(""),
     horasPresenciales: z.coerce
       .number()
@@ -66,26 +39,21 @@ export function createCursoAgendaSchema(semanasPeriodo: number = DEFAULT_SEMANAS
       .max(semanasPeriodo, `Máximo ${semanasPeriodo} semanas por semestre.`),
 
     dedicacionPeriodo: z.coerce.number().optional().default(0),
-
-    horarios: horarioCursoSchema.default({
-      lunes: null,
-      martes: null,
-      miercoles: null,
-      jueves: null,
-      viernes: null,
-      sabado: null,
-      domingo: null,
-    }),
   }).transform((data) => {
-    const factorPreparacion = 1.5;
-    const horasTutoria = 1;
-    const horasSemanalesCalculadas = (data.horasPresenciales * factorPreparacion) + horasTutoria;
-    const calculoLegalTotal = horasSemanalesCalculadas * data.semanas;
+    // Art. 3 Par. 4 Acuerdo 048: factor varía según tipo de curso.
+    // Usa semanasPeriodo (del closure) en vez de data.semanas para coincidir
+    // exactamente con SilentDedicacionCalc y evitar divergencia en el mensaje de error.
+    // Guard horas > 0 igual al de SilentDedicacionCalc (constanteSuma no aplica si no hay horas).
+    const f = FACTOR_POR_TIPO[data.tipoCurso ?? "TEORICO_PRACTICO"] ?? { factorHoras: 1.5, constanteSuma: 1 }
+    const horasSemanalesCalculadas = data.horasPresenciales > 0
+      ? (data.horasPresenciales * f.factorHoras) + f.constanteSuma
+      : 0
+    const calculoLegalTotal = horasSemanalesCalculadas * semanasPeriodo
 
     return {
       ...data,
       dedicacionPeriodo: calculoLegalTotal
-    };
+    }
   })
 }
 
@@ -113,6 +81,18 @@ export function createActividadSchema(semanasPeriodo: number = DEFAULT_SEMANAS_P
       .min(0, "No puede ser negativo")
       .max(880, "No puede exceder 880 horas en el semestre.")
       .default(0),
+    // Cantidad de unidades para actividades con tope por unidad (Art. 11):
+    // cohortes (Consejería), estudiantes (Asesorías), trabajos (Dirección tesis)
+    cantidadUnidades: z.coerce
+      .number()
+      .int("Debe ser un número entero")
+      .min(0, "No puede ser negativo")
+      .optional()
+      .default(0),
+    // Sede de ejecución (Art. 11). Obligatoria al ENVIAR cuando el catálogo
+    // dice aplicaUnoPorSede=true o topePorUnidad=SEDE. Informativa en el resto
+    // (autocompletada desde docente.sedeBase en el wizard).
+    sede: z.string().nullable().optional().default(null),
   }).transform((data) => {
     // Si el usuario llenó h/sem × semanas, ese cálculo gana; si no, se preserva
     // el `dedicacionPeriodo` ingresado directamente (modo "total semestre").
@@ -164,19 +144,38 @@ export type DocenteFlags = {
   // Art. 10 + Art. 11 Acuerdo 048: cargos exentos del tope del 20% de gestión.
   // Derivado de `Docente.tipoCargo` vía `esCargoExentoGestion20()`.
   excluyeTopeGestion20: boolean;
+  // Art. 3 Par. 1 Acuerdo 048: Jefes de Programa deben orientar mínimo un curso.
+  // Derivado de `Docente.tipoCargo` vía `esJefeDePrograma()`.
+  esJefeDePrograma: boolean;
 }
 
 /**
- * Mapa de topes individuales por actividad (Art. 11 Acuerdo 048).
- * Clave: `${categoria}::${nombre}` (ej: "GESTION::Jefatura de Programa").
- * Valor: tope semestral en horas (`topeSemestralH` del catálogo).
+ * Detalle de tope por actividad del catálogo (Art. 11 Acuerdo 048).
  *
- * Si una actividad no está en el mapa o tiene tope null, se omite la
- * validación individual para esa entrada (comportamiento permisivo:
- * compatible con borradores legacy con nombres libres y con la opción
- * genérica "Otras Actividades Académico-Administrativas").
+ * Tres ramas de validación:
+ *   A) topePorUnidad !== NINGUNA + topeSemestralH set → tope por unidad fijo
+ *      (ej: Consejería = 48h × #cohortes, máx 2)
+ *   B) topePorUnidad !== NINGUNA + topeSemanalHPorUnidad set → tope semanal por unidad
+ *      (ej: Asesoría PP = 2h/sem × #estudiantes; Dirección tesis = 2h/sem × #trabajos)
+ *   C) topePorUnidad === NINGUNA → tope plano semestral (comportamiento original)
  */
-export type TopesActividadesMap = Record<string, number>
+export type ActividadTopeDetalle = {
+  topeSemestralH: number | null
+  topePorUnidad: string  // "NINGUNA" | "COHORTE" | "ESTUDIANTE" | "PROYECTO" | "SEDE"
+  topeSemanalHPorUnidad: number | null
+  unidadMax: number | null
+  cantidadMaxSimultaneos: number | null
+  requiereProyectoAprobado: boolean
+  aplicaUnoPorFacultad: boolean
+  aplicaUnoPorSede: boolean
+  // Art. 11: "Supeditadas a asignación de funciones por parte del Rector mediante resolución".
+  // Cableado en Paso 1 (saneamiento). La validación dura (rechazar el envío
+  // si no hay resolución acreditada) llegará en un paso posterior cuando se
+  // defina cómo capturar la evidencia de la resolución.
+  requiereResolucionRector: boolean
+}
+
+export type TopesActividadesMap = Record<string, ActividadTopeDetalle>
 
 export function topesKey(categoria: "DOCENCIA" | "INVESTIGACION" | "PROYECCION_SOCIAL" | "GESTION", nombre: string): string {
   return `${categoria}::${nombre}`
@@ -189,6 +188,8 @@ export function createAgendaSchema(
   minDocencia: number = 0,
   semanasPeriodo: number = DEFAULT_SEMANAS_PERIODO,
   topesActividades?: TopesActividadesMap,
+  maxInvProySocialCatedra: number | null = null,
+  maxGestionOverride?: number,
 ) {
   return createAgendaWizardBaseSchema(semanasPeriodo).superRefine((data, ctx) => {
     const totalHorasSemestrales = calcularTotalHoras(data);
@@ -196,9 +197,38 @@ export function createAgendaSchema(
     const TOLERANCIA_SEMANAL = 0.5;
     const maxPermitido = (maxHoras + TOLERANCIA_SEMANAL) * semanasPeriodo;
 
+    // 0a. ART. 3 PAR. 1 — Jefes de Programa deben orientar mínimo un curso.
+    // Bloqueo duro al enviar. El warning informativo (sin bloqueo) vive en
+    // `validateAgenda()` para mostrarse en el panel desde el step de Docencia.
+    //
+    // IMPORTANTE: usamos un path sintético (no `["cursos"]`) para que la regla
+    // NO bloquee el avance entre steps del wizard. `handleNext()` llama a
+    // `form.trigger(["cursos", "otrasActividadesDocencia"])` y captura issues
+    // en esos paths; con un path sintético solo se dispara en `form.trigger()`
+    // sin argumentos (envío final). Sigue el patrón de `_horasExcedidas`,
+    // `_minDocenciaInsuficiente`, `_catedraInvPSExcedido`.
+    if (flags.esJefeDePrograma && data.cursos.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "El Acuerdo 048 Art. 3 Par. 1 exige que los Jefes de Programa orienten mínimo un curso. Agregue al menos un curso a su agenda para enviar.",
+        path: ["_jefeProgramaSinCursos"],
+      });
+    }
+
+    // 0. SEDE DE CURSO OBLIGATORIA al enviar (Acuerdo 048 + formato oficial FO-19).
+    // En borrador es opcional para no bloquear el flujo de carga progresiva.
+    data.cursos.forEach((curso, idx) => {
+      if (!curso.sede || curso.sede.trim() === "") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "La sede del curso es obligatoria.",
+          path: ["cursos", idx, "sede"],
+        });
+      }
+    });
+
     // 1. TOPE MÁXIMO (Acuerdo 048 Arts. 4a/4b/4c/4d)
-    // `maxHoras` es el límite superior contractual, NO una obligación de
-    // igualdad. El docente puede registrar menos horas que el tope.
     if (esEstricto && totalHorasSemestrales > maxPermitido) {
       const exceso = Math.round((totalHorasSemestrales - maxPermitido) * 10) / 10;
       ctx.addIssue({
@@ -208,9 +238,7 @@ export function createAgendaSchema(
       });
     }
 
-    // 2. MÍNIMO DE DOCENCIA (Art. 3) — se evalúa sobre las horas de docencia
-    // (cursos + otras actividades de docencia), no sobre el total de la agenda.
-    // `minDocencia` ya viene ajustado según `proyectosActivos` (Art. 3 Par. 1).
+    // 2. MÍNIMO DE DOCENCIA (Art. 3)
     if (minDocencia > 0) {
       const horasDocencia =
         data.cursos.reduce((acc, c) => acc + (Number(c.dedicacionPeriodo) || 0), 0) +
@@ -232,7 +260,6 @@ export function createAgendaSchema(
     // 3. ARTÍCULO 10: Gestión Académico Administrativa
     const horasGestion = data.actividadesGestion.reduce((acc, item) => acc + (Number(item.dedicacionPeriodo) || 0), 0);
 
-    // Sin cargo administrativo no se pueden registrar horas de gestión.
     if (horasGestion > 0 && !flags.cargoAdministrativo) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -241,49 +268,116 @@ export function createAgendaSchema(
       });
     }
 
-    // Art. 10: el límite del 20% aplica a TODOS los cargos administrativos
-    // EXCEPTO Jefes de Programa, Jefes de Departamento, Asesores de Vicerrectoría,
-    // Asesores de Rectoría y Decanos (esos se rigen por el Art. 11).
     if (flags.cargoAdministrativo && !flags.excluyeTopeGestion20) {
-      const limiteGestionSemestral = maxHorasSemestrales * 0.20;
+      const limiteGestionSemestral = maxGestionOverride ?? maxHorasSemestrales * 0.20;
       if (horasGestion > limiteGestionSemestral) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `Las horas de gestión semestrales (${horasGestion}h) no pueden exceder el 20% de su carga laboral (${limiteGestionSemestral}h).`,
+          message: `Las horas de gestión semestrales (${horasGestion}h) no pueden exceder el límite permitido de su carga laboral (${limiteGestionSemestral}h).`,
           path: ["actividadesGestion"],
         });
       }
     }
 
-    // NOTA: El Art. 4 Par. 3 (vinculación a grupo de investigación para
-    // docentes con doctorado) es informativo en SAGE — se muestra como nota
-    // sutil en la UI, no bloquea el envío. La revisión final la realiza el
-    // jefe de programa en el monitoreo.
-
     // 4. ART. 11: Topes individuales por actividad del catálogo.
-    // Solo aplica a las 4 categorías de actividades del Art. 11 (los cursos
-    // tienen su propio catálogo en CursoMaestro, no aplican aquí).
-    // Si la actividad no está en el mapa (texto libre legacy o genérico sin
-    // tope), se omite la validación — permisivo por diseño.
+    //
+    // Tres ramas según la naturaleza del tope:
+    //
+    //   RAMA A — topePorUnidad !== NINGUNA y topeSemestralH set:
+    //     Tope semestral POR UNIDAD (ej: Consejería = 48h/cohorte, máx 2 cohortes).
+    //     maxPermitido = topeSemestralH × min(cantidadUnidades || 1, unidadMax)
+    //
+    //   RAMA B — topePorUnidad !== NINGUNA y topeSemanalHPorUnidad set:
+    //     Tope semanal POR UNIDAD (ej: Dirección tesis = 2h/sem × #trabajos, máx 3).
+    //     maxPermitido = topeSemanalHPorUnidad × min(cantidadUnidades, cantMaxSim) × semanas
+    //     También valida que cantidadUnidades no supere cantidadMaxSimultaneos.
+    //
+    //   RAMA C — topePorUnidad === NINGUNA:
+    //     Tope plano semestral. Comportamiento original.
+    //
+    // Si la actividad no está en el mapa (texto libre legacy o genérico sin tope), se omite.
     if (topesActividades) {
       const validarTopesArray = (
-        arr: { nombre?: string; dedicacionPeriodo?: number }[],
+        arr: { nombre?: string; dedicacionPeriodo?: number; cantidadUnidades?: number; sede?: string | null }[],
         arrayName: "otrasActividadesDocencia" | "actividadesInvestigacion" | "actividadesProyeccionSocial" | "actividadesGestion",
         categoria: "DOCENCIA" | "INVESTIGACION" | "PROYECCION_SOCIAL" | "GESTION",
       ) => {
         arr.forEach((act, idx) => {
           const nombre = act.nombre?.trim()
           if (!nombre) return
+
           const tope = topesActividades[topesKey(categoria, nombre)]
-          if (tope === undefined || tope === null) return
+          if (!tope) return
+
           const dedicacion = Number(act.dedicacionPeriodo) || 0
-          if (dedicacion > tope) {
-            const exceso = Math.round((dedicacion - tope) * 10) / 10
+          const cantidadUnidades = Number(act.cantidadUnidades) || 0
+
+          // requiereProyectoAprobado — independiente de la rama de topes
+          if (tope.requiereProyectoAprobado && !flags.proyectosActivos) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
-              message: `"${nombre}" excede su tope individual del Art. 11 (máx ${tope}h). Actual: ${dedicacion}h. Reduzca las horas en ${exceso}h o seleccione otra actividad.`,
-              path: [arrayName, idx, "dedicacionPeriodo"],
+              message: `"${nombre}" requiere que tenga un proyecto aprobado activo (Art. 3 Par. 1). Active el flag en su perfil si corresponde.`,
+              path: [arrayName, idx, "nombre"],
             })
+          }
+
+          // Sede OBLIGATORIA cuando la actividad es "Uno por Sede" o su tope se
+          // calcula por sede. Sin sede no se puede enforzar Art. 11 con precisión.
+          if ((tope.aplicaUnoPorSede || tope.topePorUnidad === "SEDE") && !act.sede) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `"${nombre}" requiere indicar la sede de ejecución (Art. 11 — "uno por sede").`,
+              path: [arrayName, idx, "sede"],
+            })
+          }
+
+          if (tope.topePorUnidad !== "NINGUNA" && tope.topeSemestralH !== null) {
+            // RAMA A: tope semestral por unidad (Consejería Académica)
+            const unidadesEfectivas = tope.unidadMax !== null
+              ? Math.min(cantidadUnidades || 1, tope.unidadMax)
+              : (cantidadUnidades || 1)
+            const maxTotal = tope.topeSemestralH * unidadesEfectivas
+            if (dedicacion > maxTotal) {
+              const exceso = Math.round((dedicacion - maxTotal) * 10) / 10
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `"${nombre}" excede el tope del Art. 11 para ${unidadesEfectivas} ${_unidadLabel(tope.topePorUnidad)}(s): máx ${maxTotal}h (${tope.topeSemestralH}h × ${unidadesEfectivas}). Actual: ${dedicacion}h. Exceso: ${exceso}h.`,
+                path: [arrayName, idx, "dedicacionPeriodo"],
+              })
+            }
+          } else if (tope.topePorUnidad !== "NINGUNA" && tope.topeSemanalHPorUnidad !== null) {
+            // RAMA B: tope semanal por unidad (Asesorías, Dirección tesis)
+            if (tope.cantidadMaxSimultaneos !== null && cantidadUnidades > tope.cantidadMaxSimultaneos) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `"${nombre}" no puede tener más de ${tope.cantidadMaxSimultaneos} ${_unidadLabel(tope.topePorUnidad)}(s) simultáneos (Art. 11).`,
+                path: [arrayName, idx, "cantidadUnidades"],
+              })
+            }
+            if (cantidadUnidades > 0) {
+              const unidadesEfectivas = tope.cantidadMaxSimultaneos !== null
+                ? Math.min(cantidadUnidades, tope.cantidadMaxSimultaneos)
+                : cantidadUnidades
+              const maxTotal = tope.topeSemanalHPorUnidad * unidadesEfectivas * semanasPeriodo
+              if (dedicacion > maxTotal) {
+                const exceso = Math.round((dedicacion - maxTotal) * 10) / 10
+                ctx.addIssue({
+                  code: z.ZodIssueCode.custom,
+                  message: `"${nombre}" excede el tope del Art. 11: máx ${maxTotal}h (${tope.topeSemanalHPorUnidad}h/sem × ${unidadesEfectivas} ${_unidadLabel(tope.topePorUnidad)}(s) × ${semanasPeriodo} sem). Actual: ${dedicacion}h. Exceso: ${exceso}h.`,
+                  path: [arrayName, idx, "dedicacionPeriodo"],
+                })
+              }
+            }
+          } else if (tope.topePorUnidad === "NINGUNA" && tope.topeSemestralH !== null) {
+            // RAMA C: tope plano semestral (comportamiento original)
+            if (dedicacion > tope.topeSemestralH) {
+              const exceso = Math.round((dedicacion - tope.topeSemestralH) * 10) / 10
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `"${nombre}" excede su tope individual del Art. 11 (máx ${tope.topeSemestralH}h). Actual: ${dedicacion}h. Reduzca las horas en ${exceso}h o seleccione otra actividad.`,
+                path: [arrayName, idx, "dedicacionPeriodo"],
+              })
+            }
           }
         })
       }
@@ -293,35 +387,56 @@ export function createAgendaSchema(
       validarTopesArray(data.actividadesProyeccionSocial, "actividadesProyeccionSocial", "PROYECCION_SOCIAL")
       validarTopesArray(data.actividadesGestion, "actividadesGestion", "GESTION")
     }
+
+    // 5. ART. 3 PAR. 2: Tope de cátedra en Investigación + Proyección Social combinadas.
+    if (maxInvProySocialCatedra !== null) {
+      const invPS =
+        data.actividadesInvestigacion.reduce(
+          (acc, a) => acc + (Number(a.dedicacionPeriodo) || 0), 0
+        ) +
+        data.actividadesProyeccionSocial.reduce(
+          (acc, a) => acc + (Number(a.dedicacionPeriodo) || 0), 0
+        )
+      if (invPS > maxInvProySocialCatedra) {
+        const exceso = Math.round((invPS - maxInvProySocialCatedra) * 10) / 10
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `La suma de Investigación + Proyección Social (${invPS}h) excede en ${exceso}h el tope de cátedra (${maxInvProySocialCatedra}h = 4h/sem × ${semanasPeriodo} sem). Art. 3 Par. 2 Acuerdo 048.`,
+          path: ["_catedraInvPSExcedido"],
+        })
+      }
+    }
   });
+}
+
+function _unidadLabel(topePorUnidad: string): string {
+  const labels: Record<string, string> = {
+    COHORTE: "cohorte",
+    ESTUDIANTE: "estudiante",
+    PROYECTO: "trabajo",
+    SEDE: "sede",
+    FACULTAD: "facultad",
+  }
+  return labels[topePorUnidad] ?? topePorUnidad.toLowerCase()
 }
 
 export interface AgendaWizardPayload {
   periodo: string
   enviar: boolean
+  semanasAgenda: number
   data: AgendaWizardFormData
 }
 
-export const EMPTY_HORARIO: HorarioCursoFormData = {
-  lunes: null,
-  martes: null,
-  miercoles: null,
-  jueves: null,
-  viernes: null,
-  sabado: null,
-  domingo: null,
-}
-
 export const EMPTY_CURSO: CursoAgendaFormData = {
+  cursoMaestroId: null,
+  tipoCurso: null,
   numeroCurso: "",
   nombreCurso: "",
-  subgrupo: "",
   sede: "",
   horasPresenciales: 0,
   creditos: 0,
   semanas: 0,
   dedicacionPeriodo: 0,
-  horarios: { ...EMPTY_HORARIO },
 }
 
 export const EMPTY_ACTIVIDAD: ActividadFormData = {
@@ -330,6 +445,8 @@ export const EMPTY_ACTIVIDAD: ActividadFormData = {
   horasSemanales: 0,
   semanas: 0,
   dedicacionPeriodo: 0,
+  cantidadUnidades: 0,
+  sede: null,
 }
 
 export const DEFAULT_FORM_VALUES: AgendaWizardFormData = {

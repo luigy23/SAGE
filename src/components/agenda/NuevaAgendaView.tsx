@@ -5,6 +5,8 @@ import type { Docente } from "@/generated/prisma/client"
 import { AgendaWizardForm } from "@/components/agenda/AgendaWizardForm"
 import type { CursoMaestroOption } from "@/components/agenda/CursoMaestroSelector"
 import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatalogoSelector"
+import type { FormulasCursos } from "@/lib/actions/formulas"
+import type { AgendaLimits } from "@/lib/validations/agenda-rules"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -31,12 +33,18 @@ export function NuevaAgendaView({
   catalogoActividades,
   periodo,
   semanasPeriodo,
+  semanasMaximas,
+  formulas,
+  agendaLimits,
 }: {
   docente: Docente
   cursosMaestros: CursoMaestroOption[]
   catalogoActividades: ActividadCatalogoOption[]
   periodo: string
   semanasPeriodo: number
+  semanasMaximas?: number
+  formulas?: FormulasCursos
+  agendaLimits?: AgendaLimits
 }) {
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
 
@@ -51,6 +59,9 @@ export function NuevaAgendaView({
         catalogoActividades={catalogoActividades}
         periodo={periodo}
         semanasPeriodo={semanasPeriodo}
+        semanasMaximas={semanasMaximas}
+        formulas={formulas}
+        agendaLimits={agendaLimits}
       />
     )
   }

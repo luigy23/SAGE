@@ -706,3 +706,46 @@ Art. 5 Par. 2 distingue 60 / 45 minutos por jornada. El modelo `HorarioCurso` so
 6. **Acción de rehabilitación**: server action + modal con motivo obligatorio + audit trail.
 7. **Tests de regresión**: snapshot del comportamiento actual antes de mover constantes a DB.
 8. **Corregir los bugs** del §8 antes o durante el refactor.
+
+---
+
+## 10. Decisiones interpretativas adoptadas
+
+### 10.1 Art. 4d — Regla mixta de sede para catedráticos (16 vs 19 h/sem)
+
+El Art. 4d permite **19 h/sem** a catedráticos "vinculados para orientar cursos en las sedes de Pitalito, Garzón y La Plata", contra **16 h/sem** en sede principal. La norma es ambigua: ¿"vinculado" significa contrato (sedeBase) o ejecución (sede del curso)?
+
+**Interpretación adoptada en SAGE:** combinación OR.
+
+- `sedeBase ∈ {PITALITO, GARZON, LA_PLATA}` → **19 h/sem** (piso por contrato/concurso, alineado con Art. 4 Par. 1).
+- `>50% de las horas presenciales del semestre en sedes regionales` → **19 h/sem** (override permisivo: refleja "vinculado para orientar cursos en…").
+- Si no se cumple ninguna → **16 h/sem**.
+
+**Implementación:** `esCatedraConTopeRegional()` en `src/lib/validations/agenda-rules.ts`. Reutilizado por `getCargaSemestralCopy()` en `src/lib/utils/modalidad.ts`. Cuando la regla mixta eleva el tope por cursos (y no por sedeBase), `validateAgenda()` emite un `ValidationItem` informativo para que el docente entienda por qué se autorizan más horas.
+
+### 10.2 Sede de actividades no-curso (Art. 11)
+
+Tras la migración `20260524000000_sede_en_actividades`, los modelos `ActividadDocencia`, `ActividadInvestigacion`, `ActividadProyeccionSocial` y `ActividadGestion` tienen columna `sede Sede?` (nullable).
+
+- **Sede obligatoria al ENVIAR** solo cuando el catálogo dice `aplicaUnoPorSede=true` o `topePorUnidad=SEDE`. En otros casos queda `null` y no participa en validaciones de sede.
+- El blindaje DB pasó de `@@unique([agendaId, nombre])` a `@@unique([agendaId, nombre, sede])`. Como PostgreSQL considera `NULL ≠ NULL` para unique constraints, **el blindaje anti-clonación para actividades sin sede vive ahora en código** (regla "duplicados internos" en `validateAgenda()` + refine del schema Zod).
+- El cross-agenda check del Art. 11 (otros docentes ya tienen la actividad para la misma sede) usa primero `act.sede`; si está ausente (datos pre-migración), cae a `docente.sedeBase`.
+
+---
+
+## 11. Flags del catálogo SIN enforcement actual (deuda técnica)
+
+Los siguientes flags del modelo `CatalogoActividad` se renderizan como badges informativos en el wizard pero **no se validan**. Cada uno es candidato para un PR posterior.
+
+| Flag | Hoy | Falta |
+|------|-----|-------|
+| `restriccionTemporalAnos` | Badge "Máx X año(s)" en `ActividadCatalogoSelector` | Tracker histórico entre períodos: registrar año de inicio de la actividad por docente y rechazar al superar el límite. Requiere nueva tabla `AsignacionActividadHistorica` o campo en `ActividadX`. |
+| `aplicaSoloAModalidades` (Modalidad[]) | Array ignorado | Validador simple: rechazar actividad si la modalidad del docente no está en el array. Una línea en `validateAgenda()` + el refine de envío. |
+| `aplicaAPregrado` / `aplicaAPosgrado` | Booleans ignorados | Requiere que `CursoMaestro` (o algún campo derivado) clasifique cada curso como pregrado o posgrado. Hoy no existe ese flag y el FO-19 no lo solicita explícitamente. |
+| `requiereResolucionRector` | Badge "Requiere resolución del Rector" | Captura de número/PDF de resolución por actividad. Validación admin (no autoservicio). Requiere extender el modelo de actividad con `numeroResolucion: String?` y `archivoResolucion: String?` (o referencia a S3). |
+
+**Prioridad sugerida:**
+1. `aplicaSoloAModalidades` — esfuerzo mínimo, beneficio claro.
+2. `requiereResolucionRector` — alto impacto regulatorio.
+3. `aplicaAPregrado/aplicaAPosgrado` — bajo, hasta que el catálogo maestro de cursos lo soporte.
+4. `restriccionTemporalAnos` — requiere modelo histórico, mayor inversión.

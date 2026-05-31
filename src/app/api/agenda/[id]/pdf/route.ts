@@ -22,7 +22,6 @@ export async function GET(
     include: {
       docente: true,
       cursos: {
-        include: { horarios: true },
         orderBy: { numeroCurso: "asc" },
       },
       otrasActividadesDocencia: { orderBy: { nombre: "asc" } },
@@ -36,13 +35,13 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
-  const bytes = await renderFo19Pdf(agenda as AgendaConRelaciones)
+  const bytes = await renderFo19Pdf(agenda as AgendaConRelaciones, agenda.estado)
 
   const safePeriodo = agenda.periodo.replace(/[^a-zA-Z0-9._-]/g, "_")
   const safeNombre = agenda.docente.nombre.replace(/[^a-zA-Z0-9._-]/g, "_")
   const filename = `FO-19_${safePeriodo}_${safeNombre}.pdf`
 
-  return new NextResponse(new Uint8Array(bytes) as BodyInit, {
+  return new NextResponse(bytes as unknown as BodyInit, {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="${filename}"`,

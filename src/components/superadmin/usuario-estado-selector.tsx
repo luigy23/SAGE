@@ -13,12 +13,13 @@ import { toast } from "sonner"
 import { cambiarEstadoCuenta } from "@/lib/actions/superadmin-actions"
 import type { EstadoCuenta } from "@/generated/prisma/client"
 
-const ESTADOS: EstadoCuenta[] = ["PENDIENTE", "ACTIVO", "INACTIVO"]
+const ESTADOS: EstadoCuenta[] = ["PENDIENTE", "ACTIVO", "INACTIVO", "RECHAZADO"]
 
 const VARIANT: Record<EstadoCuenta, "default" | "secondary" | "outline" | "destructive"> = {
   PENDIENTE: "secondary",
   ACTIVO: "default",
   INACTIVO: "destructive",
+  RECHAZADO: "destructive",
 }
 
 export function UsuarioEstadoSelector({

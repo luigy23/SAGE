@@ -74,20 +74,6 @@ const parametrosGlobales = [
     articuloOrigen: "Acuerdo 048/2018 Art. 3 Par. 3",
   },
   {
-    clave: "min_estudiantes_subgrupo",
-    valor: "10",
-    tipo: "int",
-    descripcion: "Mínimo de estudiantes por subgrupo en cursos divididos",
-    articuloOrigen: "Acuerdo 048/2018 Art. 7",
-  },
-  {
-    clave: "umbral_excepcion_subgrupo",
-    valor: "20",
-    tipo: "int",
-    descripcion: "Umbral por debajo del cual no aplica el mínimo de subgrupo",
-    articuloOrigen: "Acuerdo 048/2018 Art. 7",
-  },
-  {
     clave: "factor_preparacion_default",
     valor: "1.5",
     tipo: "float",
@@ -196,12 +182,23 @@ const parametrosModalidad = [
     minDocenciaConProyectos: null,
     maxInvProySocSemanal: 4,
   },
-  // Visitante — Art. 4e: "según tipo de dedicación" (derivado).
+  // Visitante TC — Art. 4e: "según tipo de dedicación" (derivado).
   // El mínimo 60 % docencia (Art. 3 Par. 3) se calcula sobre el total derivado, no aquí.
   {
-    modalidad: "VISITANTE" as const,
+    modalidad: "VISITANTE_TC" as const,
     sedeAplicable: null,
     horasSemanalMax: 40,
+    horasSemestralMax: null as number | null,
+    horasSemestralEstricto: false,
+    minDocencia: null,
+    minDocenciaConProyectos: null,
+    maxInvProySocSemanal: null,
+  },
+  // Visitante MT — Art. 4e: medio tiempo, según tipo de dedicación (derivado).
+  {
+    modalidad: "VISITANTE_MT" as const,
+    sedeAplicable: null,
+    horasSemanalMax: 20,
     horasSemestralMax: null as number | null,
     horasSemestralEstricto: false,
     minDocencia: null,
@@ -350,6 +347,7 @@ const catalogoActividades = [
     nombre: "Comité Autoevaluación y Acreditación del Programa",
     topeSemestralH: 600,
     descripcion: "Por período académico y por programa",
+    aplicaUnoPorPrograma: true,
     articuloOrigen: "Art. 11 — Docencia",
   },
   {
@@ -555,7 +553,19 @@ const catalogoActividades = [
     categoria: "PROYECCION_SOCIAL" as const,
     nombre: "Coordinación de prácticas y pasantías de Licenciaturas",
     topeSemestralH: 132,
-    descripcion: "+44h adicionales al coordinador de facultad",
+    descripcion: "Hasta 132 horas por docente coordinador de prácticas a nivel de programa.",
+    articuloOrigen: "Art. 11 — Proyección Social",
+  },
+  {
+    // Art. 11: "Prácticas en programas de Licenciatura hasta 132 horas
+    // y al coordinador de facultad hasta 44 horas adicionales."
+    // Esta entrada modela explícitamente las 44h adicionales del coordinador
+    // a nivel de FACULTAD (no de programa). Solo un docente por facultad.
+    categoria: "PROYECCION_SOCIAL" as const,
+    nombre: "Coordinación de prácticas de Licenciatura — Coordinador de Facultad (44h adicionales)",
+    topeSemestralH: 44,
+    aplicaUnoPorFacultad: true,
+    descripcion: "44 horas adicionales para el coordinador de prácticas de Licenciatura a nivel de Facultad. Solo aplica a un docente por Facultad.",
     articuloOrigen: "Art. 11 — Proyección Social",
   },
   {
@@ -596,15 +606,16 @@ const catalogoActividades = [
     categoria: "GESTION" as const,
     nombre: "Asesoría de Vicerrectoría",
     topeSemestralH: 440,
-    descripcion: "Hasta 440 horas por dependencia.",
+    requiereResolucionRector: true,
+    descripcion: "Hasta 440 horas por dependencia. Supeditadas a asignación de funciones por parte del Rector mediante resolución.",
     articuloOrigen: "Art. 11 — Administrativas",
   },
   {
     categoria: "GESTION" as const,
     nombre: "Asesoría de Rectoría",
-    topeSemestralH: 880,
+    topeSemestralH: 440,
     requiereResolucionRector: true,
-    descripcion: "Supeditado a resolución del Rector. Tope máximo institucional como referencia.",
+    descripcion: "Hasta 440 horas por dependencia. Supeditadas a asignación de funciones por parte del Rector mediante resolución.",
     articuloOrigen: "Art. 11 — Administrativas",
   },
   {
@@ -625,6 +636,8 @@ const catalogoActividades = [
     categoria: "GESTION" as const,
     nombre: "Coordinación de programas en Sedes Regionales",
     topeSemestralH: 132,
+    requiereResolucionRector: true,
+    descripcion: "Hasta 132 horas. Supeditadas a asignación de funciones por parte del Rector mediante resolución.",
     articuloOrigen: "Art. 11 — Administrativas",
   },
   {
@@ -696,6 +709,15 @@ async function upsertWhereNull<T extends { id: string }>(
 
 async function main() {
   console.log("🌱 Sembrando reglas paramétricas (Acuerdo 048/2018, 033/2024)...\n")
+
+  // 0. Limpieza de parámetros obsoletos (TAREA ZERO: erradicación de subgrupos)
+  const clavesObsoletas = ["min_estudiantes_subgrupo", "umbral_excepcion_subgrupo"]
+  const cleanup = await prisma.parametroGlobal.deleteMany({
+    where: { clave: { in: clavesObsoletas } },
+  })
+  if (cleanup.count > 0) {
+    console.log(`✓ ${cleanup.count} parámetros obsoletos eliminados (${clavesObsoletas.join(", ")})`)
+  }
 
   // 1. Parámetros globales
   for (const p of parametrosGlobales) {
@@ -891,7 +913,7 @@ async function main() {
 
   // 7. Usuario SUPERADMIN de prueba
   const superadminEmail = "superadmin@usco.edu.co"
-  const superadminPassword = "SuperAdmin123!"
+  const superadminPassword = process.env.SUPERADMIN_PASSWORD ?? "SuperAdmin123!"
   const passwordHash = await bcrypt.hash(superadminPassword, 10)
 
   const superadmin = await prisma.docente.upsert({
@@ -923,6 +945,20 @@ async function main() {
 
   console.log(`✓ SUPERADMIN: ${superadmin.email}`)
   console.log(`   Password: ${superadminPassword}  (cámbiala tras primer login)`)
+
+  // 8. Período académico inicial
+  const periodoInicial = await prisma.periodoAcademico.upsert({
+    where: { nombre: "2026-1" },
+    create: {
+      nombre: "2026-1",
+      fechaInicio: new Date("2026-02-01"),
+      fechaFin: new Date("2026-07-15"),
+      estado: "ABIERTO",
+    },
+    update: {},
+  })
+  console.log(`✓ Período inicial: ${periodoInicial.nombre} (${periodoInicial.estado})`)
+  console.log(`   Configurá las ventanas de agenda/monitoreo desde /admin/periodos`)
 
   console.log("\n🎉 Seed completado.")
 }

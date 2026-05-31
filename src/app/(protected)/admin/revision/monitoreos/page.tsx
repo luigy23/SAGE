@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ClipboardCheck } from "lucide-react"
 import { listMonitoreosParaRevisar } from "@/lib/actions/revision"
+import { getPeriodos } from "@/lib/actions/periodo-actions"
 import { parseRevisionFilters } from "@/lib/types/revision"
 import { RevisionFilters } from "@/components/revision/RevisionFilters"
 import { RevisionPagination } from "@/components/revision/RevisionPagination"
@@ -11,7 +12,7 @@ export default async function RevisionMonitoreosPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const sp = await searchParams
+  const [sp, periodos] = await Promise.all([searchParams, getPeriodos()])
   const filters = parseRevisionFilters(sp)
   const data = await listMonitoreosParaRevisar(filters)
 
@@ -24,11 +25,10 @@ export default async function RevisionMonitoreosPage({
             Monitoreos para revisar
           </CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">
-            Lista paginada de monitoreos. Por defecto se muestran los que están en estado{" "}
-            <span className="font-mono">ENVIADO</span>.
+            Lista paginada de monitoreos. Usa los filtros para acotar por estado, periodo, modalidad o sede.
           </p>
         </div>
-        <RevisionFilters />
+        <RevisionFilters periodos={periodos.map((p) => ({ nombre: p.nombre, estado: p.estado }))} />
       </CardHeader>
       <CardContent className="space-y-4">
         <RevisionMonitoreoTable items={data.items} />

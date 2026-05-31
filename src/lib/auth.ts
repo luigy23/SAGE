@@ -22,6 +22,7 @@ declare module "next-auth" {
       doctorado: boolean
       cargoAdministrativo: boolean
       proyectosActivos: boolean
+      estadoCuenta: string
     }
   }
 
@@ -37,6 +38,7 @@ declare module "next-auth" {
     doctorado: boolean
     cargoAdministrativo: boolean
     proyectosActivos: boolean
+    estadoCuenta: string
   }
 }
 
@@ -51,6 +53,7 @@ declare module "next-auth/jwt" {
     doctorado: boolean
     cargoAdministrativo: boolean
     proyectosActivos: boolean
+    estadoCuenta: string
   }
 }
 
@@ -98,6 +101,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
           doctorado: docente.doctorado,
           cargoAdministrativo: docente.cargoAdministrativo,
           proyectosActivos: docente.proyectosActivos,
+          estadoCuenta: docente.estadoCuenta,
         }
       },
     }),
@@ -119,6 +123,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         token.doctorado = user.doctorado
         token.cargoAdministrativo = user.cargoAdministrativo
         token.proyectosActivos = user.proyectosActivos
+        token.estadoCuenta = user.estadoCuenta
       }
       return token
     },
@@ -134,6 +139,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         session.user.doctorado = token.doctorado
         session.user.cargoAdministrativo = token.cargoAdministrativo
         session.user.proyectosActivos = token.proyectosActivos
+        session.user.estadoCuenta = token.estadoCuenta
       }
       return session
     },

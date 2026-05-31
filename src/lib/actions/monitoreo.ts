@@ -3,6 +3,9 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { validarVentanaMonitoreo } from "@/lib/actions/_utils/ventana-periodo"
+import { registrarAuditoria } from "@/lib/audit"
+import type { Rol } from "@/generated/prisma/client"
 
 // ========================================
 // Helpers
@@ -32,7 +35,7 @@ async function getOwnedBorradorMonitoreo(monitoreoId: string, userId: string) {
 // ========================================
 
 /**
- * Crea un Monitoreo BORRADOR a partir de una AgendaSemestral ENVIADA.
+ * Crea un Monitoreo BORRADOR a partir de una AgendaSemestral APROBADA.
  * Pre-siembra un Reporte* por cada item de la agenda con
  * `horasEjecutadas = dedicacionPeriodo` (asume cumplimiento exacto;
  * el docente ajustará lo que sea distinto).
@@ -55,8 +58,8 @@ export async function crearMonitoreoAction(agendaId: string) {
   if (!agenda || agenda.docenteId !== user.id) {
     return { error: "Agenda no encontrada." }
   }
-  if (agenda.estado !== "ENVIADO") {
-    return { error: "Solo se puede monitorear una agenda enviada." }
+  if (agenda.estado !== "APROBADO") {
+    return { error: "Tu agenda debe estar APROBADA por el administrador antes de crear el monitoreo." }
   }
 
   // Verificar que no exista ya un monitoreo para esta agenda
@@ -65,6 +68,28 @@ export async function crearMonitoreoAction(agendaId: string) {
   })
   if (existente) {
     return { success: true, monitoreoId: existente.id }
+  }
+
+  // Verificar ventana FO-20 del período (solo si el período está activo).
+  // Si el período está CERRADO se permite igualmente — el docente tiene derecho a
+  // iniciar monitoreo de una agenda enviada aunque el semestre ya haya terminado.
+  const periodoRow = await prisma.periodoAcademico.findFirst({
+    where: { nombre: agenda.periodo, estado: "ABIERTO" },
+    select: { monitoreoDesde: true, monitoreoHasta: true },
+  })
+  if (periodoRow) {
+    if (!periodoRow.monitoreoDesde || !periodoRow.monitoreoHasta) {
+      return { error: "La ventana de monitoreo aún no ha sido configurada para este período. Contacta al administrador." }
+    }
+    const now = new Date()
+    if (now < periodoRow.monitoreoDesde) {
+      const abre = periodoRow.monitoreoDesde.toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })
+      return { error: `La ventana de entrega de monitoreo aún no ha abierto. Abre el ${abre}.` }
+    }
+    if (now > periodoRow.monitoreoHasta) {
+      const cerro = periodoRow.monitoreoHasta.toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })
+      return { error: `La ventana de entrega de monitoreo cerró el ${cerro}.` }
+    }
   }
 
   const monitoreo = await prisma.monitoreo.create({
@@ -247,9 +272,24 @@ export async function enviarMonitoreoAction(monitoreoId: string) {
   const result = await getOwnedBorradorMonitoreo(monitoreoId, user.id)
   if ("error" in result) return result
 
+  const ventanaError = await validarVentanaMonitoreo(result.monitoreo.periodo)
+  if (ventanaError) return ventanaError
+
   await prisma.monitoreo.update({
     where: { id: monitoreoId },
     data: { estado: "ENVIADO" },
+  })
+
+  await registrarAuditoria({
+    actorId:     user.id,
+    actorRol:    user.rol as Rol,
+    actorNombre: user.name ?? user.email ?? user.id,
+    entidad:     "MONITOREO",
+    accion:      "CAMBIAR_ESTADO",
+    recursoId:   monitoreoId,
+    recursoDesc: `Monitoreo ${result.monitoreo.periodo}`,
+    antes:       { estado: "BORRADOR" },
+    despues:     { estado: "ENVIADO" },
   })
 
   revalidatePath(`/monitoreo/${monitoreoId}`)

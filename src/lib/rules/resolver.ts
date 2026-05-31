@@ -19,6 +19,7 @@ import type {
   TipoCurso,
 } from "@/generated/prisma/client"
 import type { AgendaLimits } from "@/lib/validations/agenda-rules"
+import { SEDES_CATEDRA_EXTENDIDA } from "@/lib/utils/sede"
 import { esCargoExentoGestion20 } from "@/lib/utils/cargo"
 
 // ========================================
@@ -92,10 +93,7 @@ function fallbackModalidad(
       }
     case "CATEDRA": {
       // Art. 4d: "podrán laborar HASTA 16 (Neiva) / 19 (regional) horas semanales" — tope máximo derivado
-      const isRegional =
-        sedeBase === "PITALITO" ||
-        sedeBase === "GARZON" ||
-        sedeBase === "LA_PLATA"
+      const isRegional = sedeBase !== null && SEDES_CATEDRA_EXTENDIDA.includes(sedeBase)
       const horasSemanalMax = isRegional ? 19 : 16
       return {
         horasSemanalMax,
@@ -107,10 +105,21 @@ function fallbackModalidad(
         fuente: "fallback-048",
       }
     }
-    case "VISITANTE":
-      // Art. 4e: "según tipo de dedicación" — derivado del semanal
+    case "VISITANTE_TC":
+      // Art. 4e: "según tipo de dedicación — tiempo completo" — derivado del semanal
       return {
         horasSemanalMax: 40,
+        horasSemestralMax: null,
+        horasSemestralEstricto: false,
+        minDocencia: null,
+        minDocenciaConProyectos: null,
+        maxInvProySocSemanal: null,
+        fuente: "fallback-048",
+      }
+    case "VISITANTE_MT":
+      // Art. 4e: "según tipo de dedicación — medio tiempo" — derivado del semanal
+      return {
+        horasSemanalMax: 20,
         horasSemestralMax: null,
         horasSemestralEstricto: false,
         minDocencia: null,
@@ -209,7 +218,8 @@ const FALLBACK_GLOBALES: Omit<ParametrosGlobales, "fuente"> = {
 }
 
 export async function resolveGlobales(
-  periodoId: string | null = null
+  periodoId: string | null = null,
+  semanasFromDates?: number
 ): Promise<ParametrosGlobales> {
   const cacheKey = `params:globales:${periodoId ?? "default"}`
 
@@ -241,7 +251,7 @@ export async function resolveGlobales(
     }
 
     const result: ParametrosGlobales = {
-      semanasPeriodo: get("semanas_periodo", FALLBACK_GLOBALES.semanasPeriodo, (s) => parseInt(s, 10)),
+      semanasPeriodo: get("semanas_periodo", semanasFromDates ?? FALLBACK_GLOBALES.semanasPeriodo, (s) => parseInt(s, 10)),
       horasPorCredito: get("horas_por_credito", FALLBACK_GLOBALES.horasPorCredito, (s) => parseInt(s, 10)),
       toleranciaValidacionSemanal: get("tolerancia_validacion_semanal", FALLBACK_GLOBALES.toleranciaValidacionSemanal, parseFloat),
       limiteGestionPorcentaje: get("limite_gestion_porcentaje", FALLBACK_GLOBALES.limiteGestionPorcentaje, parseFloat),
@@ -300,7 +310,10 @@ export async function resolveFormulaCurso(
     if (!winner) {
       // Fallback hardcoded
       return {
-        factorHoras: tipoCurso === "TEORICO" ? 1.5 : 1.5, // 048 default
+        factorHoras:
+          tipoCurso === "TEORICO" ? 2
+          : tipoCurso === "TEORICO_PRACTICO" ? 1.5
+          : 1, // Art. 3 Par. 4 Acuerdo 048
         constanteSuma: 1,
         maxCreditosTrabajoIndep: null,
         fuente: "fallback-048",
@@ -326,9 +339,9 @@ type DocenteParaResolver = {
   doctorado: boolean
   cargoAdministrativo: boolean
   proyectosActivos: boolean
-  // Texto libre del cargo. Necesario para resolver la exención del 20%
-  // de gestión (Art. 10). Puede ser null si no tiene cargo registrado.
   tipoCargo: string | null
+  /** Semanas efectivas de contrato. Aplica a OCASIONAL/VISITANTE/INVITADO (Art. 4c/4e/4f). */
+  semanasVinculacion: number | null
 }
 
 /**
@@ -336,37 +349,72 @@ type DocenteParaResolver = {
  * Es el reemplazo async de `getAgendaLimits()` (síncrono, fallback hardcoded).
  *
  * Server-side only — los clientes deben recibir el resultado como prop.
+ *
+ * @param semanasAgendaOverride — semanas que el docente eligió para esta agenda.
+ *   Si se omite, se usan las semanas efectivas del contrato (semanasVinculacion o semanasPeriodo).
+ *   Si se provee, escala horasTotalesPeriodo, maxGestion y maxInvProySocialCatedra.
+ *   minDocencia permanece fijo (Acuerdo 048 — valores absolutos), salvo VISITANTE que es porcentual.
  */
 export async function resolveAgendaLimits(
   docente: DocenteParaResolver,
-  periodoId: string | null = null
+  periodoId: string | null = null,
+  semanasAgendaOverride?: number
 ): Promise<AgendaLimits & { fuente: ResolvedModalidad["fuente"] }> {
   const [modalidad, globales] = await Promise.all([
     resolveModalidad(docente.modalidad, docente.sedeBase, periodoId),
     resolveGlobales(periodoId),
   ])
 
-  // Si la norma fija el tope semestral (PLANTA_TC=880, PLANTA_MT=440 — Art. 4a/4b)
-  // se usa tal cual. Si no, se deriva: horasSemanalMax × semanasPeriodo (Art. 4c/4d/4e/4f).
-  const horasTotalesPeriodo =
-    modalidad.horasSemestralMax ?? modalidad.horasSemanalMax * globales.semanasPeriodo
+  // Para OCASIONAL/VISITANTE/INVITADO, el techo viene del período de vinculación del contrato
+  // (Art. 4c/4e/4f). PLANTA usa el semestral global.
+  const MODALIDADES_VINCULACION = new Set([
+    "OCASIONAL_TC", "OCASIONAL_MT", "VISITANTE_TC", "VISITANTE_MT", "INVITADO",
+  ] as const)
+  const semanasEfectivas =
+    docente.semanasVinculacion != null &&
+    MODALIDADES_VINCULACION.has(docente.modalidad as never)
+      ? docente.semanasVinculacion
+      : globales.semanasPeriodo
 
-  // Mínimo de docencia: si tiene proyectos activos, usa el reducido
-  const minDocencia = docente.proyectosActivos
-    ? modalidad.minDocenciaConProyectos ?? modalidad.minDocencia ?? 0
-    : modalidad.minDocencia ?? 0
+  // semanasReales: lo que el docente elige para esta agenda (clampeado al techo efectivo).
+  // Si no se pasa override, se usa el techo completo.
+  const semanasReales = semanasAgendaOverride != null
+    ? Math.min(Math.max(1, semanasAgendaOverride), semanasEfectivas)
+    : semanasEfectivas
 
-  // Art. 10: 20% del total, EXCEPTO los 5 cargos exentos del Art. 11
-  // (Jefe de Programa/Departamento, Asesor de Vicerrectoría/Rectoría, Decano).
-  // Cualquier otro cargo administrativo aplica el 20%.
+  // horasTotalesPeriodo: si hay override de semanas, se recalcula siempre desde la tasa semanal.
+  // Sin override, PLANTA_TC/MT usan el valor fijo del Acuerdo (880/440); los demás derivan.
+  const horasTotalesPeriodo = semanasAgendaOverride != null
+    ? modalidad.horasSemanalMax * semanasReales
+    : (modalidad.horasSemestralMax ?? modalidad.horasSemanalMax * semanasReales)
+
+  // Mínimo de docencia: si tiene proyectos activos, usa el reducido.
+  // Para VISITANTE_TC/MT, el mínimo es porcentual (60% del total), escala con semanasReales.
+  // Para todos los demás: FIJO según Acuerdo 048 (Art. 3 — valores absolutos).
+  const baseMinDocencia = docente.proyectosActivos
+    ? (modalidad.minDocenciaConProyectos ?? modalidad.minDocencia)
+    : modalidad.minDocencia
+
+  const esVisitante =
+    docente.modalidad === "VISITANTE_TC" || docente.modalidad === "VISITANTE_MT"
+
+  const minDocencia =
+    baseMinDocencia !== null
+      ? baseMinDocencia
+      : esVisitante
+        ? Math.floor(horasTotalesPeriodo * globales.minVisitanteDocenciaPorcentaje)
+        : 0
+
+  // Art. 10: 20% del total, EXCEPTO los 5 cargos exentos del Art. 11.
+  // Escala con horasTotalesPeriodo (que a su vez escala con semanasReales).
   const maxGestion = esCargoExentoGestion20(docente.tipoCargo)
     ? horasTotalesPeriodo
     : Math.floor(horasTotalesPeriodo * globales.limiteGestionPorcentaje)
 
-  // Máx inv+PS para cátedras (Art. 3 Par. 2)
+  // Máx inv+PS para cátedras (Art. 3 Par. 2) — escala con semanasReales.
   const maxInvProySocialCatedra =
     docente.modalidad === "CATEDRA" && modalidad.maxInvProySocSemanal !== null
-      ? modalidad.maxInvProySocSemanal * globales.semanasPeriodo
+      ? modalidad.maxInvProySocSemanal * semanasReales
       : null
 
   return {
@@ -376,7 +424,8 @@ export async function resolveAgendaLimits(
     minDocencia,
     maxGestion,
     maxInvProySocialCatedra,
-    semanas: globales.semanasPeriodo,
+    semanas: semanasReales,          // semanas efectivas de trabajo para esta agenda
+    semanasMaximas: semanasEfectivas, // techo máximo elegible por el docente
     fuente: modalidad.fuente,
   }
 }

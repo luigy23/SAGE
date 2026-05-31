@@ -4,6 +4,9 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import type { TipoActividad } from "@/lib/types/agenda"
+import { validarVentanaAgenda } from "@/lib/actions/_utils/ventana-periodo"
+import { registrarAuditoria } from "@/lib/audit"
+import type { Rol } from "@/generated/prisma/client"
 
 // ========================================
 // Helpers
@@ -76,9 +79,24 @@ export async function enviarAgendaAction(agendaId: string) {
   const result = await getOwnedBorradorAgenda(agendaId, user.id)
   if ("error" in result) return result
 
+  const ventanaError = await validarVentanaAgenda(result.agenda.periodo)
+  if (ventanaError) return ventanaError
+
   await prisma.agendaSemestral.update({
     where: { id: agendaId },
     data: { estado: "ENVIADO" },
+  })
+
+  await registrarAuditoria({
+    actorId:     user.id,
+    actorRol:    user.rol as Rol,
+    actorNombre: user.name ?? user.email ?? user.id,
+    entidad:     "AGENDA",
+    accion:      "CAMBIAR_ESTADO",
+    recursoId:   agendaId,
+    recursoDesc: `Agenda ${result.agenda.periodo}`,
+    antes:       { estado: "BORRADOR" },
+    despues:     { estado: "ENVIADO" },
   })
 
   revalidatePath(`/agenda/${agendaId}`)
@@ -105,12 +123,20 @@ export async function createCursoAgendaAction(_prevState: unknown, formData: For
     return { error: "Numero y nombre del curso son obligatorios." }
   }
 
+  // FK al catálogo maestro — opcional. Si el caller no envía el campo o lo manda
+  // vacío, queda null (curso ingresado a mano). Sostén del safeguard en /admin/cursos.
+  const cursoMaestroIdRaw = formData.get("cursoMaestroId")
+  const cursoMaestroId =
+    typeof cursoMaestroIdRaw === "string" && cursoMaestroIdRaw.trim() !== ""
+      ? cursoMaestroIdRaw.trim()
+      : null
+
   await prisma.cursoAgenda.create({
     data: {
       agendaId,
+      cursoMaestroId,
       numeroCurso,
       nombreCurso,
-      subgrupo: (formData.get("subgrupo") as string) || null,
       sede: (formData.get("sede") as string) || null,
       horasPresenciales: Number(formData.get("horasPresenciales")) || 0,
       creditos: Number(formData.get("creditos")) || 0,
@@ -147,12 +173,26 @@ export async function updateCursoAgendaAction(_prevState: unknown, formData: For
     return { error: "Numero y nombre del curso son obligatorios." }
   }
 
+  // Permite reasociar (o desasociar) el CursoAgenda al catálogo maestro.
+  // Si el caller omite el campo del FormData, NO tocamos el valor existente.
+  // Si lo envía vacío, se interpreta como "limpiar relación" (null).
+  const cursoMaestroIdRaw = formData.get("cursoMaestroId")
+  let cursoMaestroIdData: { cursoMaestroId: string | null } | Record<string, never> = {}
+  if (cursoMaestroIdRaw !== null) {
+    cursoMaestroIdData = {
+      cursoMaestroId:
+        typeof cursoMaestroIdRaw === "string" && cursoMaestroIdRaw.trim() !== ""
+          ? cursoMaestroIdRaw.trim()
+          : null,
+    }
+  }
+
   await prisma.cursoAgenda.update({
     where: { id },
     data: {
+      ...cursoMaestroIdData,
       numeroCurso,
       nombreCurso,
-      subgrupo: (formData.get("subgrupo") as string) || null,
       sede: (formData.get("sede") as string) || null,
       horasPresenciales: Number(formData.get("horasPresenciales")) || 0,
       creditos: Number(formData.get("creditos")) || 0,
@@ -182,56 +222,6 @@ export async function deleteCursoAgendaAction(id: string) {
   }
 
   await prisma.cursoAgenda.delete({ where: { id } })
-
-  revalidatePath(`/agenda/${curso.agendaId}`)
-  return { success: true }
-}
-
-// ========================================
-// Horarios
-// ========================================
-
-export async function upsertHorarioAction(_prevState: unknown, formData: FormData) {
-  const user = await getAuthenticatedUser()
-  if (!user) return { error: "No autenticado." }
-
-  const cursoId = formData.get("cursoId") as string
-  const curso = await prisma.cursoAgenda.findUnique({
-    where: { id: cursoId },
-    include: { agenda: true },
-  })
-
-  if (!curso || curso.agenda.docenteId !== user.id) {
-    return { error: "Curso no encontrado." }
-  }
-  if (curso.agenda.estado !== "BORRADOR") {
-    return { error: "No se puede modificar una agenda enviada." }
-  }
-
-  const horarioData = {
-    lunes: (formData.get("lunes") as string) || null,
-    martes: (formData.get("martes") as string) || null,
-    miercoles: (formData.get("miercoles") as string) || null,
-    jueves: (formData.get("jueves") as string) || null,
-    viernes: (formData.get("viernes") as string) || null,
-    sabado: (formData.get("sabado") as string) || null,
-    domingo: (formData.get("domingo") as string) || null,
-  }
-
-  const existing = await prisma.horarioCurso.findFirst({
-    where: { cursoId },
-  })
-
-  if (existing) {
-    await prisma.horarioCurso.update({
-      where: { id: existing.id },
-      data: horarioData,
-    })
-  } else {
-    await prisma.horarioCurso.create({
-      data: { cursoId, ...horarioData },
-    })
-  }
 
   revalidatePath(`/agenda/${curso.agendaId}`)
   return { success: true }

@@ -1,0 +1,529 @@
+"use server"
+
+import { revalidatePath } from "next/cache"
+import { auth } from "@/lib/auth"
+import { prisma } from "@/lib/prisma"
+import { registrarAuditoriaStrict } from "@/lib/audit"
+import type { Prisma, Rol, Modalidad, Sede } from "@/generated/prisma/client"
+import {
+  solicitudCambioPerfilInputSchema,
+  type SolicitudCambioPerfilInput,
+  CAMPOS_EDITABLES,
+  type CampoEditable,
+} from "@/lib/schemas/solicitud-perfil-schema"
+
+// =====================================================================
+// Guards
+// =====================================================================
+
+async function ensureAdmin() {
+  const session = await auth()
+  const rol = session?.user?.rol
+  if (!session?.user || (rol !== "ADMIN" && rol !== "SUPERADMIN")) {
+    throw new Error("No autorizado. Se requiere ADMIN o SUPERADMIN.")
+  }
+  return session.user
+}
+
+async function ensureDocente() {
+  const session = await auth()
+  if (!session?.user?.id) {
+    throw new Error("No autenticado. Inicie sesión nuevamente.")
+  }
+  return session.user
+}
+
+// =====================================================================
+// Helpers
+// =====================================================================
+
+type DocenteSnapshot = Record<CampoEditable, unknown>
+
+function snapshotDocente(d: {
+  modalidad: Modalidad
+  programa: string
+  facultad: string
+  sedeBase: Sede
+  cargoAdministrativo: boolean
+  tipoCargo: string | null
+  doctorado: boolean
+  tituloDoctorado: string | null
+  proyectosActivos: boolean
+  semanasVinculacion: number | null
+  celular: string | null
+}): DocenteSnapshot {
+  return {
+    modalidad: d.modalidad,
+    programa: d.programa,
+    facultad: d.facultad,
+    sedeBase: d.sedeBase,
+    cargoAdministrativo: d.cargoAdministrativo,
+    tipoCargo: d.tipoCargo,
+    doctorado: d.doctorado,
+    tituloDoctorado: d.tituloDoctorado,
+    proyectosActivos: d.proyectosActivos,
+    semanasVinculacion: d.semanasVinculacion,
+    celular: d.celular,
+  }
+}
+
+/**
+ * Devuelve solo los campos del input cuyo valor difiere del snapshot actual.
+ * Normaliza null/undefined/""/0 para evitar falsos positivos.
+ */
+function diffCambios(
+  input: SolicitudCambioPerfilInput,
+  actual: DocenteSnapshot,
+): Partial<DocenteSnapshot> {
+  const cambios: Partial<DocenteSnapshot> = {}
+  for (const campo of CAMPOS_EDITABLES) {
+    if (!(campo in input)) continue
+    const nuevo = (input as Record<string, unknown>)[campo]
+    if (nuevo === undefined) continue
+    const original = actual[campo]
+    const normNuevo = nuevo === "" ? null : nuevo
+    const normOriginal = original ?? null
+    if (normNuevo !== normOriginal) {
+      cambios[campo] = normNuevo as DocenteSnapshot[typeof campo]
+    }
+  }
+  return cambios
+}
+
+/**
+ * Aplica las reglas estatutarias sobre el estado RESULTANTE (snapshot actual
+ * merged con los cambios propuestos). Si la modalidad final es CATEDRA, fuerza
+ * cargoAdministrativo/tipoCargo/proyectosActivos a false/null.
+ */
+function aplicarReglasEstatutarias(
+  cambios: Partial<DocenteSnapshot>,
+  actual: DocenteSnapshot,
+): { cambios: Partial<DocenteSnapshot>; error?: string } {
+  const resultante = { ...actual, ...cambios }
+
+  if (resultante.modalidad === "CATEDRA") {
+    if (resultante.cargoAdministrativo === true) {
+      return {
+        cambios,
+        error:
+          "Art. 10: un docente catedrático no puede tener cargo administrativo. Desactívelo para esta solicitud.",
+      }
+    }
+    if (resultante.proyectosActivos === true) {
+      return {
+        cambios,
+        error:
+          "Art. 3 Par. 1: un docente catedrático no puede tener proyectos activos. Desactívelo para esta solicitud.",
+      }
+    }
+  }
+
+  if (resultante.cargoAdministrativo === true && !resultante.tipoCargo) {
+    return {
+      cambios,
+      error: "Debe especificar el tipo de cargo administrativo.",
+    }
+  }
+
+  return { cambios }
+}
+
+// =====================================================================
+// LECTURA — usada por la UI del docente y del admin
+// =====================================================================
+
+export async function getSolicitudActivaParaDocente(docenteId: string) {
+  return prisma.solicitudCambioPerfil.findFirst({
+    where: { docenteId, estado: "ENVIADO" },
+    orderBy: { createdAt: "desc" },
+  })
+}
+
+export async function getUltimaSolicitudParaDocente(docenteId: string) {
+  return prisma.solicitudCambioPerfil.findFirst({
+    where: { docenteId },
+    orderBy: { createdAt: "desc" },
+  })
+}
+
+export async function listSolicitudesDocente(docenteId: string) {
+  return prisma.solicitudCambioPerfil.findMany({
+    where: { docenteId },
+    orderBy: { createdAt: "desc" },
+  })
+}
+
+// =====================================================================
+// CREAR — docente envía una solicitud
+// =====================================================================
+
+export async function crearSolicitudCambioPerfilAction(
+  input: SolicitudCambioPerfilInput,
+): Promise<{ error: string } | { success: true; id: string }> {
+  const session = await ensureDocente()
+
+  const parsed = solicitudCambioPerfilInputSchema.safeParse(input)
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." }
+  }
+
+  const docente = await prisma.docente.findUnique({
+    where: { id: session.id },
+    select: {
+      id: true,
+      modalidad: true,
+      programa: true,
+      facultad: true,
+      sedeBase: true,
+      cargoAdministrativo: true,
+      tipoCargo: true,
+      doctorado: true,
+      tituloDoctorado: true,
+      proyectosActivos: true,
+      semanasVinculacion: true,
+      celular: true,
+    },
+  })
+  if (!docente) return { error: "Docente no encontrado." }
+
+  // Bloquear si ya hay una solicitud ENVIADO
+  const pendiente = await prisma.solicitudCambioPerfil.findFirst({
+    where: { docenteId: docente.id, estado: "ENVIADO" },
+    select: { id: true },
+  })
+  if (pendiente) {
+    return {
+      error:
+        "Ya tienes una solicitud de cambio de perfil en revisión. Cancélala antes de enviar una nueva.",
+    }
+  }
+
+  const snapshot = snapshotDocente(docente)
+  const cambios = diffCambios(parsed.data, snapshot)
+
+  if (Object.keys(cambios).length === 0) {
+    return { error: "No se detectaron cambios respecto a tu perfil actual." }
+  }
+
+  const reglas = aplicarReglasEstatutarias(cambios, snapshot)
+  if (reglas.error) return { error: reglas.error }
+
+  const motivo = parsed.data.motivoSolicitud?.trim() || null
+
+  const creada = await prisma.solicitudCambioPerfil.create({
+    data: {
+      docenteId: docente.id,
+      estado: "ENVIADO",
+      camposAntes: snapshot as Prisma.InputJsonValue,
+      camposDespues: reglas.cambios as Prisma.InputJsonValue,
+      motivoSolicitud: motivo,
+    },
+    select: { id: true },
+  })
+
+  revalidatePath("/perfil")
+  revalidatePath("/perfil/editar")
+  revalidatePath("/perfil/solicitudes")
+  revalidatePath("/admin/revision/perfiles")
+
+  return { success: true, id: creada.id }
+}
+
+// =====================================================================
+// CANCELAR — docente cancela su propia solicitud pendiente
+// =====================================================================
+
+export async function cancelarSolicitudCambioPerfilAction(
+  id: string,
+): Promise<{ error: string } | { success: true }> {
+  const session = await ensureDocente()
+
+  const solicitud = await prisma.solicitudCambioPerfil.findUnique({
+    where: { id },
+    select: { id: true, docenteId: true, estado: true },
+  })
+  if (!solicitud) return { error: "Solicitud no encontrada." }
+  if (solicitud.docenteId !== session.id) {
+    return { error: "No puedes cancelar una solicitud que no es tuya." }
+  }
+  if (solicitud.estado !== "ENVIADO") {
+    return { error: "Solo se pueden cancelar solicitudes en estado ENVIADO." }
+  }
+
+  await prisma.solicitudCambioPerfil.update({
+    where: { id },
+    data: {
+      estado: "RECHAZADO",
+      observacionesAdmin: "Cancelada por el docente",
+      revisadoEn: new Date(),
+    },
+  })
+
+  revalidatePath("/perfil/editar")
+  revalidatePath("/perfil/solicitudes")
+  revalidatePath("/admin/revision/perfiles")
+
+  return { success: true }
+}
+
+// =====================================================================
+// APROBAR — admin aplica los cambios al Docente
+// =====================================================================
+
+export async function aprobarSolicitudCambioPerfilAction(
+  id: string,
+): Promise<{ error: string } | { success: true }> {
+  const user = await ensureAdmin()
+
+  const solicitud = await prisma.solicitudCambioPerfil.findUnique({
+    where: { id },
+    include: {
+      docente: {
+        select: {
+          id: true,
+          modalidad: true,
+          programa: true,
+          facultad: true,
+          sedeBase: true,
+          cargoAdministrativo: true,
+          tipoCargo: true,
+          doctorado: true,
+          tituloDoctorado: true,
+          proyectosActivos: true,
+          semanasVinculacion: true,
+          celular: true,
+          nombre: true,
+        },
+      },
+    },
+  })
+  if (!solicitud) return { error: "Solicitud no encontrada." }
+  if (solicitud.estado !== "ENVIADO") {
+    return { error: "Solo se pueden aprobar solicitudes en estado ENVIADO." }
+  }
+
+  const cambios = solicitud.camposDespues as Partial<DocenteSnapshot>
+  const snapshotActual = snapshotDocente(solicitud.docente)
+
+  // Re-validar las reglas con el estado RESULTANTE (defensa en profundidad —
+  // los datos del docente pueden haber cambiado por otra vía entre el envío
+  // y la aprobación).
+  const reglas = aplicarReglasEstatutarias(cambios, snapshotActual)
+  if (reglas.error) {
+    return {
+      error: `No se puede aprobar: ${reglas.error}. Pide al docente que cree una nueva solicitud.`,
+    }
+  }
+
+  // Construir el data del update aplicando override defensivo CATEDRA.
+  const resultante = { ...snapshotActual, ...cambios }
+  const isCatedra = resultante.modalidad === "CATEDRA"
+
+  const dataDocente: Prisma.DocenteUpdateInput = {}
+  if ("modalidad" in cambios)
+    dataDocente.modalidad = cambios.modalidad as Modalidad
+  if ("programa" in cambios) dataDocente.programa = cambios.programa as string
+  if ("facultad" in cambios) dataDocente.facultad = cambios.facultad as string
+  if ("sedeBase" in cambios) dataDocente.sedeBase = cambios.sedeBase as Sede
+  if ("cargoAdministrativo" in cambios)
+    dataDocente.cargoAdministrativo = isCatedra
+      ? false
+      : (cambios.cargoAdministrativo as boolean)
+  if ("tipoCargo" in cambios)
+    dataDocente.tipoCargo = isCatedra
+      ? null
+      : ((cambios.tipoCargo as string | null) ?? null)
+  if ("doctorado" in cambios)
+    dataDocente.doctorado = cambios.doctorado as boolean
+  if ("tituloDoctorado" in cambios)
+    dataDocente.tituloDoctorado = (cambios.tituloDoctorado as string | null) ?? null
+  if ("proyectosActivos" in cambios)
+    dataDocente.proyectosActivos = isCatedra
+      ? false
+      : (cambios.proyectosActivos as boolean)
+  if ("semanasVinculacion" in cambios)
+    dataDocente.semanasVinculacion =
+      (cambios.semanasVinculacion as number | null) ?? null
+  if ("celular" in cambios)
+    dataDocente.celular = (cambios.celular as string | null) ?? null
+
+  await prisma.$transaction(async (tx) => {
+    await tx.docente.update({
+      where: { id: solicitud.docenteId },
+      data: dataDocente,
+    })
+    await tx.solicitudCambioPerfil.update({
+      where: { id },
+      data: {
+        estado: "APROBADO",
+        revisadoPor: user.id,
+        revisadoEn: new Date(),
+      },
+    })
+    await registrarAuditoriaStrict(
+      {
+        actorId: user.id,
+        actorRol: user.rol as Rol,
+        actorNombre: user.name ?? user.email ?? user.id,
+        entidad: "SOLICITUD_PERFIL",
+        accion: "CAMBIAR_ESTADO",
+        recursoId: id,
+        recursoDesc: `Solicitud de ${solicitud.docente.nombre}`,
+        antes: snapshotActual as Record<string, unknown>,
+        despues: { ...snapshotActual, ...cambios } as Record<string, unknown>,
+      },
+      tx,
+    )
+  })
+
+  revalidatePath("/admin/revision/perfiles")
+  revalidatePath(`/admin/revision/perfiles/${id}`)
+  revalidatePath("/perfil")
+  revalidatePath("/perfil/editar")
+  revalidatePath("/perfil/solicitudes")
+  revalidatePath("/agenda")
+
+  return { success: true }
+}
+
+// =====================================================================
+// RECHAZAR — admin rechaza con motivo, no toca al Docente
+// =====================================================================
+
+export async function rechazarSolicitudCambioPerfilAction(
+  id: string,
+  motivo: string,
+): Promise<{ error: string } | { success: true }> {
+  const user = await ensureAdmin()
+
+  if (!motivo || motivo.trim().length < 10) {
+    return { error: "El motivo es obligatorio y debe tener al menos 10 caracteres." }
+  }
+
+  const solicitud = await prisma.solicitudCambioPerfil.findUnique({
+    where: { id },
+    include: {
+      docente: { select: { nombre: true } },
+    },
+  })
+  if (!solicitud) return { error: "Solicitud no encontrada." }
+  if (solicitud.estado !== "ENVIADO") {
+    return { error: "Solo se pueden rechazar solicitudes en estado ENVIADO." }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.solicitudCambioPerfil.update({
+      where: { id },
+      data: {
+        estado: "RECHAZADO",
+        observacionesAdmin: motivo.trim(),
+        revisadoPor: user.id,
+        revisadoEn: new Date(),
+      },
+    })
+    await registrarAuditoriaStrict(
+      {
+        actorId: user.id,
+        actorRol: user.rol as Rol,
+        actorNombre: user.name ?? user.email ?? user.id,
+        entidad: "SOLICITUD_PERFIL",
+        accion: "CAMBIAR_ESTADO",
+        recursoId: id,
+        recursoDesc: `Solicitud de ${solicitud.docente.nombre}`,
+        antes: { estado: "ENVIADO" },
+        despues: { estado: "RECHAZADO" },
+        observaciones: motivo.trim(),
+      },
+      tx,
+    )
+  })
+
+  revalidatePath("/admin/revision/perfiles")
+  revalidatePath(`/admin/revision/perfiles/${id}`)
+  revalidatePath("/perfil/editar")
+  revalidatePath("/perfil/solicitudes")
+
+  return { success: true }
+}
+
+// =====================================================================
+// LISTAR / OBTENER — admin
+// =====================================================================
+
+export async function listSolicitudesParaAdmin(opts?: {
+  estado?: "ENVIADO" | "APROBADO" | "RECHAZADO" | "TODAS"
+  q?: string
+  page?: number
+  perPage?: number
+}) {
+  await ensureAdmin()
+  const page = opts?.page ?? 1
+  const perPage = opts?.perPage ?? 20
+  const estado = !opts?.estado || opts.estado === "TODAS" ? undefined : opts.estado
+
+  const where: Prisma.SolicitudCambioPerfilWhereInput = {
+    estado,
+    docente: opts?.q
+      ? {
+          OR: [
+            { nombre: { contains: opts.q, mode: "insensitive" } },
+            { cedula: { contains: opts.q } },
+            { email: { contains: opts.q, mode: "insensitive" } },
+          ],
+        }
+      : undefined,
+  }
+
+  const [total, items] = await Promise.all([
+    prisma.solicitudCambioPerfil.count({ where }),
+    prisma.solicitudCambioPerfil.findMany({
+      where,
+      orderBy: [{ estado: "asc" }, { createdAt: "desc" }],
+      skip: (page - 1) * perPage,
+      take: perPage,
+      include: {
+        docente: {
+          select: {
+            id: true,
+            nombre: true,
+            email: true,
+            cedula: true,
+            modalidad: true,
+            sedeBase: true,
+            facultad: true,
+            programa: true,
+          },
+        },
+      },
+    }),
+  ])
+
+  return {
+    items,
+    total,
+    page,
+    perPage,
+    totalPages: Math.max(1, Math.ceil(total / perPage)),
+  }
+}
+
+export async function getSolicitudParaAdmin(id: string) {
+  await ensureAdmin()
+  return prisma.solicitudCambioPerfil.findUnique({
+    where: { id },
+    include: {
+      docente: {
+        select: {
+          id: true,
+          nombre: true,
+          email: true,
+          cedula: true,
+          modalidad: true,
+          sedeBase: true,
+          facultad: true,
+          programa: true,
+        },
+      },
+    },
+  })
+}

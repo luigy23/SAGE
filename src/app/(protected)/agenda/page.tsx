@@ -1,14 +1,14 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
-import { getPeriodoActivo } from "@/lib/utils/periodo-server"
+import { getPeriodoActivoConFechas } from "@/lib/utils/periodo-server"
 import { AgendaWizardForm } from "@/components/agenda/AgendaWizardForm"
 import { NuevaAgendaView } from "@/components/agenda/NuevaAgendaView"
 import { AgendaReadOnly } from "@/components/agenda/AgendaReadOnly"
 import type { AgendaConRelaciones } from "@/lib/types/agenda"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import { DiscardDraftButton } from "@/components/agenda/DiscardDraftButton"
-import { resolveGlobales } from "@/lib/rules/resolver"
+import { resolveGlobales, resolveAgendaLimits } from "@/lib/rules/resolver"
 import {
   Card,
   CardContent,
@@ -17,7 +17,8 @@ import {
   CardDescription,
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { CalendarDays, FileText, Pencil } from "lucide-react"
+import { CalendarDays, FileText, Pencil, AlertTriangle, CheckCircle2 } from "lucide-react"
+import { resolveFormulasCursosAction } from "@/lib/actions/formulas"
 import Link from "next/link"
 
 /**
@@ -58,16 +59,193 @@ export default async function AgendaPage() {
   // ==========================================
   // 2. Periodo activo + parámetros globales (cascada DB → fallback)
   // ==========================================
-  const periodo = await getPeriodoActivo()
+  const periodoInfo = await getPeriodoActivoConFechas()
+
+  if (!periodoInfo) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold sm:text-3xl">Agenda Semestral (FO-19)</h1>
+        </div>
+        <Card className="border-yellow-500/30 bg-yellow-50/50 dark:bg-yellow-950/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <AlertTriangle className="h-5 w-5 text-yellow-600" />
+              Período académico no disponible
+            </CardTitle>
+            <CardDescription>
+              No hay un período académico activo en este momento. No es posible crear
+              ni modificar agendas. Contacta al administrador para que active el período
+              correspondiente al semestre actual.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    )
+  }
+
+  const periodo = periodoInfo.nombre
   const periodoRow = await prisma.periodoAcademico.findUnique({
     where: { nombre: periodo },
     select: { id: true },
   })
-  const globales = await resolveGlobales(periodoRow?.id ?? null)
+  const [globales, formulas, agendaLimits] = await Promise.all([
+    resolveGlobales(periodoRow?.id ?? null, periodoInfo.semanasCalculadas),
+    resolveFormulasCursosAction(periodoRow?.id ?? null, docente.facultad ?? null),
+    resolveAgendaLimits(
+      {
+        modalidad: docente.modalidad,
+        sedeBase: docente.sedeBase,
+        doctorado: docente.doctorado,
+        cargoAdministrativo: docente.cargoAdministrativo,
+        proyectosActivos: docente.proyectosActivos,
+        tipoCargo: docente.tipoCargo ?? null,
+        semanasVinculacion: docente.semanasVinculacion ?? null,
+      },
+      periodoRow?.id ?? null
+    ),
+  ])
   const semanasPeriodo = globales.semanasPeriodo
 
   // ==========================================
-  // 3. Buscar agenda del periodo con relaciones
+  // 3. Quick agenda state check (to decide if window check is needed)
+  // ENVIADO agendas bypass the submission window — docentes must always see their sent form.
+  // ==========================================
+  const agendaEstadoQuick = await prisma.agendaSemestral.findUnique({
+    where: { docenteId_periodo: { docenteId: docente.id, periodo } },
+    select: { estado: true },
+  })
+
+  // Window check — only gates BORRADOR and new agendas, not already-processed ones
+  const estadoBypassesWindow = ["ENVIADO", "APROBADO", "RECHAZADO"].includes(agendaEstadoQuick?.estado ?? "")
+  if (!estadoBypassesWindow) {
+    const now = new Date()
+    const { agendaDesde, agendaHasta } = periodoInfo
+
+    if (!agendaDesde || !agendaHasta) {
+      return (
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold sm:text-3xl">Agenda Semestral (FO-19)</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Período actual:{" "}
+              <Badge variant="secondary" className="ml-1 text-xs">{periodo}</Badge>
+            </p>
+          </div>
+          {agendaEstadoQuick?.estado === "BORRADOR" && (
+            <Card className="border-yellow-500/30 bg-yellow-50/50 dark:bg-yellow-950/20">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                  <Pencil className="h-4 w-4" />
+                  Tienes un borrador guardado para este período
+                </CardTitle>
+                <CardDescription>
+                  Podrás continuar editando cuando el administrador configure la ventana de entrega.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )}
+          <Card className="border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <CalendarDays className="h-5 w-5 text-blue-600" />
+                Ventana de entrega no configurada
+              </CardTitle>
+              <CardDescription>
+                El administrador aún no ha definido el período de entrega de agendas para el semestre{" "}
+                <span className="font-mono font-medium">{periodo}</span>. Consulta con tu coordinador
+                académico para conocer las fechas.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      )
+    }
+
+    if (now < agendaDesde) {
+      return (
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold sm:text-3xl">Agenda Semestral (FO-19)</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Período actual:{" "}
+              <Badge variant="secondary" className="ml-1 text-xs">{periodo}</Badge>
+            </p>
+          </div>
+          <Card className="border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <CalendarDays className="h-5 w-5 text-blue-600" />
+                La ventana de entrega aún no está abierta
+              </CardTitle>
+              <CardDescription>
+                Podrás diligenciar tu Agenda Semestral a partir del{" "}
+                <span className="font-medium text-foreground">
+                  {agendaDesde.toLocaleDateString("es-CO", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </span>
+                . El sistema abrirá el acceso automáticamente en esa fecha.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      )
+    }
+
+    if (now > agendaHasta) {
+      return (
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold sm:text-3xl">Agenda Semestral (FO-19)</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Período actual:{" "}
+              <Badge variant="secondary" className="ml-1 text-xs">{periodo}</Badge>
+            </p>
+          </div>
+          {agendaEstadoQuick?.estado === "BORRADOR" && (
+            <Card className="border-yellow-500/30 bg-yellow-50/50 dark:bg-yellow-950/20">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                  <Pencil className="h-4 w-4" />
+                  Tienes un borrador guardado para este período
+                </CardTitle>
+                <CardDescription>
+                  La ventana de entrega ya cerró. Contacta al administrador si necesitas enviar tu agenda.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )}
+          <Card className="border-orange-500/30 bg-orange-50/50 dark:bg-orange-950/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <AlertTriangle className="h-5 w-5 text-orange-600" />
+                La ventana de entrega está cerrada
+              </CardTitle>
+              <CardDescription>
+                La ventana de entrega de agendas para el semestre{" "}
+                <span className="font-mono font-medium">{periodo}</span> cerró el{" "}
+                <span className="font-medium text-foreground">
+                  {agendaHasta.toLocaleDateString("es-CO", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </span>
+                . Contacta al administrador si necesitas habilitar el acceso.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      )
+    }
+  }
+
+  // ==========================================
+  // 4. Buscar agenda del periodo con relaciones
   // ==========================================
   const agenda = await prisma.agendaSemestral.findUnique({
     where: {
@@ -79,7 +257,6 @@ export default async function AgendaPage() {
     include: {
       docente: true,
       cursos: {
-        include: { horarios: true },
         orderBy: { numeroCurso: "asc" },
       },
       otrasActividadesDocencia: { orderBy: { nombre: "asc" } },
@@ -155,6 +332,9 @@ export default async function AgendaPage() {
           catalogoActividades={catalogoActividades}
           periodo={periodo}
           semanasPeriodo={semanasPeriodo}
+          semanasMaximas={agendaLimits.semanasMaximas}
+          formulas={formulas}
+          agendaLimits={agendaLimits}
         />
 
         {/* Lista de agendas de periodos anteriores */}
@@ -173,23 +353,16 @@ export default async function AgendaPage() {
     // Transformar datos de Prisma → formato AgendaWizardFormData (RHF)
     const defaultValues: AgendaWizardFormData = {
       cursos: agenda.cursos.map((c) => ({
+        cursoMaestroId: c.cursoMaestroId ?? null,
+        // Recupera tipo desde catálogo maestro para usar la fórmula correcta
+        tipoCurso: cursosMaestros.find((m) => m.id === c.cursoMaestroId)?.tipo ?? null,
         numeroCurso: c.numeroCurso,
         nombreCurso: c.nombreCurso,
-        subgrupo: c.subgrupo || "",
         sede: c.sede || "",
         horasPresenciales: c.horasPresenciales,
         creditos: c.creditos,
         semanas: c.semanas,
         dedicacionPeriodo: c.dedicacionPeriodo,
-        horarios: {
-          lunes: c.horarios[0]?.lunes ?? null,
-          martes: c.horarios[0]?.martes ?? null,
-          miercoles: c.horarios[0]?.miercoles ?? null,
-          jueves: c.horarios[0]?.jueves ?? null,
-          viernes: c.horarios[0]?.viernes ?? null,
-          sabado: c.horarios[0]?.sabado ?? null,
-          domingo: c.horarios[0]?.domingo ?? null,
-        },
       })),
       otrasActividadesDocencia: agenda.otrasActividadesDocencia.map(
         (a) => ({
@@ -198,6 +371,8 @@ export default async function AgendaPage() {
           horasSemanales: 0,
           semanas: 0,
           dedicacionPeriodo: a.dedicacionPeriodo,
+          cantidadUnidades: a.cantidadUnidades ?? 0,
+          sede: a.sede ?? null,
         })
       ),
       actividadesInvestigacion: agenda.actividadesInvestigacion.map(
@@ -207,6 +382,8 @@ export default async function AgendaPage() {
           horasSemanales: 0,
           semanas: 0,
           dedicacionPeriodo: a.dedicacionPeriodo,
+          cantidadUnidades: a.cantidadUnidades ?? 0,
+          sede: a.sede ?? null,
         })
       ),
       actividadesProyeccionSocial: agenda.actividadesProyeccionSocial.map(
@@ -216,6 +393,8 @@ export default async function AgendaPage() {
           horasSemanales: 0,
           semanas: 0,
           dedicacionPeriodo: a.dedicacionPeriodo,
+          cantidadUnidades: 0,
+          sede: a.sede ?? null,
         })
       ),
       actividadesGestion: agenda.actividadesGestion.map((a) => ({
@@ -224,6 +403,8 @@ export default async function AgendaPage() {
         horasSemanales: 0,
         semanas: 0,
         dedicacionPeriodo: a.dedicacionPeriodo,
+        cantidadUnidades: 0,
+        sede: a.sede ?? null,
       })),
     }
 
@@ -327,6 +508,10 @@ export default async function AgendaPage() {
           periodo={periodo}
           defaultValues={defaultValues}
           semanasPeriodo={semanasPeriodo}
+          semanasMaximas={agendaLimits.semanasMaximas}
+          defaultSemanasAgenda={agenda.semanasAgenda}
+          formulas={formulas}
+          agendaLimits={agendaLimits}
         />
 
         {/* Botón Descartar — client component para manejar el server action */}
@@ -338,9 +523,56 @@ export default async function AgendaPage() {
   }
 
   // ==========================================
-  // CASO C: ENVIADO → Vista de solo lectura
+  // CASO C: ENVIADO / APROBADO / RECHAZADO → Vista de solo lectura
   // ==========================================
-  return <AgendaReadOnly agenda={agenda as AgendaConRelaciones} semanasPeriodo={semanasPeriodo} />
+  return (
+    <div className="space-y-4">
+      {agenda.estado === "APROBADO" && (
+        <div className="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-4 text-sm dark:border-green-900 dark:bg-green-950">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600 dark:text-green-400" />
+          <div>
+            <p className="font-semibold text-green-900 dark:text-green-200">Agenda aprobada</p>
+            <p className="mt-0.5 text-green-800 dark:text-green-300">
+              Tu Agenda Semestral (FO-19) para el período{" "}
+              <span className="font-mono font-medium">{agenda.periodo}</span> ha sido aprobada.
+              Ya podés crear tu Monitoreo (FO-20).
+            </p>
+          </div>
+        </div>
+      )}
+      <AgendaReadOnly
+        agenda={agenda as AgendaConRelaciones}
+        semanasPeriodo={semanasPeriodo}
+        slotPostDatosDocente={
+          agenda.estado === "RECHAZADO" ? (
+            <div className="overflow-hidden rounded-xl border border-red-200 bg-gradient-to-br from-red-50 to-red-50/60 shadow-sm dark:border-red-900/50 dark:from-red-950/40 dark:to-red-950/10">
+              <div className="p-5">
+                <div className="space-y-2">
+                  <h3 className="text-base font-semibold leading-tight text-red-900 dark:text-red-200">
+                    Agenda rechazada
+                  </h3>
+                  <p className="text-sm leading-relaxed text-red-800/90 dark:text-red-300/90">
+                    Tu Agenda Semestral (FO-19) para el período{" "}
+                    <span className="font-mono font-semibold">{agenda.periodo}</span> fue rechazada por el administrador. Contactá a tu coordinador para que habilite la corrección.
+                  </p>
+                  {agenda.observacionesAdmin && (
+                    <div className="mt-3 rounded-lg border border-red-200/80 bg-white/70 px-4 py-3 dark:border-red-900/50 dark:bg-red-950/50">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-red-700 dark:text-red-400">
+                        Motivo del rechazo
+                      </p>
+                      <p className="mt-1 text-sm leading-relaxed text-red-900 dark:text-red-200">
+                        {agenda.observacionesAdmin}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null
+        }
+      />
+    </div>
+  )
 }
 
 // ==========================================
@@ -398,11 +630,14 @@ async function PreviousAgendasList({
                 </span>
               </div>
               <Badge
-                variant={a.estado === "ENVIADO" ? "default" : "outline"}
                 className={
                   a.estado === "ENVIADO"
-                    ? "bg-green-600 hover:bg-green-600"
-                    : ""
+                    ? "bg-yellow-500 hover:bg-yellow-500"
+                    : a.estado === "APROBADO"
+                      ? "bg-green-600 hover:bg-green-600"
+                      : a.estado === "RECHAZADO"
+                        ? "bg-red-600 hover:bg-red-600"
+                        : "border text-foreground"
                 }
               >
                 {a.estado}

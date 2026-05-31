@@ -39,7 +39,8 @@ const MODALIDADES = new Set<Modalidad>([
   "OCASIONAL_TC",
   "OCASIONAL_MT",
   "CATEDRA",
-  "VISITANTE",
+  "VISITANTE_TC",
+  "VISITANTE_MT",
   "INVITADO",
 ])
 
@@ -63,7 +64,7 @@ export function parseRevisionFilters(
   const programa = first(sp.programa)?.trim() || undefined
 
   const estadoRaw = first(sp.estado) as FiltroEstado | undefined
-  const estado = estadoRaw && ESTADOS.has(estadoRaw) ? estadoRaw : "ENVIADO"
+  const estado = estadoRaw && ESTADOS.has(estadoRaw) ? estadoRaw : "TODAS"
 
   const modalidadRaw = first(sp.modalidad) as Modalidad | undefined
   const modalidad =
@@ -119,7 +120,7 @@ export function serializeRevisionFilters(f: Partial<RevisionFilters>): string {
   const sp = new URLSearchParams()
   if (f.q) sp.set("q", f.q)
   if (f.periodo) sp.set("periodo", f.periodo)
-  if (f.estado && f.estado !== "ENVIADO") sp.set("estado", f.estado)
+  if (f.estado && f.estado !== "TODAS") sp.set("estado", f.estado)
   if (f.modalidad) sp.set("modalidad", f.modalidad)
   if (f.sede) sp.set("sede", f.sede)
   if (f.facultad) sp.set("facultad", f.facultad)

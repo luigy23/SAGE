@@ -11,6 +11,7 @@ export default async function ProtectedLayout({
 }) {
   const session = await auth()
   if (!session?.user) redirect("/auth/login")
+  if (session.user.estadoCuenta === "RECHAZADO") redirect("/cuenta-rechazada")
 
   return (
     <SidebarProvider>

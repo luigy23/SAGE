@@ -18,6 +18,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Search, Check, ListChecks, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 export type CategoriaActividadFiltro =
   | "DOCENCIA"
@@ -128,12 +134,14 @@ export function ActividadCatalogoSelector({
   selectedNombre,
   onSelect,
   onClear,
+  proyectosActivos,
 }: {
   catalogo: ActividadCatalogoOption[]
   categoria: CategoriaActividadFiltro
   selectedNombre?: string
   onSelect: (actividad: ActividadCatalogoOption) => void
   onClear?: () => void
+  proyectosActivos?: boolean
 }) {
   const [open, setOpen] = useState(false)
 
@@ -213,41 +221,61 @@ export function ActividadCatalogoSelector({
               No se encontraron actividades en esta categoría.
             </CommandEmpty>
             <CommandGroup heading={`Catálogo Art. 11 (${filtered.length})`}>
-              {filtered.map((act) => (
-                <CommandItem
-                  key={act.id}
-                  value={act.nombre}
-                  onSelect={() => handleSelect(act)}
-                  className="cursor-pointer"
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4 shrink-0",
-                      selectedNombre === act.nombre ? "opacity-100" : "opacity-0"
-                    )}
-                  />
-                  <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                    <span className="text-sm">{act.nombre}</span>
-                    <div className="flex flex-wrap gap-1">
-                      {act.topeSemestralH !== null && (
-                        <Badge variant="secondary" className="text-[10px] font-normal">
-                          {act.topeSemestralH}h/sem
-                        </Badge>
+              {filtered.map((act) => {
+                const isBlocked = act.requiereProyectoAprobado && !(proyectosActivos ?? true)
+                return (
+                  <CommandItem
+                    key={act.id}
+                    value={act.nombre}
+                    onSelect={() => { if (!isBlocked) handleSelect(act) }}
+                    disabled={isBlocked}
+                    className={cn("cursor-pointer", isBlocked && "opacity-50 cursor-not-allowed")}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4 shrink-0",
+                        selectedNombre === act.nombre ? "opacity-100" : "opacity-0"
                       )}
-                      {act.topeSemanalHPorUnidad !== null && (
-                        <Badge variant="secondary" className="text-[10px] font-normal">
-                          {act.topeSemanalHPorUnidad} h/sem · {UNIDAD_LABEL[act.topePorUnidad]}
-                        </Badge>
-                      )}
-                      {act.requiereProyectoAprobado && (
-                        <Badge variant="outline" className="text-[10px] font-normal">
-                          requiere proyecto
-                        </Badge>
-                      )}
+                    />
+                    <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                      <span className="text-sm">{act.nombre}</span>
+                      <div className="flex flex-wrap gap-1">
+                        {act.topeSemestralH !== null && (
+                          <Badge variant="secondary" className="text-[10px] font-normal">
+                            {act.topeSemestralH}h/sem
+                          </Badge>
+                        )}
+                        {act.topeSemanalHPorUnidad !== null && (
+                          <Badge variant="secondary" className="text-[10px] font-normal">
+                            {act.topeSemanalHPorUnidad} h/sem · {UNIDAD_LABEL[act.topePorUnidad]}
+                          </Badge>
+                        )}
+                        {act.requiereProyectoAprobado && (
+                          isBlocked ? (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="outline" className="text-[10px] font-normal border-destructive/40 text-muted-foreground">
+                                    sin proyecto activo
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="max-w-52 text-center text-xs">
+                                  Necesitás un proyecto aprobado. Registrá uno en{" "}
+                                  <span className="font-medium">Mis Proyectos</span>.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] font-normal">
+                              requiere proyecto
+                            </Badge>
+                          )
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </CommandItem>
-              ))}
+                  </CommandItem>
+                )
+              })}
             </CommandGroup>
           </CommandList>
         </Command>

@@ -4,12 +4,8 @@ import { redirect, notFound } from "next/navigation"
 import type { MonitoreoConRelaciones } from "@/lib/types/monitoreo"
 import { MonitoreoForm } from "@/components/monitoreo/MonitoreoForm"
 import { MonitoreoReadOnly } from "@/components/monitoreo/MonitoreoReadOnly"
+import { CheckCircle2, XCircle } from "lucide-react"
 
-/**
- * Página de detalle de un Monitoreo.
- * - BORRADOR → <MonitoreoForm> editable
- * - ENVIADO  → <MonitoreoReadOnly> solo lectura
- */
 export default async function MonitoreoDetallePage(props: {
   params: Promise<{ id: string }>
 }) {
@@ -26,7 +22,6 @@ export default async function MonitoreoDetallePage(props: {
         include: {
           docente: true,
           cursos: {
-            include: { horarios: true },
             orderBy: { numeroCurso: "asc" },
           },
           otrasActividadesDocencia: { orderBy: { nombre: "asc" } },
@@ -52,5 +47,40 @@ export default async function MonitoreoDetallePage(props: {
     return <MonitoreoForm monitoreo={data} />
   }
 
-  return <MonitoreoReadOnly monitoreo={data} />
+  return (
+    <div className="space-y-4">
+      {data.estado === "APROBADO" && (
+        <div className="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-4 text-sm dark:border-green-900 dark:bg-green-950">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600 dark:text-green-400" />
+          <div>
+            <p className="font-semibold text-green-900 dark:text-green-200">Monitoreo aprobado</p>
+            <p className="mt-0.5 text-green-800 dark:text-green-300">
+              Tu Monitoreo (FO-20) para el período{" "}
+              <span className="font-mono font-medium">{data.periodo}</span> ha sido aprobado por el administrador.
+            </p>
+          </div>
+        </div>
+      )}
+      {data.estado === "RECHAZADO" && (
+        <div className="flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm dark:border-red-900 dark:bg-red-950">
+          <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+          <div>
+            <p className="font-semibold text-red-900 dark:text-red-200">Monitoreo rechazado</p>
+            <p className="mt-1 text-red-800 dark:text-red-300">
+              Tu Monitoreo (FO-20) para el período{" "}
+              <span className="font-mono font-medium">{data.periodo}</span> fue rechazado.
+              Contactá a tu coordinador para que habilite la corrección.
+            </p>
+            {data.observacionesAdmin && (
+              <div className="mt-2 rounded border border-red-300 bg-red-100 px-3 py-2 dark:border-red-800 dark:bg-red-900">
+                <p className="font-medium text-red-900 dark:text-red-200">Motivo:</p>
+                <p className="mt-0.5 text-red-800 dark:text-red-300">{data.observacionesAdmin}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      <MonitoreoReadOnly monitoreo={data} />
+    </div>
+  )
 }

@@ -21,6 +21,15 @@
  */
 
 /**
+ * Patrón Jefe / Jefa / Jefatura de Programa. Extraído como constante para
+ * reutilizarse tanto en `PATRONES_CARGOS_EXENTOS` (Art. 10 exención del 20%)
+ * como en `esJefeDePrograma()` (Art. 3 Par. 1: orientar mínimo un curso).
+ * Cubre: "jefe de programa", "jefatura de programa", "jefe del programa",
+ * "jefe programa", "Jefatura del Programa de Ingeniería de Software", etc.
+ */
+const PATRON_JEFE_PROGRAMA = /\bjef(e|a|atura)\s+(de(l)?\s+)?programa\b/
+
+/**
  * Patrones regex (sobre texto normalizado: minúsculas + sin tildes) que
  * identifican cada cargo exento. Cubren variantes comunes:
  *   - "jefe de programa", "jefatura de programa", "jefe del programa", "jefe programa"
@@ -28,8 +37,7 @@
  *   - sin preposición: "jefe programa", "asesor rectoria"
  */
 const PATRONES_CARGOS_EXENTOS: RegExp[] = [
-  // Jefe / Jefa / Jefatura de Programa
-  /\bjef(e|a|atura)\s+(de(l)?\s+)?programa\b/,
+  PATRON_JEFE_PROGRAMA,
   // Jefe / Jefa / Jefatura de Departamento
   /\bjef(e|a|atura)\s+(de(l)?\s+)?departamento\b/,
   // Asesor / Asesora / Asesoria de Vicerrectoría / Vicerrector / Vicerrectorado
@@ -51,6 +59,7 @@ function normalizar(texto: string): string {
   return texto
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
+    .replace(/_/g, " ")
     .toLowerCase()
     .trim()
 }
@@ -68,4 +77,20 @@ export function esCargoExentoGestion20(
   if (!tipoCargo || tipoCargo.trim() === "") return false
   const normalizado = normalizar(tipoCargo)
   return PATRONES_CARGOS_EXENTOS.some((patron) => patron.test(normalizado))
+}
+
+/**
+ * Determina si el cargo del docente corresponde a "Jefe de Programa"
+ * (Acuerdo 048 Art. 3 Par. 1: "Los Jefes de Programa orientarán mínimo
+ * un curso en programas de pregrado").
+ *
+ * Usa el mismo `normalizar()` que el resto del módulo para tolerar tildes,
+ * mayúsculas y variantes ortográficas. Si `tipoCargo` es null/vacío
+ * retorna `false` (sin información, no se aplica la obligación).
+ */
+export function esJefeDePrograma(
+  tipoCargo: string | null | undefined
+): boolean {
+  if (!tipoCargo || tipoCargo.trim() === "") return false
+  return PATRON_JEFE_PROGRAMA.test(normalizar(tipoCargo))
 }

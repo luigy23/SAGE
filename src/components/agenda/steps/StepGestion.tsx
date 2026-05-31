@@ -37,16 +37,18 @@ import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatal
  */
 export function StepGestion({
   cargoAdministrativo,
-  semanasPeriodo,
-  maxHoras,
+  maxGestion,
   excluyeTopeGestion20,
   catalogoActividades,
+  sedeBase,
+  semanasPeriodo,
 }: {
   cargoAdministrativo: boolean
-  semanasPeriodo: number
-  maxHoras: number
+  maxGestion: number
   excluyeTopeGestion20: boolean
   catalogoActividades: ActividadCatalogoOption[]
+  sedeBase?: string | null
+  semanasPeriodo: number
 }) {
   const { control, formState: { errors } } = useFormContext<AgendaWizardFormData>()
 
@@ -67,9 +69,9 @@ export function StepGestion({
     errors.actividadesGestion?.root?.message ||
     errors.actividadesGestion?.message
 
-  // Cálculo en tiempo real del límite Art. 10 (20% de la carga semestral)
+  // Límite Art. 10 — viene del servidor (ParametroGlobal.limiteGestionPorcentaje × horasTotales).
   // Solo aplica si el cargo NO está en la lista de exentos del Art. 10/11.
-  const limiteGestionSemestral = Math.floor(maxHoras * semanasPeriodo * 0.20)
+  const limiteGestionSemestral = maxGestion
   const totalGestionActual = (actividadesGestionLive as { dedicacionPeriodo?: number }[])
     .reduce((acc, a) => acc + (Number(a?.dedicacionPeriodo) || 0), 0)
   const excedeLimiteGestion = !excluyeTopeGestion20 && totalGestionActual > limiteGestionSemestral
@@ -134,6 +136,7 @@ export function StepGestion({
             catalogo={catalogoActividades}
             categoria="GESTION"
             semanasPeriodo={semanasPeriodo}
+            sedeBase={sedeBase}
             onRemove={() => removeGestion(index)}
           />
         ))}

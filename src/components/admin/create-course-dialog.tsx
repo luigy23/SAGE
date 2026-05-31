@@ -1,10 +1,8 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
-import { useForm } from "react-hook-form"
+import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
 import { crearCursoMaestro } from "@/lib/actions/curso-maestro-actions"
 import { Button } from "@/components/ui/button"
 import {
@@ -16,87 +14,70 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Form } from "@/components/ui/form"
 import { Plus, Loader2 } from "lucide-react"
 import { toast } from "sonner"
-
-// =====================================================================
-// ZOD SCHEMA — Validación estricta del formulario
-// =====================================================================
-const createCourseSchema = z.object({
-  codigo: z
-    .string()
-    .min(1, "El código es obligatorio.")
-    .max(20, "Máximo 20 caracteres."),
-  nombre: z
-    .string()
-    .min(1, "El nombre es obligatorio.")
-    .max(150, "Máximo 150 caracteres."),
-  creditos: z
-    .number({ message: "Debe ser un número válido." })
-    .int({ message: "Debe ser un número entero." })
-    .min(1, "Mínimo 1 crédito.")
-    .max(12, "Máximo 12 créditos."),
-  tipo: z.enum(["TEORICO", "TEORICO_PRACTICO"], {
-    message: "Selecciona el tipo de curso.",
-  }),
-})
-
-type CreateCourseFormValues = z.infer<typeof createCourseSchema>
+import {
+  courseFormSchema,
+  CourseFormBody,
+  mapFormValuesToCursoPayload,
+  type CourseFormValues,
+} from "./course-form-shared"
 
 export function CreateCourseDialog() {
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
-  const router = useRouter()
 
-  const form = useForm<CreateCourseFormValues>({
-    resolver: zodResolver(createCourseSchema),
+  const form = useForm<CourseFormValues>({
+    resolver: zodResolver(courseFormSchema),
     defaultValues: {
       codigo: "",
       nombre: "",
-      creditos: 1,
       tipo: undefined,
+      creditos: 1,
+      creditosT: null,
+      creditosP: null,
+      horasSemT: null,
+      horasSemP: null,
+      horasSemI: null,
+      componente: null,
+      facultad: "",
+      acuerdoOrigen: "",
     },
   })
 
-  function onSubmit(values: CreateCourseFormValues) {
+  // Solo para deshabilitar el submit hasta que haya tipo seleccionado.
+  // La reactividad real vive en useCourseFormReactivity dentro de CourseFormBody.
+  const tipo = useWatch({ control: form.control, name: "tipo" })
+
+  function onSubmit(values: CourseFormValues) {
     startTransition(async () => {
-      try {
-        await crearCursoMaestro(values)
-        toast.success("Curso creado exitosamente.")
-        form.reset()
-        setOpen(false)
-        router.refresh()
-      } catch (error: any) {
-        toast.error(error.message || "Error al crear el curso.")
+      const result = await crearCursoMaestro(mapFormValuesToCursoPayload(values))
+      if ("error" in result) {
+        toast.error(result.error)
+        return
       }
+      toast.success("Curso creado exitosamente.")
+      form.reset()
+      setOpen(false)
     })
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) form.reset()
+        setOpen(o)
+      }}
+    >
       <DialogTrigger asChild>
         <Button id="btn-crear-curso">
           <Plus className="mr-2 h-4 w-4" />
           Crear Curso
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[640px]">
         <DialogHeader>
           <DialogTitle>Nuevo Curso Maestro</DialogTitle>
           <DialogDescription>
@@ -106,96 +87,12 @@ export function CreateCourseDialog() {
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {/* Código */}
-            <FormField
-              control={form.control}
-              name="codigo"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Código</FormLabel>
-                  <FormControl>
-                    <Input
-                      id="input-codigo-curso"
-                      placeholder="Ej: MAT101"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+            <div className="max-h-[60vh] overflow-y-auto pr-1 py-2">
+              <CourseFormBody form={form} />
+            </div>
 
-            {/* Nombre */}
-            <FormField
-              control={form.control}
-              name="nombre"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nombre del Curso</FormLabel>
-                  <FormControl>
-                    <Input
-                      id="input-nombre-curso"
-                      placeholder="Ej: Cálculo Diferencial"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Créditos */}
-            <FormField
-              control={form.control}
-              name="creditos"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Créditos</FormLabel>
-                  <FormControl>
-                    <Input
-                      id="input-creditos-curso"
-                      type="number"
-                      min={1}
-                      max={12}
-                      {...field}
-                      onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Tipo de Curso */}
-            <FormField
-              control={form.control}
-              name="tipo"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Tipo de Curso</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger id="select-tipo-curso">
-                        <SelectValue placeholder="Seleccionar tipo" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="TEORICO">Teórico</SelectItem>
-                      <SelectItem value="TEORICO_PRACTICO">
-                        Teórico - Práctico
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <DialogFooter>
+            <DialogFooter className="pt-4">
               <Button
                 type="button"
                 variant="outline"
@@ -204,7 +101,11 @@ export function CreateCourseDialog() {
               >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isPending} id="btn-submit-curso">
+              <Button
+                type="submit"
+                disabled={isPending || !tipo}
+                id="btn-submit-curso"
+              >
                 {isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

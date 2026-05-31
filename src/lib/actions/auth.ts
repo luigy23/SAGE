@@ -1,6 +1,6 @@
 "use server"
 
-import { signIn } from "@/lib/auth"
+import { signIn, auth, signOut } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { redirect } from "next/navigation"
@@ -53,7 +53,8 @@ const DICCIONARIO_MODALIDAD: Record<string, string> = {
   "OCASIONAL_TC": "OCASIONAL_TC",
   "OCASIONAL_MT": "OCASIONAL_MT",
   "CATEDRA": "CATEDRA",
-  "VISITANTE": "VISITANTE",
+  "VISITANTE_TC": "VISITANTE_TC",
+  "VISITANTE_MT": "VISITANTE_MT",
   "INVITADO": "INVITADO",
   // Legacy frontend abbreviations (backward compat)
   "TCP": "PLANTA_TC",
@@ -65,7 +66,7 @@ const DICCIONARIO_MODALIDAD: Record<string, string> = {
 // Modalidades válidas (must match Prisma enum exactly)
 const MODALIDADES_VALIDAS = new Set([
   "PLANTA_TC", "PLANTA_MT", "OCASIONAL_TC", "OCASIONAL_MT",
-  "CATEDRA", "VISITANTE", "INVITADO",
+  "CATEDRA", "VISITANTE_TC", "VISITANTE_MT", "INVITADO",
 ])
 
 // Sedes válidas (must match Prisma enum exactly)
@@ -96,11 +97,16 @@ export async function registerAction(_prevState: RegisterState, formData: FormDa
   
   const sedeRaw = formData.get("sede") as string
   const modalidadRaw = formData.get("modalidad") as string
+  const semanasVinculacionRaw = formData.get("semanasVinculacion") as string
 
-  const values = { 
-    email, nombre, cedula, facultad, programa, celular, 
+  const values = {
+    email, nombre, cedula, facultad, programa, celular,
     sede: sedeRaw, modalidad: modalidadRaw
   }
+
+  const MODALIDADES_TEMPORALES_SET = new Set([
+    "OCASIONAL_TC", "OCASIONAL_MT", "VISITANTE_TC", "VISITANTE_MT", "INVITADO",
+  ])
 
   // ==========================================
   // 1. Presencia — todos los campos requeridos
@@ -156,6 +162,18 @@ export async function registerAction(_prevState: RegisterState, formData: FormDa
     return { error: `La sede "${sedeRaw}" no es válida.`, values }
   }
 
+  const esModalidadTemporal = MODALIDADES_TEMPORALES_SET.has(modalidadTraducida)
+  const semanasVinculacion = esModalidadTemporal && semanasVinculacionRaw
+    ? parseInt(semanasVinculacionRaw, 10)
+    : null
+  if (semanasVinculacion !== null) {
+    const { resolveGlobales } = await import("@/lib/rules/resolver")
+    const globales = await resolveGlobales(null)
+    if (isNaN(semanasVinculacion) || semanasVinculacion < 1 || semanasVinculacion > globales.semanasPeriodo) {
+      return { error: `Las semanas de vinculación deben estar entre 1 y ${globales.semanasPeriodo}.`, values }
+    }
+  }
+
   // ==========================================
   // 5. Unicidad + Persistencia
   // ==========================================
@@ -191,6 +209,7 @@ export async function registerAction(_prevState: RegisterState, formData: FormDa
         doctorado: false,
         cargoAdministrativo: false,
         proyectosActivos: false,
+        semanasVinculacion,
       },
     })
   } catch (error: unknown) {
@@ -212,10 +231,39 @@ export async function registerAction(_prevState: RegisterState, formData: FormDa
 }
 
 export async function loginAction(_prevState: unknown, formData: FormData) {
+  const email = formData.get("email") as string
+  const password = formData.get("password") as string
+
+  // Pre-check: verificar estado de cuenta antes de autenticar
+  const docente = await prisma.docente.findUnique({
+    where: { email },
+    select: { estadoCuenta: true, password: true },
+  })
+
+  if (docente) {
+    const match = await bcrypt.compare(password, docente.password)
+    if (match) {
+      if (docente.estadoCuenta === "PENDIENTE") {
+        return { error: "Tu solicitud de registro está siendo revisada. Te avisaremos cuando sea aprobada." }
+      }
+      if (docente.estadoCuenta === "INACTIVO") {
+        return { error: "Tu cuenta ha sido desactivada. Contactá al administrador para más información." }
+      }
+      if (docente.estadoCuenta === "RECHAZADO") {
+        try {
+          await signIn("credentials", { email, password, redirectTo: "/cuenta-rechazada" })
+        } catch (e) {
+          if ((e as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) throw e
+        }
+        return
+      }
+    }
+  }
+
   try {
     await signIn("credentials", {
-      email: formData.get("email") as string,
-      password: formData.get("password") as string,
+      email,
+      password,
       redirectTo: "/dashboard",
     })
   } catch (error) {
@@ -224,4 +272,68 @@ export async function loginAction(_prevState: unknown, formData: FormData) {
     }
     return { error: "Credenciales inválidas." }
   }
+}
+
+export async function reAplicarAction(_prevState: unknown, formData: FormData) {
+  const session = await auth()
+
+  if (!session?.user?.id) return { error: "No autenticado." }
+  if (session.user.estadoCuenta !== "RECHAZADO") return { error: "Tu cuenta no está en estado rechazado." }
+
+  const facultad = formData.get("facultad") as string
+  const programa = formData.get("programa") as string
+  const modalidadRaw = formData.get("modalidad") as string
+  const sedeRaw = formData.get("sede") as string
+  const celular = (formData.get("celular") as string) || ""
+  const semanasVinculacionRaw = formData.get("semanasVinculacion") as string
+
+  if (!facultad || !programa || !modalidadRaw || !sedeRaw) {
+    return { error: "Todos los campos son obligatorios." }
+  }
+
+  const programasValidos = FACULTAD_PROGRAMAS[facultad]
+  if (!programasValidos) return { error: `La facultad "${facultad}" no es válida.` }
+  if (!programasValidos.includes(programa)) {
+    return { error: `El programa "${programa}" no pertenece a la facultad "${facultad}".` }
+  }
+
+  const modalidadTraducida = DICCIONARIO_MODALIDAD[modalidadRaw.toUpperCase()] || modalidadRaw.toUpperCase()
+  if (!MODALIDADES_VALIDAS.has(modalidadTraducida)) return { error: `La modalidad "${modalidadRaw}" no es válida.` }
+
+  const sedeFormateada = sedeRaw.toUpperCase()
+  if (!SEDES_VALIDAS.has(sedeFormateada)) return { error: `La sede "${sedeRaw}" no es válida.` }
+
+  if (celular && !/^\d{10}$/.test(celular)) {
+    return { error: "El celular debe ser un número de 10 dígitos." }
+  }
+
+  const esModalidadTemporalR = new Set([
+    "OCASIONAL_TC", "OCASIONAL_MT", "VISITANTE_TC", "VISITANTE_MT", "INVITADO",
+  ]).has(modalidadTraducida)
+  const semanasVinculacion = esModalidadTemporalR && semanasVinculacionRaw
+    ? parseInt(semanasVinculacionRaw, 10)
+    : null
+  if (semanasVinculacion !== null) {
+    const { resolveGlobales } = await import("@/lib/rules/resolver")
+    const globales = await resolveGlobales(null)
+    if (isNaN(semanasVinculacion) || semanasVinculacion < 1 || semanasVinculacion > globales.semanasPeriodo) {
+      return { error: `Las semanas de vinculación deben estar entre 1 y ${globales.semanasPeriodo}.` }
+    }
+  }
+
+  await prisma.docente.update({
+    where: { id: session.user.id },
+    data: {
+      facultad,
+      programa,
+      modalidad: modalidadTraducida as import("@/generated/prisma/client").Modalidad,
+      sedeBase: sedeFormateada as import("@/generated/prisma/client").Sede,
+      celular: celular || null,
+      estadoCuenta: "PENDIENTE",
+      perfilVerificado: false,
+      semanasVinculacion,
+    },
+  })
+
+  await signOut({ redirectTo: "/auth/login?reaplicado=true" })
 }

@@ -10,10 +10,11 @@ import {
   type AgendaWizardPayload,
   type AgendaWizardFormData,
   type TopesActividadesMap,
+  type ActividadTopeDetalle,
 } from "@/lib/schemas/agenda-schema"
 import { resolveAgendaLimits } from "@/lib/rules/resolver"
-import { getPeriodoActivo } from "@/lib/utils/periodo-server"
-import { esCargoExentoGestion20 } from "@/lib/utils/cargo"
+import { esCargoExentoGestion20, esJefeDePrograma } from "@/lib/utils/cargo"
+import type { Sede } from "@/generated/prisma/client"
 
 async function getAuthenticatedDocente() {
   const session = await auth()
@@ -35,38 +36,69 @@ export async function upsertAgendaCompletaAction(
     return { error: "No autenticado. Inicia sesión e intenta de nuevo." }
   }
 
-  const { periodo, enviar, data } = payload
+  const { periodo, enviar, semanasAgenda, data } = payload
 
   if (!periodo || periodo.trim() === "") {
     return { error: "El periodo académico es obligatorio." }
   }
 
-  // Resolver paramétrico (Fase 3): lee desde DB con cascada y cache.
-  // Si no hay parámetros en DB, cae al fallback hardcoded del Acuerdo 048.
-  const periodoActivo = await getPeriodoActivo()
+  // Verificar que el período existe, está ABIERTO y que la ventana FO-19 está activa.
   const periodoRow = await prisma.periodoAcademico.findUnique({
-    where: { nombre: periodoActivo },
-    select: { id: true },
+    where: { nombre: periodo },
+    select: { id: true, estado: true, agendaDesde: true, agendaHasta: true },
   })
-  const excluyeTopeGestion20 = esCargoExentoGestion20(docente.tipoCargo)
+  if (!periodoRow) {
+    return { error: `El período "${periodo}" no existe en el sistema.` }
+  }
+  if (periodoRow.estado !== "ABIERTO") {
+    return { error: `El período "${periodo}" está cerrado. No se pueden crear o modificar agendas.` }
+  }
+  if (!periodoRow.agendaDesde || !periodoRow.agendaHasta) {
+    return { error: "El administrador aún no ha configurado la ventana de entrega de agendas para este período." }
+  }
+  const now = new Date()
+  if (now < periodoRow.agendaDesde) {
+    const abre = periodoRow.agendaDesde.toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })
+    return { error: `La ventana de entrega de agendas aún no ha abierto. Abre el ${abre}.` }
+  }
+  if (now > periodoRow.agendaHasta) {
+    const cerro = periodoRow.agendaHasta.toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })
+    return { error: `La ventana de entrega de agendas cerró el ${cerro}.` }
+  }
 
-  const limits = await resolveAgendaLimits(
-    {
-      modalidad: docente.modalidad,
-      sedeBase: docente.sedeBase,
-      doctorado: docente.doctorado,
-      cargoAdministrativo: docente.cargoAdministrativo,
-      proyectosActivos: docente.proyectosActivos,
-      tipoCargo: docente.tipoCargo,
-    },
-    periodoRow?.id ?? null
-  )
+  const excluyeTopeGestion20 = esCargoExentoGestion20(docente.tipoCargo)
+  const esJefeProg = esJefeDePrograma(docente.tipoCargo)
+
+  const docenteParaResolver = {
+    modalidad: docente.modalidad,
+    sedeBase: docente.sedeBase,
+    doctorado: docente.doctorado,
+    cargoAdministrativo: docente.cargoAdministrativo,
+    proyectosActivos: docente.proyectosActivos,
+    tipoCargo: docente.tipoCargo,
+    semanasVinculacion: docente.semanasVinculacion ?? null,
+  }
+
+  // Resolver base (sin override) para obtener semanasMaximas y validar el input
+  const baseLimits = await resolveAgendaLimits(docenteParaResolver, periodoRow.id)
+
+  if (
+    !Number.isInteger(semanasAgenda) ||
+    semanasAgenda < 1 ||
+    semanasAgenda > baseLimits.semanasMaximas
+  ) {
+    return { error: `Semanas inválidas: debe ser un número entre 1 y ${baseLimits.semanasMaximas}.` }
+  }
+
+  // Resolver con semanasAgenda para obtener los límites escalados
+  const limits = await resolveAgendaLimits(docenteParaResolver, periodoRow.id, semanasAgenda)
 
   const flags = {
     doctorado: docente.doctorado,
     cargoAdministrativo: docente.cargoAdministrativo,
     proyectosActivos: docente.proyectosActivos,
     excluyeTopeGestion20,
+    esJefeDePrograma: esJefeProg,
   }
 
   // Art. 11: topes individuales por actividad — se cargan solo al ENVIAR
@@ -74,13 +106,97 @@ export async function upsertAgendaCompletaAction(
   let topesActividades: TopesActividadesMap | undefined = undefined
   if (enviar) {
     const catalogo = await prisma.catalogoActividad.findMany({
-      where: { activo: true, topeSemestralH: { not: null } },
-      select: { categoria: true, nombre: true, topeSemestralH: true },
+      where: {
+        activo: true,
+        OR: [
+          { topeSemestralH: { not: null } },
+          { topeSemanalHPorUnidad: { not: null } },
+        ],
+      },
+      select: {
+        categoria: true,
+        nombre: true,
+        topeSemestralH: true,
+        topePorUnidad: true,
+        topeSemanalHPorUnidad: true,
+        unidadMax: true,
+        cantidadMaxSimultaneos: true,
+        requiereProyectoAprobado: true,
+        aplicaUnoPorFacultad: true,
+        aplicaUnoPorSede: true,
+        // Paso 1 (saneamiento Art. 11): cableamos el campo para que el motor
+        // de validación lo tenga disponible. La regla dura de rechazar el
+        // envío sin resolución del Rector se implementa en un paso aparte.
+        requiereResolucionRector: true,
+      },
     })
     topesActividades = {}
     for (const item of catalogo) {
-      if (item.topeSemestralH !== null) {
-        topesActividades[topesKey(item.categoria, item.nombre)] = item.topeSemestralH
+      const detalle: ActividadTopeDetalle = {
+        topeSemestralH: item.topeSemestralH,
+        topePorUnidad: item.topePorUnidad,
+        topeSemanalHPorUnidad: item.topeSemanalHPorUnidad,
+        unidadMax: item.unidadMax,
+        cantidadMaxSimultaneos: item.cantidadMaxSimultaneos,
+        requiereProyectoAprobado: item.requiereProyectoAprobado,
+        aplicaUnoPorFacultad: item.aplicaUnoPorFacultad,
+        aplicaUnoPorSede: item.aplicaUnoPorSede,
+        requiereResolucionRector: item.requiereResolucionRector,
+      }
+      topesActividades[topesKey(item.categoria, item.nombre)] = detalle
+    }
+  }
+
+  // Art. 11: checks cross-agenda (aplicaUnoPorFacultad / aplicaUnoPorSede).
+  // Solo aplican al enviar — en borrador se omiten para no bloquear el flujo.
+  if (enviar && topesActividades) {
+    type ActividadInput = { nombre?: string; [k: string]: unknown }
+    const seccionesPorCategoria: [
+      "DOCENCIA" | "INVESTIGACION" | "PROYECCION_SOCIAL" | "GESTION",
+      ActividadInput[]
+    ][] = [
+      ["DOCENCIA", data.otrasActividadesDocencia ?? []],
+      ["INVESTIGACION", data.actividadesInvestigacion ?? []],
+      ["PROYECCION_SOCIAL", data.actividadesProyeccionSocial ?? []],
+      ["GESTION", data.actividadesGestion ?? []],
+    ]
+
+    for (const [cat, acts] of seccionesPorCategoria) {
+      for (const act of acts) {
+        const nombre = act.nombre?.trim()
+        if (!nombre) continue
+        const tope = topesActividades[topesKey(cat, nombre)]
+        if (!tope) continue
+
+        if (tope.aplicaUnoPorFacultad) {
+          // Verificar que ningún otro docente de la misma facultad tenga esta
+          // actividad en estado ENVIADO o APROBADO en el mismo período.
+          const modelo = _modeloParaCategoria(cat)
+          const count = await _contarActividadCruzada(
+            prisma, modelo, nombre, periodo, docente.id, "facultad", docente.facultad
+          )
+          if (count > 0) {
+            return {
+              error: `"${nombre}" ya fue asignada a otro docente de la Facultad de ${docente.facultad} en este período. El Art. 11 permite solo un responsable por facultad.`,
+            }
+          }
+        }
+
+        if (tope.aplicaUnoPorSede) {
+          // Prioriza la sede de la actividad (capturada en el wizard). Si está
+          // ausente (legacy o no obligatoria), cae a sedeBase del docente.
+          const sedeEfectiva =
+            ((act as ActividadInput).sede as Sede | null | undefined) ?? docente.sedeBase
+          const modelo = _modeloParaCategoria(cat)
+          const count = await _contarActividadCruzada(
+            prisma, modelo, nombre, periodo, docente.id, "sede", sedeEfectiva
+          )
+          if (count > 0) {
+            return {
+              error: `"${nombre}" ya fue asignada a otro docente de la sede ${sedeEfectiva} en este período. El Art. 11 permite solo un responsable por sede.`,
+            }
+          }
+        }
       }
     }
   }
@@ -88,7 +204,7 @@ export async function upsertAgendaCompletaAction(
   // Borradores: solo validación estructural (tipos y transformaciones)
   // Envío final: validación completa con reglas de negocio resueltas
   const schema = enviar
-    ? createAgendaSchema(limits.maxHorasSemanales, limits.esEstricto, flags, limits.minDocencia, limits.semanas, topesActividades)
+    ? createAgendaSchema(limits.maxHorasSemanales, limits.esEstricto, flags, limits.minDocencia, limits.semanas, topesActividades, limits.maxInvProySocialCatedra)
     : createAgendaWizardBaseSchema(limits.semanas)
 
   const parseResult = schema.safeParse(data)
@@ -128,23 +244,26 @@ export async function upsertAgendaCompletaAction(
       const agenda = existingAgenda
         ? await tx.agendaSemestral.update({
             where: { id: existingAgenda.id },
-            data: { estado: enviar ? "ENVIADO" : "BORRADOR" },
+            data: { estado: enviar ? "ENVIADO" : "BORRADOR", semanasAgenda },
           })
         : await tx.agendaSemestral.create({
             data: {
               docenteId: docente.id,
               periodo,
               estado: enviar ? "ENVIADO" : "BORRADOR",
+              semanasAgenda,
             },
           })
 
       for (const curso of validData.cursos) {
-        const createdCurso = await tx.cursoAgenda.create({
+        await tx.cursoAgenda.create({
           data: {
             agendaId: agenda.id,
+            // FK al catálogo maestro — sustenta el safeguard de borrado en
+            // /admin/cursos. null cuando el docente ingresó el curso a mano.
+            cursoMaestroId: curso.cursoMaestroId ?? null,
             numeroCurso: curso.numeroCurso,
             nombreCurso: curso.nombreCurso,
-            subgrupo: curso.subgrupo || null,
             sede: curso.sede || null,
             horasPresenciales: curso.horasPresenciales,
             creditos: curso.creditos,
@@ -152,27 +271,6 @@ export async function upsertAgendaCompletaAction(
             dedicacionPeriodo: curso.dedicacionPeriodo,
           },
         })
-
-        const h = curso.horarios
-        const tieneHorario = [
-          h.lunes, h.martes, h.miercoles, h.jueves,
-          h.viernes, h.sabado, h.domingo,
-        ].some((v) => v !== null && v !== undefined)
-
-        if (tieneHorario) {
-          await tx.horarioCurso.create({
-            data: {
-              cursoId: createdCurso.id,
-              lunes: h.lunes ?? null,
-              martes: h.martes ?? null,
-              miercoles: h.miercoles ?? null,
-              jueves: h.jueves ?? null,
-              viernes: h.viernes ?? null,
-              sabado: h.sabado ?? null,
-              domingo: h.domingo ?? null,
-            },
-          })
-        }
       }
 
       if (validData.otrasActividadesDocencia.length > 0) {
@@ -182,6 +280,8 @@ export async function upsertAgendaCompletaAction(
             nombre: act.nombre,
             descripcion: act.descripcion || null,
             dedicacionPeriodo: act.dedicacionPeriodo,
+            cantidadUnidades: act.cantidadUnidades || null,
+            sede: (act.sede as Sede | null) ?? null,
           })),
         })
       }
@@ -193,6 +293,8 @@ export async function upsertAgendaCompletaAction(
             nombre: act.nombre,
             descripcion: act.descripcion || null,
             dedicacionPeriodo: act.dedicacionPeriodo,
+            cantidadUnidades: act.cantidadUnidades || null,
+            sede: (act.sede as Sede | null) ?? null,
           })),
         })
       }
@@ -204,6 +306,7 @@ export async function upsertAgendaCompletaAction(
             nombre: act.nombre,
             descripcion: act.descripcion || null,
             dedicacionPeriodo: act.dedicacionPeriodo,
+            sede: (act.sede as Sede | null) ?? null,
           })),
         })
       }
@@ -215,6 +318,7 @@ export async function upsertAgendaCompletaAction(
             nombre: act.nombre,
             descripcion: act.descripcion || null,
             dedicacionPeriodo: act.dedicacionPeriodo,
+            sede: (act.sede as Sede | null) ?? null,
           })),
         })
       }
@@ -229,6 +333,66 @@ export async function upsertAgendaCompletaAction(
       err instanceof Error ? err.message : "Error inesperado al guardar la agenda."
     return { error: message }
   }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Helpers internos para checks cross-agenda del Art. 11
+// ──────────────────────────────────────────────────────────────────────────────
+
+type ModeloCategoriaActividad =
+  | "actividadDocencia"
+  | "actividadInvestigacion"
+  | "actividadProyeccionSocial"
+  | "actividadGestion"
+
+function _modeloParaCategoria(
+  cat: "DOCENCIA" | "INVESTIGACION" | "PROYECCION_SOCIAL" | "GESTION"
+): ModeloCategoriaActividad {
+  switch (cat) {
+    case "DOCENCIA": return "actividadDocencia"
+    case "INVESTIGACION": return "actividadInvestigacion"
+    case "PROYECCION_SOCIAL": return "actividadProyeccionSocial"
+    case "GESTION": return "actividadGestion"
+  }
+}
+
+async function _contarActividadCruzada(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  client: any,
+  modelo: ModeloCategoriaActividad,
+  nombre: string,
+  periodo: string,
+  docenteIdExcluido: string,
+  dimension: "facultad" | "sede",
+  valor: string | null
+): Promise<number> {
+  if (!valor) return 0
+
+  // Para dimensión "sede": prioriza la nueva columna `sede` de la actividad.
+  // Mantiene fallback retro por `docente.sedeBase` para filas sin sede (legacy
+  // o actividades donde la sede no es obligatoria).
+  const sedeFilter =
+    dimension === "sede"
+      ? {
+          OR: [
+            { sede: valor },
+            { sede: null, agenda: { docente: { sedeBase: valor } } },
+          ],
+        }
+      : null
+
+  return client[modelo].count({
+    where: {
+      nombre,
+      ...(sedeFilter ?? {}),
+      agenda: {
+        periodo,
+        estado: { in: ["ENVIADO", "APROBADO"] },
+        docenteId: { not: docenteIdExcluido },
+        ...(dimension === "facultad" ? { docente: { facultad: valor } } : {}),
+      },
+    },
+  })
 }
 
 export async function searchCursosGuardadosAction(query: string) {

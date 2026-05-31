@@ -66,8 +66,8 @@ export function DiscardDraftButton({ periodo }: { periodo: string }) {
           <AlertDialogTitle>¿Descartar borrador?</AlertDialogTitle>
           <AlertDialogDescription>
             Se eliminará permanentemente el borrador de la agenda del periodo{" "}
-            <strong>{periodo}</strong> y todos sus datos (cursos, actividades,
-            horarios). Esta acción no se puede deshacer.
+            <strong>{periodo}</strong> y todos sus datos (cursos y actividades).
+            Esta acción no se puede deshacer.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

@@ -58,8 +58,15 @@ export function AgendaList({ agendas }: { agendas: AgendaSemestral[] }) {
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-base">{agenda.periodo}</CardTitle>
                 <Badge
-                  variant={
-                    agenda.estado === "ENVIADO" ? "default" : "secondary"
+                  variant="default"
+                  className={
+                    agenda.estado === "APROBADO"
+                      ? "bg-green-600 hover:bg-green-600"
+                      : agenda.estado === "RECHAZADO"
+                        ? "bg-red-600 hover:bg-red-600"
+                        : agenda.estado === "ENVIADO"
+                          ? "bg-yellow-500 hover:bg-yellow-500"
+                          : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                   }
                 >
                   {agenda.estado}

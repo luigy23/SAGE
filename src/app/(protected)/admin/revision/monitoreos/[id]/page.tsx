@@ -5,6 +5,8 @@ import type { MonitoreoConRelaciones } from "@/lib/types/monitoreo"
 import { MonitoreoReadOnly } from "@/components/monitoreo/MonitoreoReadOnly"
 import { HistorialRevisionPanel } from "@/components/revision/HistorialRevisionPanel"
 import { RehabilitarMonitoreoDialog } from "@/components/revision/RehabilitarMonitoreoDialog"
+import { AprobarMonitoreoButton } from "@/components/revision/AprobarMonitoreoButton"
+import { RechazarMonitoreoDialog } from "@/components/revision/RechazarMonitoreoDialog"
 import { getMonitoreoParaRevision } from "@/lib/actions/revision"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -30,7 +32,6 @@ export default async function RevisionMonitoreoDetailPage({
         include: {
           docente: true,
           cursos: {
-            include: { horarios: true },
             orderBy: { numeroCurso: "asc" },
           },
           otrasActividadesDocencia: { orderBy: { nombre: "asc" } },
@@ -59,14 +60,31 @@ export default async function RevisionMonitoreoDetailPage({
             Volver al listado
           </Link>
         </Button>
-        {monitoreo.estado === "ENVIADO" && (
-          <RehabilitarMonitoreoDialog
-            monitoreoId={monitoreo.id}
-            docenteName={monitoreo.docente.nombre}
-            periodo={monitoreo.periodo}
-            triggerSize="default"
-          />
-        )}
+        <div className="flex flex-wrap gap-2">
+          {monitoreo.estado === "ENVIADO" && (
+            <>
+              <AprobarMonitoreoButton
+                monitoreoId={monitoreo.id}
+                docenteName={monitoreo.docente.nombre}
+                periodo={monitoreo.periodo}
+              />
+              <RechazarMonitoreoDialog
+                monitoreoId={monitoreo.id}
+                docenteName={monitoreo.docente.nombre}
+                periodo={monitoreo.periodo}
+                triggerSize="default"
+              />
+            </>
+          )}
+          {(monitoreo.estado === "APROBADO" || monitoreo.estado === "RECHAZADO") && (
+            <RehabilitarMonitoreoDialog
+              monitoreoId={monitoreo.id}
+              docenteName={monitoreo.docente.nombre}
+              periodo={monitoreo.periodo}
+              triggerSize="default"
+            />
+          )}
+        </div>
       </div>
 
       <Card>
@@ -88,10 +106,12 @@ export default async function RevisionMonitoreoDetailPage({
               <Badge
                 className={
                   monitoreo.estado === "ENVIADO"
-                    ? "bg-green-600 hover:bg-green-600"
+                    ? "bg-yellow-500 hover:bg-yellow-500"
                     : monitoreo.estado === "APROBADO"
-                      ? "bg-blue-600 hover:bg-blue-600"
-                      : ""
+                      ? "bg-green-600 hover:bg-green-600"
+                      : monitoreo.estado === "RECHAZADO"
+                        ? "bg-red-600 hover:bg-red-600"
+                        : ""
                 }
               >
                 {monitoreo.estado}
@@ -124,6 +144,7 @@ export default async function RevisionMonitoreoDetailPage({
               rehabilitaciones={detalle.monitoreo.rehabilitaciones}
               ediciones={detalle.ediciones}
               actores={actores}
+              auditoria={detalle.auditLogs}
             />
           </div>
         </aside>

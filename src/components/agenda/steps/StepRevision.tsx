@@ -1,6 +1,6 @@
 "use client"
 
-import { useFormContext, useWatch } from "react-hook-form"
+import { useWatch } from "react-hook-form"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import type { Docente } from "@/generated/prisma/client"
 import { getModalidadLabel, getModalidadLabelLargo } from "@/lib/utils/modalidad"
@@ -18,7 +18,6 @@ import {
   Users,
   Building2,
   GraduationCap,
-  AlertTriangle,
   XCircle,
   CheckCircle2,
 } from "lucide-react"
@@ -39,22 +38,19 @@ import { cn } from "@/lib/utils"
  */
 export function StepRevision({
   docente,
-  maxHoras,
-  esEstricto,
-  semanasPeriodo,
+  horasTotalesPeriodo,
+  maxGestion,
   minDocencia,
   excluyeTopeGestion20,
+  maxInvProySocialCatedra,
 }: {
   docente: Docente
-  maxHoras: number
-  esEstricto: boolean
-  semanasPeriodo: number
+  horasTotalesPeriodo: number
+  maxGestion: number
   minDocencia: number
   excluyeTopeGestion20: boolean
+  maxInvProySocialCatedra: number | null
 }) {
-  // Observar el estado del formulario globalmente
-  const { formState: { errors } } = useFormContext<AgendaWizardFormData>()
-
   // Observar todos los arrays del formulario
   const cursos = useWatch<AgendaWizardFormData, "cursos">({ name: "cursos" }) || []
   const otrasDocencia = useWatch<AgendaWizardFormData, "otrasActividadesDocencia">({ name: "otrasActividadesDocencia" }) || []
@@ -76,8 +72,9 @@ export function StepRevision({
 
   // =========================================================
   // Comparación Semestral — granTotal vs límite legal del periodo
+  // horasTotalesPeriodo viene del servidor (resolver DB → fallback 40×sem)
   // =========================================================
-  const horasSemestrales = maxHoras * semanasPeriodo
+  const horasSemestrales = horasTotalesPeriodo
   const excedidoSemestral = granTotal > horasSemestrales
   const porcentajeUso = horasSemestrales > 0 ? Math.round((granTotal / horasSemestrales) * 100) : 0
 
@@ -148,7 +145,6 @@ export function StepRevision({
                   >
                     <span>
                       {c?.numeroCurso || "—"} — {c?.nombreCurso || "Sin nombre"}
-                      {c?.subgrupo ? ` (${c.subgrupo})` : ""}
                     </span>
                     <span className="tabular-nums text-muted-foreground">
                       {Number(c?.dedicacionPeriodo) || 0}h
@@ -424,8 +420,8 @@ export function StepRevision({
                 </div>
               )
             }
-            // Caso B: cargo NO exento → aplica el 20%.
-            const limiteGestionSemestral = Math.floor(maxHoras * semanasPeriodo * 0.20)
+            // Caso B: cargo NO exento → aplica el límite del servidor (ParametroGlobal).
+            const limiteGestionSemestral = maxGestion
             const excedeGestion = totalGestion > limiteGestionSemestral
             const diff = Math.round(Math.abs(limiteGestionSemestral - totalGestion) * 10) / 10
             return (
@@ -454,34 +450,38 @@ export function StepRevision({
             )
           })()}
 
-          {/* Errores Zod del formulario (visibles solo tras intento de envío) */}
-          {(errors as Record<string, any>)._minDocenciaInsuficiente && (
-            <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
-              <div>
-                <p className="text-sm font-semibold text-destructive">
-                  Mínimo de Docencia No Cumplido
-                </p>
-                <p className="mt-1 text-sm text-destructive/80">
-                  {String((errors as Record<string, any>)._minDocenciaInsuficiente.message)}
-                </p>
+          {/* Requisito 4: Tope Inv + Proyección Social para cátedras (Art. 3 Par. 2) */}
+          {maxInvProySocialCatedra !== null && (() => {
+            const invPS = totalInvestigacion + totalProyeccion
+            const excede = invPS > maxInvProySocialCatedra
+            const diff = Math.round(Math.abs(maxInvProySocialCatedra - invPS) * 10) / 10
+            return (
+              <div className={cn(
+                "flex items-start gap-3 rounded-lg border p-3 text-sm",
+                excede
+                  ? "border-destructive/40 bg-destructive/5 text-destructive"
+                  : "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300"
+              )}>
+                {!excede
+                  ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                  : <XCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+                <div>
+                  <p className="font-medium">
+                    Tope de Cátedra (Investigación y Proyección social): {invPS}h asignadas de {maxInvProySocialCatedra}h máximas
+                  </p>
+                  <p className="mt-0.5 text-xs opacity-75">
+                    {excede
+                      ? `⚠️ Límite superado por ${diff}h. Reduzca sus actividades en el Paso 3 para poder enviar la agenda (Art. 3 Par. 2).`
+                      : invPS === maxInvProySocialCatedra
+                        ? `Límite exacto alcanzado. Cumple con el tope normativo (Art. 3 Par. 2).`
+                        : invPS === 0
+                          ? `No ha registrado horas. Tiene ${maxInvProySocialCatedra}h de margen si desea agregar actividades (Art. 3 Par. 2).`
+                          : `Tiene ${diff}h de margen si desea registrar más actividades (Art. 3 Par. 2).`}
+                  </p>
+                </div>
               </div>
-            </div>
-          )}
-
-          {(errors as Record<string, any>)._horasExcedidas && (
-            <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
-              <div>
-                <p className="text-sm font-semibold text-destructive">
-                  Tope Contractual Excedido
-                </p>
-                <p className="mt-1 text-sm text-destructive/80">
-                  {String((errors as Record<string, any>)._horasExcedidas.message)}
-                </p>
-              </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Nota informativa sutil para docentes con doctorado (Art. 4 Par. 3).
               No bloquea el envío — el jefe de programa revisará en monitoreo. */}

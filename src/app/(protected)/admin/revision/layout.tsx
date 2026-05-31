@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { Calendar, ClipboardCheck, LayoutGrid } from "lucide-react"
+import { Calendar, ClipboardCheck, LayoutGrid, UserCog } from "lucide-react"
 
 /**
  * Layout del hub de revisión.
@@ -45,6 +45,12 @@ export default async function RevisionLayout({
           icon={<ClipboardCheck className="h-4 w-4" />}
         >
           Monitoreos
+        </TabLink>
+        <TabLink
+          href="/admin/revision/perfiles"
+          icon={<UserCog className="h-4 w-4" />}
+        >
+          Perfiles
         </TabLink>
       </nav>
 

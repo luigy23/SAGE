@@ -30,13 +30,20 @@ function formatearTipoCargo(raw: string): string {
   return limpio.charAt(0).toUpperCase() + limpio.slice(1)
 }
 
-export function ProfileView({ docente }: { docente: Docente }) {
-  // El campo `tipoCargo` solo aplica si el docente tiene cargo administrativo activo.
-  // El cleanup en profile-actions garantiza que se setea a null cuando se desactiva el cargo,
-  // pero defendemos contra cadenas vacías legacy con .trim().
+type ExtendedDocente = Docente & {
+  tituloDoctorado?: string | null
+  semanasVinculacion?: number | null
+}
+
+export function ProfileView({ docente }: { docente: ExtendedDocente }) {
   const tipoCargoActivo =
     docente.cargoAdministrativo && docente.tipoCargo?.trim()
       ? docente.tipoCargo.trim()
+      : null
+
+  const tituloDoctoradoActivo =
+    docente.doctorado && docente.tituloDoctorado?.trim()
+      ? docente.tituloDoctorado.trim()
       : null
 
   // Art. 10 + Art. 11: detecta los 5 cargos exentos del tope del 20% de gestión.
@@ -80,9 +87,14 @@ export function ProfileView({ docente }: { docente: Docente }) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Datos Personales</CardTitle>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/perfil/editar">Editar Perfil</Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/perfil/solicitudes">Mis solicitudes</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/perfil/editar">Editar Perfil</Link>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -144,6 +156,17 @@ export function ProfileView({ docente }: { docente: Docente }) {
                 )}
               </dd>
             </div>
+            {docente.semanasVinculacion != null && (
+              <div>
+                <dt className="text-sm font-medium text-muted-foreground">
+                  Semanas de vinculación
+                </dt>
+                <dd className="text-sm">
+                  {docente.semanasVinculacion} semanas
+                  <span className="ml-1 text-xs text-muted-foreground">(Art. 4c/4e/4f)</span>
+                </dd>
+              </div>
+            )}
           </dl>
         </CardContent>
       </Card>
@@ -161,8 +184,7 @@ export function ProfileView({ docente }: { docente: Docente }) {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {condiciones.map((cond) => {
               const Icon = cond.icon
-              // Solo la caja de "Cargo Administrativo" muestra detalle adicional
-              // (nombre del cargo + insignia de exención cuando aplica).
+              const showDoctoradoDetail = cond.key === "doctorado" && cond.value && tituloDoctoradoActivo
               const showCargoDetail = cond.key === "cargoAdministrativo" && cond.value && tipoCargoLabel
               return (
                 <div
@@ -193,6 +215,13 @@ export function ProfileView({ docente }: { docente: Docente }) {
                       {cond.value ? "Sí" : "No"}
                     </Badge>
                   </div>
+                  {showDoctoradoDetail && (
+                    <div className="pl-7">
+                      <span className="text-sm font-medium text-foreground">
+                        {tituloDoctoradoActivo}
+                      </span>
+                    </div>
+                  )}
                   {showCargoDetail && (
                     <div className="flex flex-wrap items-center gap-1.5 pl-7">
                       <span className="text-sm font-medium text-foreground">

@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { cambiarEstadoDocente } from "@/lib/actions/admin-actions"
-import { EstadoCuenta } from "@/generated/prisma/client"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -13,44 +12,36 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { MoreHorizontal, Loader2, CheckCircle, XCircle, Clock } from "lucide-react"
+import { MoreHorizontal, Loader2, CheckCircle, XCircle, ShieldOff, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
 interface TeacherStatusDropdownProps {
   docenteId: string
-  currentStatus: EstadoCuenta
+  currentStatus: string
 }
 
-export function TeacherStatusDropdown({
-  docenteId,
-  currentStatus,
-}: TeacherStatusDropdownProps) {
+export function TeacherStatusDropdown({ docenteId, currentStatus }: TeacherStatusDropdownProps) {
   const [isPending, startTransition] = useTransition()
-  const [isOpen, setIsOpen] = useState(false)
   const router = useRouter()
 
-  const handleStatusChange = (newStatus: EstadoCuenta) => {
-    if (newStatus === currentStatus) return
-
+  const handleStatusChange = (newStatus: string) => {
     startTransition(async () => {
       try {
-        const result = await cambiarEstadoDocente(docenteId, newStatus)
+        const result = await cambiarEstadoDocente(docenteId, newStatus as any)
         if (result && "error" in result) {
           toast.error(result.error)
         } else {
-          toast.success(`Estado actualizado a ${newStatus}`)
+          toast.success("Estado actualizado correctamente")
           router.refresh()
         }
       } catch (error: any) {
         toast.error(error.message || "Error al actualizar el estado")
-      } finally {
-        setIsOpen(false)
       }
     })
   }
 
   return (
-    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+    <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="h-8 w-8 p-0" disabled={isPending}>
           <span className="sr-only">Abrir menú</span>
@@ -62,36 +53,57 @@ export function TeacherStatusDropdown({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+        <DropdownMenuLabel>Cambiar estado</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        
-        <DropdownMenuItem
-          disabled={currentStatus === "ACTIVO" || isPending}
-          onClick={() => handleStatusChange("ACTIVO")}
-          className="text-green-600 focus:text-green-600 focus:bg-green-50 cursor-pointer"
-        >
-          <CheckCircle className="mr-2 h-4 w-4" />
-          Aprobar (ACTIVO)
-        </DropdownMenuItem>
 
-        <DropdownMenuItem
-          disabled={currentStatus === "PENDIENTE" || isPending}
-          onClick={() => handleStatusChange("PENDIENTE")}
-          className="text-yellow-600 focus:text-yellow-600 focus:bg-yellow-50 cursor-pointer"
-        >
-          <Clock className="mr-2 h-4 w-4" />
-          Marcar como PENDIENTE
-        </DropdownMenuItem>
-        
-        <DropdownMenuItem
-          disabled={currentStatus === "INACTIVO" || isPending}
-          onClick={() => handleStatusChange("INACTIVO")}
-          className="text-red-600 focus:text-red-600 focus:bg-red-50 cursor-pointer"
-        >
-          <XCircle className="mr-2 h-4 w-4" />
-          Suspender (INACTIVO)
-        </DropdownMenuItem>
+        {currentStatus === "PENDIENTE" && (
+          <>
+            <DropdownMenuItem
+              onClick={() => handleStatusChange("ACTIVO")}
+              className="text-green-600 focus:text-green-600 focus:bg-green-50 cursor-pointer"
+            >
+              <CheckCircle className="mr-2 h-4 w-4" />
+              Aprobar
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => handleStatusChange("RECHAZADO")}
+              className="text-red-600 focus:text-red-600 focus:bg-red-50 cursor-pointer"
+            >
+              <XCircle className="mr-2 h-4 w-4" />
+              Rechazar
+            </DropdownMenuItem>
+          </>
+        )}
 
+        {currentStatus === "ACTIVO" && (
+          <DropdownMenuItem
+            onClick={() => handleStatusChange("INACTIVO")}
+            className="text-red-600 focus:text-red-600 focus:bg-red-50 cursor-pointer"
+          >
+            <ShieldOff className="mr-2 h-4 w-4" />
+            Suspender
+          </DropdownMenuItem>
+        )}
+
+        {currentStatus === "INACTIVO" && (
+          <DropdownMenuItem
+            onClick={() => handleStatusChange("ACTIVO")}
+            className="text-green-600 focus:text-green-600 focus:bg-green-50 cursor-pointer"
+          >
+            <CheckCircle className="mr-2 h-4 w-4" />
+            Reactivar
+          </DropdownMenuItem>
+        )}
+
+        {currentStatus === "RECHAZADO" && (
+          <DropdownMenuItem
+            onClick={() => handleStatusChange("PENDIENTE")}
+            className="text-blue-600 focus:text-blue-600 focus:bg-blue-50 cursor-pointer"
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Dar 2da oportunidad
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

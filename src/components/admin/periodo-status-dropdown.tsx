@@ -33,19 +33,21 @@ export function PeriodoStatusDropdown({
     if (newStatus === currentStatus) return
 
     startTransition(async () => {
-      try {
-        await cambiarEstadoPeriodo(periodoId, newStatus)
-        toast.success(
-          newStatus === "ABIERTO"
-            ? "Período abierto. Los docentes pueden planificar agendas."
-            : "Período cerrado. Las agendas quedan bloqueadas."
-        )
-        router.refresh()
-      } catch (error: any) {
-        toast.error(error.message || "Error al actualizar el estado")
-      } finally {
+      const result = await cambiarEstadoPeriodo(periodoId, newStatus)
+
+      if ("error" in result) {
+        toast.error(result.error)
         setIsOpen(false)
+        return
       }
+
+      toast.success(
+        newStatus === "ABIERTO"
+          ? "Período abierto. Los docentes pueden planificar agendas."
+          : "Período cerrado. Las agendas quedan bloqueadas."
+      )
+      router.refresh()
+      setIsOpen(false)
     })
   }
 

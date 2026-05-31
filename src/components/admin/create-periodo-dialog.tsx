@@ -25,12 +25,9 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus, Loader2, Info } from "lucide-react"
 import { toast } from "sonner"
 
-// =====================================================================
-// ZOD SCHEMA — Validación estricta del formulario (Zod v4)
-// =====================================================================
 const createPeriodoSchema = z
   .object({
     nombre: z
@@ -56,7 +53,11 @@ const createPeriodoSchema = z
 
 type CreatePeriodoFormValues = z.infer<typeof createPeriodoSchema>
 
-export function CreatePeriodoDialog() {
+interface CreatePeriodoDialogProps {
+  periodoActivoNombre?: string | null
+}
+
+export function CreatePeriodoDialog({ periodoActivoNombre }: CreatePeriodoDialogProps) {
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
@@ -72,19 +73,26 @@ export function CreatePeriodoDialog() {
 
   function onSubmit(values: CreatePeriodoFormValues) {
     startTransition(async () => {
-      try {
-        await crearPeriodo({
-          nombre: values.nombre,
-          fechaInicio: new Date(values.fechaInicio),
-          fechaFin: new Date(values.fechaFin),
-        })
-        toast.success("Período académico creado exitosamente.")
-        form.reset()
-        setOpen(false)
-        router.refresh()
-      } catch (error: any) {
-        toast.error(error.message || "Error al crear el período.")
+      const result = await crearPeriodo({
+        nombre: values.nombre,
+        fechaInicio: new Date(values.fechaInicio),
+        fechaFin: new Date(values.fechaFin),
+      })
+
+      if ("error" in result) {
+        toast.error(result.error)
+        return
       }
+
+      if (result.advertencia) {
+        toast.warning(result.advertencia)
+      } else {
+        toast.success("Período académico creado y activado exitosamente.")
+      }
+
+      form.reset()
+      setOpen(false)
+      router.refresh()
     })
   }
 
@@ -105,9 +113,19 @@ export function CreatePeriodoDialog() {
           </DialogDescription>
         </DialogHeader>
 
+        {periodoActivoNombre && (
+          <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>
+              El período <span className="font-mono font-semibold">{periodoActivoNombre}</span> está
+              activo. El nuevo período se creará como <span className="font-semibold">CERRADO</span>{" "}
+              para no interferir. Cierra el actual antes de abrir el nuevo.
+            </span>
+          </div>
+        )}
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {/* Nombre del Período */}
             <FormField
               control={form.control}
               name="nombre"
@@ -126,7 +144,6 @@ export function CreatePeriodoDialog() {
               )}
             />
 
-            {/* Fecha Inicio */}
             <FormField
               control={form.control}
               name="fechaInicio"
@@ -145,7 +162,6 @@ export function CreatePeriodoDialog() {
               )}
             />
 
-            {/* Fecha Fin */}
             <FormField
               control={form.control}
               name="fechaFin"

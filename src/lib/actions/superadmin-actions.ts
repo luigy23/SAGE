@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache"
 import { invalidate } from "@/lib/rules/cache"
 import type { EstadoCuenta, Rol } from "@/generated/prisma/client"
 import { assertNoEsUltimoSuperadmin, assertPuedeMutarUsuario } from "@/lib/rbac"
+import { registrarAuditoria } from "@/lib/audit"
 
 // =====================================================================
 // Guard
@@ -32,7 +33,7 @@ export async function listParametrosGlobales() {
 }
 
 export async function updateParametroGlobal(id: string, valor: string) {
-  await ensureSuperadmin()
+  const user = await ensureSuperadmin()
 
   const param = await prisma.parametroGlobal.findUnique({ where: { id } })
   if (!param) return { error: "Parámetro no encontrado." }
@@ -53,6 +54,18 @@ export async function updateParametroGlobal(id: string, valor: string) {
   await prisma.parametroGlobal.update({
     where: { id },
     data: { valor },
+  })
+
+  await registrarAuditoria({
+    actorId: user.id,
+    actorRol: user.rol as Rol,
+    actorNombre: user.name ?? user.email ?? user.id,
+    entidad: "PARAMETRO_GLOBAL",
+    accion: "ACTUALIZAR",
+    recursoId: id,
+    recursoDesc: `Parámetro ${param.clave}`,
+    antes: { clave: param.clave, valor: param.valor },
+    despues: { clave: param.clave, valor },
   })
 
   invalidate("params:globales:*")
@@ -85,7 +98,7 @@ export async function updateParametrosModalidad(
     activo: boolean
   }
 ) {
-  await ensureSuperadmin()
+  const user = await ensureSuperadmin()
 
   // Sanity check
   if (data.horasSemanalMax < 0) {
@@ -102,9 +115,38 @@ export async function updateParametrosModalidad(
     return { error: "El mínimo de docencia no puede superar la carga semestral." }
   }
 
+  const prev = await prisma.parametrosModalidad.findUnique({
+    where: { id },
+    select: {
+      modalidad: true,
+      sedeAplicable: true,
+      horasSemanalMax: true,
+      horasSemestralMax: true,
+      horasSemestralEstricto: true,
+      minDocencia: true,
+      minDocenciaConProyectos: true,
+      maxInvProySocSemanal: true,
+      activo: true,
+    },
+  })
+
   await prisma.parametrosModalidad.update({
     where: { id },
     data,
+  })
+
+  await registrarAuditoria({
+    actorId: user.id,
+    actorRol: user.rol as Rol,
+    actorNombre: user.name ?? user.email ?? user.id,
+    entidad: "PARAMETROS_MODALIDAD",
+    accion: "ACTUALIZAR",
+    recursoId: id,
+    recursoDesc: prev
+      ? `Modalidad ${prev.modalidad}${prev.sedeAplicable ? ` / ${prev.sedeAplicable}` : ""}`
+      : `Modalidad ${id}`,
+    antes: prev ?? undefined,
+    despues: data,
   })
 
   invalidate("params:modalidad:*")
@@ -224,9 +266,26 @@ export async function cambiarRolUsuario(usuarioId: string, nuevoRol: Rol) {
     if (lockout) return lockout
   }
 
+  const target = await prisma.docente.findUnique({
+    where: { id: usuarioId },
+    select: { nombre: true },
+  })
+
   await prisma.docente.update({
     where: { id: usuarioId },
     data: { rol: nuevoRol },
+  })
+
+  await registrarAuditoria({
+    actorId: user.id,
+    actorRol: user.rol as Rol,
+    actorNombre: user.name ?? user.email ?? user.id,
+    entidad: "USUARIO_ROL",
+    accion: "CAMBIAR_ROL",
+    recursoId: usuarioId,
+    recursoDesc: `Usuario ${target?.nombre ?? usuarioId}`,
+    antes: { rol: check.targetRol },
+    despues: { rol: nuevoRol },
   })
 
   revalidatePath("/superadmin/usuarios")
@@ -253,11 +312,66 @@ export async function cambiarEstadoCuenta(
     if (lockout) return lockout
   }
 
+  const target = await prisma.docente.findUnique({
+    where: { id: usuarioId },
+    select: { nombre: true, estadoCuenta: true },
+  })
+
   await prisma.docente.update({
     where: { id: usuarioId },
     data: { estadoCuenta: nuevoEstado },
   })
 
+  await registrarAuditoria({
+    actorId: user.id,
+    actorRol: user.rol as Rol,
+    actorNombre: user.name ?? user.email ?? user.id,
+    entidad: "USUARIO_ESTADO",
+    accion: "CAMBIAR_ESTADO",
+    recursoId: usuarioId,
+    recursoDesc: `Usuario ${target?.nombre ?? usuarioId}`,
+    antes: { estadoCuenta: target?.estadoCuenta },
+    despues: { estadoCuenta: nuevoEstado },
+  })
+
   revalidatePath("/superadmin/usuarios")
+  revalidatePath(`/superadmin/usuarios/${usuarioId}`)
   return { success: true }
+}
+
+/**
+ * Obtener todos los datos de un usuario para la vista detalle superadmin
+ */
+export async function getUsuarioSuperadmin(usuarioId: string) {
+  await ensureSuperadmin()
+
+  try {
+    return await prisma.docente.findUnique({
+      where: { id: usuarioId },
+      select: {
+        id: true,
+        nombre: true,
+        cedula: true,
+        email: true,
+        celular: true,
+        modalidad: true,
+        sedeBase: true,
+        facultad: true,
+        programa: true,
+        estadoCuenta: true,
+        rol: true,
+        createdAt: true,
+        doctorado: true,
+        tituloDoctorado: true,
+        cargoAdministrativo: true,
+        tipoCargo: true,
+        proyectosActivos: true,
+        semanasVinculacion: true,
+        perfilVerificado: true,
+      },
+    })
+  } catch (error) {
+    console.error("[getUsuarioSuperadmin] Error:", error)
+    throw new Error("No se pudo obtener el usuario.")
+  }
 }

@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { EstadoCuenta, type Rol } from "@/generated/prisma/client"
 import { assertNoEsUltimoSuperadmin, assertPuedeMutarUsuario } from "@/lib/rbac"
+import { registrarAuditoria } from "@/lib/audit"
 
 /**
  * Solo administradores pueden ejecutar estas acciones.
@@ -39,6 +40,8 @@ export async function getDocentesAdmin() {
         sedeBase: true,
         estadoCuenta: true,
         createdAt: true,
+        facultad: true,
+        programa: true,
       },
     })
     return docentes
@@ -68,16 +71,68 @@ export async function cambiarEstadoDocente(docenteId: string, nuevoEstado: Estad
   }
 
   try {
+    const target = await prisma.docente.findUnique({
+      where: { id: docenteId },
+      select: { nombre: true, estadoCuenta: true },
+    })
+
     await prisma.docente.update({
       where: { id: docenteId },
       data: { estadoCuenta: nuevoEstado },
     })
 
-    // Revalidar la vista de admin
+    await registrarAuditoria({
+      actorId: actor.id,
+      actorRol: actor.rol as Rol,
+      actorNombre: actor.name ?? actor.email ?? actor.id,
+      entidad: "USUARIO_ESTADO",
+      accion: "CAMBIAR_ESTADO",
+      recursoId: docenteId,
+      recursoDesc: `Usuario ${target?.nombre ?? docenteId}`,
+      antes: { estadoCuenta: target?.estadoCuenta },
+      despues: { estadoCuenta: nuevoEstado },
+    })
+
     revalidatePath("/admin/docentes")
+    revalidatePath(`/admin/docentes/${docenteId}`)
     return { success: true }
   } catch (error) {
     console.error("[cambiarEstadoDocente] Error:", error)
     throw new Error("No se pudo actualizar el estado del docente.")
+  }
+}
+
+/**
+ * Obtener todos los datos de un docente para la vista detalle admin
+ */
+export async function getDocenteAdmin(docenteId: string) {
+  await ensureAdmin()
+
+  try {
+    return await prisma.docente.findUnique({
+      where: { id: docenteId },
+      select: {
+        id: true,
+        nombre: true,
+        cedula: true,
+        email: true,
+        celular: true,
+        modalidad: true,
+        sedeBase: true,
+        facultad: true,
+        programa: true,
+        estadoCuenta: true,
+        createdAt: true,
+        doctorado: true,
+        cargoAdministrativo: true,
+        tipoCargo: true,
+        proyectosActivos: true,
+        perfilVerificado: true,
+        rol: true,
+      },
+    })
+  } catch (error) {
+    console.error("[getDocenteAdmin] Error:", error)
+    throw new Error("No se pudo obtener el docente.")
   }
 }

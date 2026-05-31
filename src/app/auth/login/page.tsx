@@ -59,12 +59,21 @@ function EyeOffIcon({ className }: { className?: string }) {
 function RegisteredBanner() {
   const searchParams = useSearchParams()
   const registered = searchParams.get("registered")
+  const reaplicado = searchParams.get("reaplicado")
+
+  if (reaplicado) {
+    return (
+      <div className="mb-4 rounded-lg bg-blue-50 p-3 text-sm text-blue-700 border border-blue-200">
+        Tu solicitud fue reenviada. Te notificaremos cuando sea revisada por un administrador.
+      </div>
+    )
+  }
 
   if (!registered) return null
 
   return (
     <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-700 border border-green-200">
-      Cuenta creada exitosamente. Inicia sesión.
+      Cuenta creada exitosamente. Tu solicitud está siendo revisada.
     </div>
   )
 }
