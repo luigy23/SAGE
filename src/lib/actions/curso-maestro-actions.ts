@@ -317,7 +317,7 @@ export async function previewImportCursos(formData: FormData): Promise<
       return
     }
 
-    const creditosRaw = parseInteger(r.creditos, "creditos", fila, errors)
+    let creditosRaw = parseInteger(r.creditos, "creditos", fila, errors)
     if (creditosRaw === null) return
     if (creditosRaw < 1 || creditosRaw > 12) {
       errors.push({ fila, campo: "creditos", mensaje: `Créditos fuera de rango (1-12): ${creditosRaw}` })
@@ -333,6 +333,7 @@ export async function previewImportCursos(formData: FormData): Promise<
       })
       return
     }
+    const tipo = tipoRaw as TipoCurso
 
     const componenteRaw = parseStr(r.componente)?.toUpperCase()
     if (componenteRaw && !COMPONENTES_VALIDOS.includes(componenteRaw as ComponenteCurricular)) {
@@ -344,18 +345,66 @@ export async function previewImportCursos(formData: FormData): Promise<
       return
     }
 
+    // Campos numéricos opcionales. Rastreamos los errores de ESTA fila para
+    // no incluirla si alguno es inválido (antes una fila podía quedar
+    // "válida y con error" a la vez, importándose con el campo en null).
+    const errCountBefore = errors.length
+    let creditosT = parseInteger(r.creditost, "creditosT", fila, errors)
+    let creditosP = parseInteger(r.creditosp, "creditosP", fila, errors)
+    let horasSemT = parseInteger(r.horassemt, "horasSemT", fila, errors)
+    let horasSemP = parseInteger(r.horassemp, "horasSemP", fila, errors)
+    const horasSemI = parseInteger(r.horassemi, "horasSemI", fila, errors)
+    if (errors.length > errCountBefore) return
+
+    // Normalización tipo↔créditos/horas — espeja el formulario manual
+    // (mapFormValuesToCursoPayload + useCourseFormReactivity en
+    // course-form-shared.tsx). Garantiza que el import no introduzca datos
+    // inconsistentes (p. ej. un TEORICO con horasSemP/creditosP) que la
+    // tabla oculta pero que se filtran a los cálculos del FO-19.
+    if (tipo === "TEORICO") {
+      creditosT = creditosRaw
+      creditosP = null
+      horasSemP = null
+    } else if (tipo === "PRACTICO") {
+      creditosP = creditosRaw
+      creditosT = null
+      horasSemT = null
+    } else {
+      // TEORICO_PRACTICO: los créditos son la suma de T+P (fuente de verdad,
+      // igual que la reactividad del formulario). Se recalcula `creditos`
+      // ignorando la columna `creditos` del archivo si difiere.
+      const total = (creditosT ?? 0) + (creditosP ?? 0)
+      if (total < 1) {
+        errors.push({
+          fila,
+          campo: "creditosT",
+          mensaje: "TEORICO_PRACTICO requiere al menos un crédito teórico o práctico (creditosT/creditosP)",
+        })
+        return
+      }
+      if (total > 12) {
+        errors.push({
+          fila,
+          campo: "creditosP",
+          mensaje: `El total de créditos T+P (${total}) supera el máximo de 12`,
+        })
+        return
+      }
+      creditosRaw = total
+    }
+
     rows.push({
       codigo,
       nombre,
       creditos: creditosRaw,
-      tipo: tipoRaw as TipoCurso,
+      tipo,
       componente: (componenteRaw as ComponenteCurricular) || null,
       facultad: parseStr(r.facultad),
-      creditosT: parseInteger(r.creditost, "creditosT", fila, errors),
-      creditosP: parseInteger(r.creditosp, "creditosP", fila, errors),
-      horasSemT: parseInteger(r.horassemt, "horasSemT", fila, errors),
-      horasSemP: parseInteger(r.horassemp, "horasSemP", fila, errors),
-      horasSemI: parseInteger(r.horassemi, "horasSemI", fila, errors),
+      creditosT,
+      creditosP,
+      horasSemT,
+      horasSemP,
+      horasSemI,
       acuerdoOrigen: parseStr(r.acuerdoorigen),
     })
   })
