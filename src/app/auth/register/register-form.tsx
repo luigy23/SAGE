@@ -6,6 +6,8 @@ import { registerAction } from "@/lib/actions/auth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
+import { TIPOS_CARGO } from "@/lib/schemas/profile-schema"
 import {
   Card,
   CardContent,
@@ -19,39 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { SEDES } from "@/lib/constants"
-
-const FACULTAD_PROGRAMAS: Record<string, string[]> = {
-  "Ingeniería": [
-    "Ingeniería de Software",
-    "Ingeniería Civil",
-    "Ingeniería Agrícola",
-    "Ingeniería Electrónica",
-  ],
-  "Salud": [
-    "Medicina",
-    "Enfermería",
-  ],
-  "Educación": [
-    "Licenciatura en Educación Infantil",
-    "Licenciatura en Matemáticas",
-    "Licenciatura en Ciencias Naturales",
-  ],
-  "Economía y Administración": [
-    "Administración de Empresas",
-    "Contaduría Pública",
-    "Economía",
-  ],
-  "Ciencias Exactas y Naturales": [
-    "Biología",
-    "Matemática Aplicada",
-  ],
-  "Ciencias Sociales y Humanas": [
-    "Derecho",
-    "Psicología",
-    "Comunicación Social",
-  ],
-}
+import {
+  SEDES,
+  FACULTAD_PROGRAMAS,
+  CARGO_AMBITO,
+  opcionesAmbito,
+} from "@/lib/constants"
 
 const MODALIDADES = [
   { value: "PLANTA_TC", label: "Tiempo Completo Planta" },
@@ -97,17 +72,49 @@ export function RegisterForm({ maxSemanas }: { maxSemanas: number }) {
   const [selectedSede, setSelectedSede] = useState<string>("")
   const [selectedModalidad, setSelectedModalidad] = useState<string>("")
 
+  // Condiciones académicas (Acuerdo 048) — proyectosActivos NO se captura aquí.
+  const [doctorado, setDoctorado] = useState(false)
+  const [tituloDoctorado, setTituloDoctorado] = useState("")
+  const [cargoAdministrativo, setCargoAdministrativo] = useState(false)
+  const [tipoCargo, setTipoCargo] = useState("")
+  const [cargoAmbitoValor, setCargoAmbitoValor] = useState("")
+
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
 
-  const isFormInvalid = pending || password !== confirmPassword || !password
+  const isCatedra = selectedModalidad === "CATEDRA"
+  const ambitoCfg = tipoCargo ? CARGO_AMBITO[tipoCargo] ?? null : null
+  const ambitoOpciones = opcionesAmbito(tipoCargo)
+  const isFormInvalid =
+    pending ||
+    password !== confirmPassword ||
+    !password ||
+    (!isCatedra && cargoAdministrativo && !tipoCargo) ||
+    (!isCatedra && cargoAdministrativo && !!ambitoCfg && !cargoAmbitoValor)
   const programas = selectedFacultad ? FACULTAD_PROGRAMAS[selectedFacultad] || [] : []
 
   const handleFacultadChange = (value: string) => {
     setSelectedFacultad(value)
     setSelectedPrograma("")
+  }
+
+  // CÁTEDRA (Art. 10): no puede tener cargo administrativo. Se resetea aquí
+  // (en el handler, no en un efecto) al cambiar de modalidad.
+  const handleModalidadChange = (value: string) => {
+    setSelectedModalidad(value)
+    if (value === "CATEDRA") {
+      setCargoAdministrativo(false)
+      setTipoCargo("")
+      setCargoAmbitoValor("")
+    }
+  }
+
+  // Al cambiar de cargo, el ámbito previo deja de ser válido → resetear.
+  const handleTipoCargoChange = (value: string) => {
+    setTipoCargo(value)
+    setCargoAmbitoValor("")
   }
 
   const inputStyle = "h-11 border-gray-300 rounded-lg transition-colors duration-200 focus:border-[#8F141B] focus:ring-[#8F141B]/20"
@@ -278,7 +285,7 @@ export function RegisterForm({ maxSemanas }: { maxSemanas: number }) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="modalidad" className={labelStyle}>Modalidad de vinculación</Label>
-              <Select value={selectedModalidad} onValueChange={setSelectedModalidad}>
+              <Select value={selectedModalidad} onValueChange={handleModalidadChange}>
                 <SelectTrigger id="modalidad" className={inputStyle}>
                   <SelectValue placeholder="Seleccionar modalidad" />
                 </SelectTrigger>
@@ -353,11 +360,105 @@ export function RegisterForm({ maxSemanas }: { maxSemanas: number }) {
             </div>
           )}
 
+          {/* ── Separador: Condiciones académicas ── */}
+          <div className="relative py-1">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-white px-3 text-gray-400">Condiciones académicas (Acuerdo 048)</span>
+            </div>
+          </div>
+
+          {/* Doctorado */}
+          <div className="flex items-center justify-between rounded-lg border border-gray-200 p-3">
+            <div className="space-y-0.5 pr-3">
+              <Label className={labelStyle}>Doctorado</Label>
+              <p className="text-xs text-gray-400">
+                Art. 4 Par. 3 — Vinculación obligatoria a grupo de investigación.
+              </p>
+            </div>
+            <Switch checked={doctorado} onCheckedChange={setDoctorado} />
+          </div>
+          {doctorado && (
+            <div className="space-y-2">
+              <Label htmlFor="tituloDoctorado" className={labelStyle}>
+                Área del doctorado <span className="text-gray-400 font-normal">(opcional)</span>
+              </Label>
+              <Input
+                id="tituloDoctorado"
+                value={tituloDoctorado}
+                onChange={(e) => setTituloDoctorado(e.target.value)}
+                maxLength={200}
+                placeholder="Ej: Ingeniería de Sistemas"
+                className={inputStyle}
+              />
+            </div>
+          )}
+
+          {/* Cargo administrativo */}
+          <div className={`flex items-center justify-between rounded-lg border border-gray-200 p-3 ${isCatedra ? "opacity-50" : ""}`}>
+            <div className="space-y-0.5 pr-3">
+              <Label className={labelStyle}>Cargo administrativo</Label>
+              <p className="text-xs text-gray-400">
+                {isCatedra
+                  ? "No disponible para modalidad Cátedra (Art. 10)."
+                  : "Art. 10 — La gestión no puede exceder el 20% del tiempo laboral."}
+              </p>
+            </div>
+            <Switch
+              checked={cargoAdministrativo}
+              onCheckedChange={setCargoAdministrativo}
+              disabled={isCatedra}
+            />
+          </div>
+          {cargoAdministrativo && !isCatedra && (
+            <div className="space-y-2">
+              <Label htmlFor="tipoCargo" className={labelStyle}>Tipo de cargo</Label>
+              <Select value={tipoCargo} onValueChange={handleTipoCargoChange}>
+                <SelectTrigger id="tipoCargo" className={inputStyle}>
+                  <SelectValue placeholder="Seleccionar tipo de cargo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIPOS_CARGO.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* "¿De cuál?" — ámbito específico del cargo (Decano→Facultad, Jefe de
+              Programa→Programa, etc.). Solo para cargos que manejan ámbito. */}
+          {cargoAdministrativo && !isCatedra && ambitoCfg && (
+            <div className="space-y-2">
+              <Label htmlFor="cargoAmbitoValor" className={labelStyle}>Programa / Facultad</Label>
+              <Select value={cargoAmbitoValor} onValueChange={setCargoAmbitoValor}>
+                <SelectTrigger id="cargoAmbitoValor" className={inputStyle}>
+                  <SelectValue placeholder={ambitoCfg.tipo === "FACULTAD" ? "Seleccionar facultad" : "Seleccionar programa"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {ambitoOpciones.map((op) => (
+                    <SelectItem key={op} value={op}>{op}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-400">
+                Indica específicamente cuál {ambitoCfg.tipo === "FACULTAD" ? "facultad" : "programa"} corresponde a tu cargo. No se asume por tu programa.
+              </p>
+            </div>
+          )}
+
           {/* Inputs ocultos */}
           <input type="hidden" name="sede" value={selectedSede} />
           <input type="hidden" name="modalidad" value={selectedModalidad} />
           <input type="hidden" name="facultad" value={selectedFacultad} />
           <input type="hidden" name="programa" value={selectedPrograma} />
+          <input type="hidden" name="doctorado" value={doctorado ? "true" : "false"} />
+          <input type="hidden" name="tituloDoctorado" value={doctorado ? tituloDoctorado : ""} />
+          <input type="hidden" name="cargoAdministrativo" value={cargoAdministrativo ? "true" : "false"} />
+          <input type="hidden" name="tipoCargo" value={cargoAdministrativo ? tipoCargo : ""} />
+          <input type="hidden" name="cargoAmbitoValor" value={cargoAdministrativo && ambitoCfg ? cargoAmbitoValor : ""} />
 
           {/* ── Botón de envío ── */}
           <Button

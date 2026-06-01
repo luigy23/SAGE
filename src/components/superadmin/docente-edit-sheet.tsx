@@ -34,7 +34,6 @@ import {
   GraduationCap,
   Briefcase,
   FolderOpen,
-  ShieldCheck,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -42,6 +41,7 @@ import {
   type EditarDocenteSuperadminInput,
 } from "@/lib/schemas/superadmin-docente-schema"
 import { TIPOS_CARGO } from "@/lib/schemas/profile-schema"
+import { CARGO_AMBITO, opcionesAmbito } from "@/lib/constants"
 import { editarDocenteSuperadminAction } from "@/lib/actions/superadmin-docente-edit"
 
 const MODALIDADES = [
@@ -84,9 +84,9 @@ type Usuario = {
   tituloDoctorado?: string | null
   cargoAdministrativo: boolean
   tipoCargo: string | null
+  cargoAmbitoValor: string | null
   proyectosActivos: boolean
   semanasVinculacion?: number | null
-  perfilVerificado: boolean
 }
 
 export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
@@ -108,9 +108,9 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
       tituloDoctorado: usuario.tituloDoctorado ?? "",
       cargoAdministrativo: usuario.cargoAdministrativo,
       tipoCargo: usuario.tipoCargo ?? "",
+      cargoAmbitoValor: usuario.cargoAmbitoValor ?? "",
       proyectosActivos: usuario.proyectosActivos,
       semanasVinculacion: usuario.semanasVinculacion ?? undefined,
-      perfilVerificado: usuario.perfilVerificado,
     },
   })
 
@@ -129,9 +129,9 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
         tituloDoctorado: usuario.tituloDoctorado ?? "",
         cargoAdministrativo: usuario.cargoAdministrativo,
         tipoCargo: usuario.tipoCargo ?? "",
+        cargoAmbitoValor: usuario.cargoAmbitoValor ?? "",
         proyectosActivos: usuario.proyectosActivos,
         semanasVinculacion: usuario.semanasVinculacion ?? undefined,
-        perfilVerificado: usuario.perfilVerificado,
       })
     }
   }, [open, usuario, form])
@@ -142,6 +142,9 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
     control: form.control,
     name: "cargoAdministrativo",
   })
+  const tipoCargoW = useWatch({ control: form.control, name: "tipoCargo" })
+  const ambitoCfg = tipoCargoW ? CARGO_AMBITO[tipoCargoW] ?? null : null
+  const ambitoOpciones = opcionesAmbito(tipoCargoW)
 
   const isCatedra = modalidad === "CATEDRA"
   const isModalidadTemporal = MODALIDADES_TEMPORALES.has(modalidad ?? "")
@@ -152,6 +155,7 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
       form.setValue("cargoAdministrativo", false, { shouldValidate: true })
       form.setValue("proyectosActivos", false, { shouldValidate: true })
       form.setValue("tipoCargo", "", { shouldValidate: true })
+      form.setValue("cargoAmbitoValor", "", { shouldValidate: true })
     }
   }, [isCatedra, form])
 
@@ -160,10 +164,12 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
     if (!doctorado) form.setValue("tituloDoctorado", "", { shouldValidate: true })
   }, [doctorado, form])
 
-  // Si no hay cargo, limpiar tipoCargo
+  // Si no hay cargo, limpiar tipoCargo y ámbito
   useEffect(() => {
-    if (!cargoAdministrativo)
+    if (!cargoAdministrativo) {
       form.setValue("tipoCargo", "", { shouldValidate: true })
+      form.setValue("cargoAmbitoValor", "", { shouldValidate: true })
+    }
   }, [cargoAdministrativo, form])
 
   function onSubmit(data: EditarDocenteSuperadminInput) {
@@ -173,6 +179,7 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
         celular: data.celular?.trim() ? data.celular.trim() : null,
         tituloDoctorado: data.tituloDoctorado?.trim() || null,
         tipoCargo: data.tipoCargo?.trim() || null,
+        cargoAmbitoValor: data.cargoAmbitoValor?.trim() || null,
         semanasVinculacion: data.semanasVinculacion ?? null,
       })
       if ("error" in res) {
@@ -390,9 +397,10 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
                   >
                     <Select
                       value={form.watch("tipoCargo") ?? ""}
-                      onValueChange={(v) =>
+                      onValueChange={(v) => {
                         form.setValue("tipoCargo", v, { shouldValidate: true })
-                      }
+                        form.setValue("cargoAmbitoValor", "", { shouldValidate: true })
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecciona el cargo" />
@@ -406,6 +414,29 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
                       </SelectContent>
                     </Select>
                   </Field>
+                  {ambitoCfg && (
+                    <Field
+                      label="Programa / Facultad"
+                      error={errors.cargoAmbitoValor?.message}
+                      required
+                    >
+                      <Select
+                        value={form.watch("cargoAmbitoValor") ?? ""}
+                        onValueChange={(v) =>
+                          form.setValue("cargoAmbitoValor", v, { shouldValidate: true })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={ambitoCfg.tipo === "FACULTAD" ? "Seleccionar facultad" : "Seleccionar programa"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ambitoOpciones.map((op) => (
+                            <SelectItem key={op} value={op}>{op}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  )}
                 </div>
               )}
 
@@ -421,24 +452,6 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
                 disabled={isCatedra}
                 onChange={(v) =>
                   form.setValue("proyectosActivos", v, { shouldValidate: true })
-                }
-              />
-            </section>
-
-            <Separator />
-
-            {/* Flag administrativo */}
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                Marca administrativa
-              </h3>
-              <SwitchRow
-                icon={<ShieldCheck className="h-4 w-4" />}
-                label="Perfil verificado"
-                description="Si está apagado, el docente debe confirmar sus datos en /perfil/editar antes de usar el sistema."
-                checked={form.watch("perfilVerificado") ?? false}
-                onChange={(v) =>
-                  form.setValue("perfilVerificado", v, { shouldValidate: true })
                 }
               />
             </section>

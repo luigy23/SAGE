@@ -50,16 +50,11 @@ export async function updateProfileAction(
       data: {
         modalidad: parsed.data.modalidad as Modalidad,
         doctorado: parsed.data.doctorado,
-        // @ts-ignore: Prisma client needs regeneration
         tituloDoctorado: parsed.data.doctorado ? (parsed.data.tituloDoctorado ?? null) : null,
         cargoAdministrativo: finalCargoAdministrativo,
-        // @ts-ignore: Prisma client needs regeneration
         tipoCargo: finalCargoAdministrativo ? parsed.data.tipoCargo : null,
         proyectosActivos: finalProyectosActivos,
-        // @ts-ignore: Prisma client needs regeneration
         semanasVinculacion: parsed.data.semanasVinculacion ?? null,
-        // @ts-ignore: Prisma client needs regeneration
-        perfilVerificado: true,
       },
     })
 

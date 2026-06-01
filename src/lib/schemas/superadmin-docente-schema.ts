@@ -26,10 +26,9 @@ export const editarDocenteSuperadminSchema = z.object({
   tituloDoctorado: z.string().trim().max(200).nullable().optional(),
   cargoAdministrativo: z.boolean(),
   tipoCargo: z.string().trim().max(80).nullable().optional(),
+  cargoAmbitoValor: z.string().trim().max(200).nullable().optional(),
   proyectosActivos: z.boolean(),
   semanasVinculacion: z.number().int().min(1).max(22).nullable().optional(),
-
-  perfilVerificado: z.boolean().optional(),
 })
 
 export type EditarDocenteSuperadminInput = z.infer<

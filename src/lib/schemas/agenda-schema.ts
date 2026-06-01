@@ -168,6 +168,7 @@ export type ActividadTopeDetalle = {
   requiereProyectoAprobado: boolean
   aplicaUnoPorFacultad: boolean
   aplicaUnoPorSede: boolean
+  aplicaUnoPorPrograma: boolean
   // Art. 11: "Supeditadas a asignación de funciones por parte del Rector mediante resolución".
   // Cableado en Paso 1 (saneamiento). La validación dura (rechazar el envío
   // si no hay resolución acreditada) llegará en un paso posterior cuando se

@@ -5,11 +5,12 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { assertPuedeMutarUsuario } from "@/lib/rbac"
 import { registrarAuditoriaStrict } from "@/lib/audit"
-import type { Prisma, Rol, Modalidad, Sede } from "@/generated/prisma/client"
+import type { Prisma, Rol, Modalidad, Sede, AmbitoCargo } from "@/generated/prisma/client"
 import {
   editarDocenteSuperadminSchema,
   type EditarDocenteSuperadminInput,
 } from "@/lib/schemas/superadmin-docente-schema"
+import { CARGO_AMBITO, FACULTADES, PROGRAMAS } from "@/lib/constants"
 
 async function ensureSuperadmin() {
   const session = await auth()
@@ -31,9 +32,9 @@ const CAMPOS_AUDITABLES = [
   "tituloDoctorado",
   "cargoAdministrativo",
   "tipoCargo",
+  "cargoAmbitoValor",
   "proyectosActivos",
   "semanasVinculacion",
-  "perfilVerificado",
 ] as const
 
 type CampoAuditable = (typeof CAMPOS_AUDITABLES)[number]
@@ -118,6 +119,26 @@ export async function editarDocenteSuperadminAction(
     ? (data.tituloDoctorado ?? null)
     : null
 
+  // Ámbito del cargo: tipo derivado del cargo resultante; valor validado contra
+  // la lista controlada. Se limpia a null si no hay cargo o no maneja ámbito.
+  const cfgAmbito = finalCargoAdministrativo && finalTipoCargo
+    ? (CARGO_AMBITO[finalTipoCargo] ?? null)
+    : null
+  let finalCargoAmbitoTipo: AmbitoCargo | null = null
+  let finalCargoAmbitoValor: string | null = null
+  if (cfgAmbito) {
+    const valor = data.cargoAmbitoValor?.trim() || ""
+    const opciones = cfgAmbito.lista === "FACULTADES" ? FACULTADES : PROGRAMAS
+    if (!valor) {
+      return { error: "Debe especificar el ámbito del cargo (¿de cuál?)." }
+    }
+    if (!opciones.includes(valor)) {
+      return { error: `El ámbito "${valor}" no es válido para el cargo seleccionado.` }
+    }
+    finalCargoAmbitoTipo = cfgAmbito.tipo as AmbitoCargo
+    finalCargoAmbitoValor = valor
+  }
+
   const updatePayload: Prisma.DocenteUpdateInput = {
     nombre: data.nombre,
     cedula: data.cedula,
@@ -130,11 +151,10 @@ export async function editarDocenteSuperadminAction(
     tituloDoctorado: finalTituloDoctorado,
     cargoAdministrativo: finalCargoAdministrativo,
     tipoCargo: finalTipoCargo,
+    cargoAmbitoTipo: finalCargoAmbitoTipo,
+    cargoAmbitoValor: finalCargoAmbitoValor,
     proyectosActivos: finalProyectosActivos,
     semanasVinculacion: data.semanasVinculacion ?? null,
-    ...(typeof data.perfilVerificado === "boolean"
-      ? { perfilVerificado: data.perfilVerificado }
-      : {}),
   }
 
   const antesSnap = snapshot(docente as unknown as Record<string, unknown>)

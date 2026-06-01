@@ -1,3 +1,5 @@
+import { CARGO_AMBITO, type AmbitoConfig } from "@/lib/constants"
+
 /**
  * Utilidades de clasificación de cargos administrativos.
  *
@@ -93,4 +95,21 @@ export function esJefeDePrograma(
 ): boolean {
   if (!tipoCargo || tipoCargo.trim() === "") return false
   return PATRON_JEFE_PROGRAMA.test(normalizar(tipoCargo))
+}
+
+/**
+ * Devuelve la configuración de ámbito de un cargo (Decano→Facultad, etc.) o
+ * `null` si el cargo no maneja ámbito. Se basa en el código exacto del cargo
+ * (TIPOS_CARGO), no en regex, porque ahora la selección es estructurada.
+ */
+export function getAmbitoDeCargo(
+  tipoCargo: string | null | undefined
+): AmbitoConfig | null {
+  if (!tipoCargo) return null
+  return CARGO_AMBITO[tipoCargo] ?? null
+}
+
+/** True si el cargo exige elegir un ámbito explícito ("¿De cuál?"). */
+export function cargoRequiereAmbito(tipoCargo: string | null | undefined): boolean {
+  return getAmbitoDeCargo(tipoCargo) !== null
 }

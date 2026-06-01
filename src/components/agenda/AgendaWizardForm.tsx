@@ -265,6 +265,7 @@ export function AgendaWizardForm({
           requiereProyectoAprobado: act.requiereProyectoAprobado,
           aplicaUnoPorFacultad: act.aplicaUnoPorFacultad,
           aplicaUnoPorSede: act.aplicaUnoPorSede,
+          aplicaUnoPorPrograma: act.aplicaUnoPorPrograma,
           requiereResolucionRector: act.requiereResolucionRector ?? false,
         }
         map[topesKey(act.categoria, act.nombre)] = detalle

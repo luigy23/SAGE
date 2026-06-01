@@ -27,9 +27,9 @@ type UsuarioDetalle = {
   tituloDoctorado?: string | null
   cargoAdministrativo: boolean
   tipoCargo: string | null
+  cargoAmbitoValor: string | null
   proyectosActivos: boolean
   semanasVinculacion?: number | null
-  perfilVerificado: boolean
 }
 
 const ROLE_VARIANT: Record<Rol, "default" | "secondary" | "outline"> = {
@@ -107,12 +107,6 @@ export function UsuarioDetail({ usuario }: { usuario: UsuarioDetalle }) {
               <span className="text-sm text-muted-foreground">
                 Registrado el {format(new Date(usuario.createdAt), "dd 'de' MMMM 'de' yyyy", { locale: es })}
               </span>
-              {usuario.perfilVerificado && (
-                <Badge variant="outline" className="text-xs gap-1">
-                  <ShieldCheck className="h-3 w-3" />
-                  Perfil verificado
-                </Badge>
-              )}
             </div>
             <UsuarioAdminActions usuarioId={usuario.id} currentStatus={usuario.estadoCuenta} />
           </div>

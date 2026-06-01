@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { registrarAuditoriaStrict } from "@/lib/audit"
-import type { Prisma, Rol, Modalidad, Sede } from "@/generated/prisma/client"
+import type { Prisma, Rol, Modalidad, Sede, AmbitoCargo } from "@/generated/prisma/client"
+import { CARGO_AMBITO, FACULTADES, PROGRAMAS } from "@/lib/constants"
 import {
   solicitudCambioPerfilInputSchema,
   type SolicitudCambioPerfilInput,
@@ -46,6 +47,7 @@ function snapshotDocente(d: {
   sedeBase: Sede
   cargoAdministrativo: boolean
   tipoCargo: string | null
+  cargoAmbitoValor: string | null
   doctorado: boolean
   tituloDoctorado: string | null
   proyectosActivos: boolean
@@ -59,9 +61,10 @@ function snapshotDocente(d: {
     sedeBase: d.sedeBase,
     cargoAdministrativo: d.cargoAdministrativo,
     tipoCargo: d.tipoCargo,
+    cargoAmbitoValor: d.cargoAmbitoValor,
     doctorado: d.doctorado,
     tituloDoctorado: d.tituloDoctorado,
-    proyectosActivos: d.proyectosActivos,
+    // proyectosActivos NO es editable por solicitud: lo gobierna el módulo de proyectos.
     semanasVinculacion: d.semanasVinculacion,
     celular: d.celular,
   }
@@ -109,19 +112,39 @@ function aplicarReglasEstatutarias(
           "Art. 10: un docente catedrático no puede tener cargo administrativo. Desactívelo para esta solicitud.",
       }
     }
-    if (resultante.proyectosActivos === true) {
-      return {
-        cambios,
-        error:
-          "Art. 3 Par. 1: un docente catedrático no puede tener proyectos activos. Desactívelo para esta solicitud.",
-      }
-    }
+    // La restricción de proyectos activos para catedráticos (Art. 3 Par. 1) se
+    // valida en el módulo de proyectos, no aquí (proyectosActivos no es editable
+    // por solicitud).
   }
 
   if (resultante.cargoAdministrativo === true && !resultante.tipoCargo) {
     return {
       cambios,
       error: "Debe especificar el tipo de cargo administrativo.",
+    }
+  }
+
+  // Ámbito del cargo ("¿de cuál?"): obligatorio y válido para cargos que lo
+  // manejan (Decano→Facultad, Jefe de Programa→Programa, etc.).
+  if (
+    resultante.cargoAdministrativo === true &&
+    resultante.modalidad !== "CATEDRA"
+  ) {
+    const cfg = resultante.tipoCargo
+      ? CARGO_AMBITO[resultante.tipoCargo as string]
+      : null
+    if (cfg) {
+      const valor = resultante.cargoAmbitoValor as string | null | undefined
+      const opciones = cfg.lista === "FACULTADES" ? FACULTADES : PROGRAMAS
+      if (!valor) {
+        return { cambios, error: "Debe especificar el ámbito del cargo (¿de cuál?)." }
+      }
+      if (!opciones.includes(valor)) {
+        return {
+          cambios,
+          error: `El ámbito "${valor}" no es válido para el cargo seleccionado.`,
+        }
+      }
     }
   }
 
@@ -177,6 +200,7 @@ export async function crearSolicitudCambioPerfilAction(
       sedeBase: true,
       cargoAdministrativo: true,
       tipoCargo: true,
+      cargoAmbitoValor: true,
       doctorado: true,
       tituloDoctorado: true,
       proyectosActivos: true,
@@ -287,6 +311,7 @@ export async function aprobarSolicitudCambioPerfilAction(
           sedeBase: true,
           cargoAdministrativo: true,
           tipoCargo: true,
+          cargoAmbitoValor: true,
           doctorado: true,
           tituloDoctorado: true,
           proyectosActivos: true,
@@ -333,6 +358,24 @@ export async function aprobarSolicitudCambioPerfilAction(
     dataDocente.tipoCargo = isCatedra
       ? null
       : ((cambios.tipoCargo as string | null) ?? null)
+  // Ámbito del cargo: se recalcula de forma determinista cuando cambia algo que
+  // lo afecta. El TIPO se deriva del cargo resultante; el VALOR del snapshot.
+  const ambitoAfectado =
+    "cargoAdministrativo" in cambios ||
+    "tipoCargo" in cambios ||
+    "cargoAmbitoValor" in cambios ||
+    "modalidad" in cambios
+  if (ambitoAfectado) {
+    const cargoFinal = isCatedra ? null : ((resultante.tipoCargo as string | null) ?? null)
+    const cfgFinal = cargoFinal ? CARGO_AMBITO[cargoFinal] : null
+    if (isCatedra || !resultante.cargoAdministrativo || !cfgFinal) {
+      dataDocente.cargoAmbitoTipo = null
+      dataDocente.cargoAmbitoValor = null
+    } else {
+      dataDocente.cargoAmbitoTipo = cfgFinal.tipo as AmbitoCargo
+      dataDocente.cargoAmbitoValor = (resultante.cargoAmbitoValor as string | null) ?? null
+    }
+  }
   if ("doctorado" in cambios)
     dataDocente.doctorado = cambios.doctorado as boolean
   if ("tituloDoctorado" in cambios)

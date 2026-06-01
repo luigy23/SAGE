@@ -65,9 +65,10 @@ model Docente {
   doctorado           Boolean           @default(false)
   cargoAdministrativo Boolean           @default(false)
   tipoCargo           String?
+  cargoAmbitoTipo     AmbitoCargo?
+  cargoAmbitoValor    String?
   proyectosActivos    Boolean           @default(false)
   semanasVinculacion  Int?
-  perfilVerificado    Boolean           @default(false)
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
   tituloDoctorado     String?
@@ -667,4 +668,14 @@ enum RolEnProyecto {
   COINVESTIGADOR
   COORDINADOR
   COGESTOR
+}
+
+/// Ámbito sobre el que aplica un cargo directivo (Art. 11). Define la dimensión
+/// del cupo único: 1 Decano por FACULTAD, 1 Jefe de Programa por PROGRAMA, etc.
+enum AmbitoCargo {
+  FACULTAD
+  PROGRAMA
+  SEDE
+  DEPARTAMENTO
+  DEPENDENCIA
 }

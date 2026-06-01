@@ -9,6 +9,7 @@ import { z } from "zod"
 import type { Docente, SolicitudCambioPerfil } from "@/generated/prisma/client"
 import { TIPOS_CARGO, MODALIDADES_ENUM } from "@/lib/schemas/profile-schema"
 import { SEDES_ENUM } from "@/lib/schemas/solicitud-perfil-schema"
+import { CARGO_AMBITO, opcionesAmbito } from "@/lib/constants"
 import {
   crearSolicitudCambioPerfilAction,
   cancelarSolicitudCambioPerfilAction,
@@ -93,6 +94,7 @@ const formSchema = z.object({
   tituloDoctorado: z.string().max(200).optional().nullable(),
   cargoAdministrativo: z.boolean(),
   tipoCargo: z.string().optional().nullable(),
+  cargoAmbitoValor: z.string().optional().nullable(),
   semanasVinculacion: z.number().int().min(1).max(22).nullable().optional(),
   motivoSolicitud: z.string().max(500).optional(),
 })
@@ -141,6 +143,7 @@ export function ProfileEditForm({
       tituloDoctorado: docente.tituloDoctorado ?? "",
       cargoAdministrativo: docente.cargoAdministrativo,
       tipoCargo: docente.tipoCargo ?? "",
+      cargoAmbitoValor: docente.cargoAmbitoValor ?? "",
       semanasVinculacion: docente.semanasVinculacion ?? undefined,
       motivoSolicitud: "",
     },
@@ -152,7 +155,10 @@ export function ProfileEditForm({
     control: form.control,
     name: "cargoAdministrativo",
   })
+  const watchedTipoCargo = useWatch({ control: form.control, name: "tipoCargo" })
 
+  const ambitoCfg = watchedTipoCargo ? CARGO_AMBITO[watchedTipoCargo] ?? null : null
+  const ambitoOpciones = opcionesAmbito(watchedTipoCargo)
   const isCatedra = watchedModalidad === "CATEDRA"
   const isModalidadTemporal = MODALIDADES_TEMPORALES.has(watchedModalidad ?? "")
 
@@ -171,6 +177,7 @@ export function ProfileEditForm({
   useEffect(() => {
     if (!watchedCargo) {
       form.setValue("tipoCargo", "", { shouldValidate: true })
+      form.setValue("cargoAmbitoValor", "", { shouldValidate: true })
     }
   }, [watchedCargo, form])
 
@@ -185,6 +192,10 @@ export function ProfileEditForm({
         celular: data.celular?.trim() ? data.celular.trim() : null,
         cargoAdministrativo: data.cargoAdministrativo,
         tipoCargo: data.cargoAdministrativo ? data.tipoCargo || null : null,
+        cargoAmbitoValor:
+          data.cargoAdministrativo && data.tipoCargo && CARGO_AMBITO[data.tipoCargo]
+            ? data.cargoAmbitoValor || null
+            : null,
         doctorado: data.doctorado,
         tituloDoctorado: data.doctorado ? (data.tituloDoctorado || null) : null,
         semanasVinculacion: data.semanasVinculacion ?? null,
@@ -636,7 +647,11 @@ export function ProfileEditForm({
                     <FormItem className="animate-in fade-in slide-in-from-top-2 ml-14">
                       <FormLabel>Tipo de cargo</FormLabel>
                       <Select
-                        onValueChange={field.onChange}
+                        onValueChange={(v) => {
+                          field.onChange(v)
+                          // Al cambiar de cargo, el ámbito previo deja de ser válido.
+                          form.setValue("cargoAmbitoValor", "", { shouldValidate: true })
+                        }}
                         value={field.value || ""}
                         disabled={disabled}
                       >
@@ -653,6 +668,39 @@ export function ProfileEditForm({
                           ))}
                         </SelectContent>
                       </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {/* "¿De cuál?" — ámbito específico del cargo. No se asume nada. */}
+              {watchedCargo && !isCatedra && ambitoCfg && (
+                <FormField
+                  control={form.control}
+                  name="cargoAmbitoValor"
+                  render={({ field }) => (
+                    <FormItem className="animate-in fade-in slide-in-from-top-2 ml-14">
+                      <FormLabel>Programa / Facultad</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || ""}
+                        disabled={disabled}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full sm:max-w-xs">
+                            <SelectValue placeholder={ambitoCfg.tipo === "FACULTAD" ? "Seleccionar facultad" : "Seleccionar programa"} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {ambitoOpciones.map((op) => (
+                            <SelectItem key={op} value={op}>{op}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        Indica específicamente cuál corresponde a tu cargo.
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}

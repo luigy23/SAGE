@@ -48,15 +48,6 @@ export default async function AgendaPage() {
   if (!docente) redirect("/auth/login")
 
   // ==========================================
-  // 1b. GATEKEEPER — Profile Verification Guard
-  // New users must confirm their academic conditions
-  // at least once before accessing the FO-19 Agenda.
-  // ==========================================
-  if (!docente.perfilVerificado) {
-    redirect("/perfil/editar?aviso=requerido")
-  }
-
-  // ==========================================
   // 2. Periodo activo + parámetros globales (cascada DB → fallback)
   // ==========================================
   const periodoInfo = await getPeriodoActivoConFechas()
@@ -302,6 +293,7 @@ export default async function AgendaPage() {
       restriccionTemporalAnos: true,
       aplicaUnoPorFacultad: true,
       aplicaUnoPorSede: true,
+      aplicaUnoPorPrograma: true,
       requiereResolucionRector: true,
       requiereProyectoAprobado: true,
       articuloOrigen: true,

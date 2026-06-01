@@ -23,7 +23,6 @@ type DocenteDetalle = {
   cargoAdministrativo: boolean
   tipoCargo: string | null
   proyectosActivos: boolean
-  perfilVerificado: boolean
   rol: string
 }
 
@@ -95,12 +94,6 @@ export function DocenteDetail({ docente }: { docente: DocenteDetalle }) {
               <span className="text-sm text-muted-foreground">
                 Registrado el {format(new Date(docente.createdAt), "dd 'de' MMMM 'de' yyyy", { locale: es })}
               </span>
-              {docente.perfilVerificado && (
-                <Badge variant="outline" className="text-xs gap-1">
-                  <ShieldCheck className="h-3 w-3" />
-                  Perfil verificado
-                </Badge>
-              )}
             </div>
             <DocenteAdminActions docenteId={docente.id} currentStatus={docente.estadoCuenta} />
           </div>

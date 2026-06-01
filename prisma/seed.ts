@@ -933,13 +933,11 @@ async function main() {
       cargoAdministrativo: true,
       tipoCargo: "ASESOR_RECTOR",
       proyectosActivos: false,
-      perfilVerificado: true,
     },
     update: {
       // No sobrescribir password si ya existe (preserva cambios manuales)
       rol: "SUPERADMIN",
       estadoCuenta: "ACTIVO",
-      perfilVerificado: true,
     },
   })
 

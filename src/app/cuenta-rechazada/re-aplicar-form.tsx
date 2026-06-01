@@ -12,29 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { SEDES } from "@/lib/constants"
-
-const FACULTAD_PROGRAMAS: Record<string, string[]> = {
-  "Ingeniería": [
-    "Ingeniería de Software",
-    "Ingeniería Civil",
-    "Ingeniería Agrícola",
-    "Ingeniería Electrónica",
-  ],
-  "Salud": ["Medicina", "Enfermería"],
-  "Educación": [
-    "Licenciatura en Educación Infantil",
-    "Licenciatura en Matemáticas",
-    "Licenciatura en Ciencias Naturales",
-  ],
-  "Economía y Administración": [
-    "Administración de Empresas",
-    "Contaduría Pública",
-    "Economía",
-  ],
-  "Ciencias Exactas y Naturales": ["Biología", "Matemática Aplicada"],
-  "Ciencias Sociales y Humanas": ["Derecho", "Psicología", "Comunicación Social"],
-}
+import { SEDES, FACULTAD_PROGRAMAS } from "@/lib/constants"
 
 const MODALIDADES = [
   { value: "PLANTA_TC", label: "Tiempo Completo Planta" },

@@ -127,7 +127,6 @@ export async function getDocenteAdmin(docenteId: string) {
         cargoAdministrativo: true,
         tipoCargo: true,
         proyectosActivos: true,
-        perfilVerificado: true,
         rol: true,
       },
     })

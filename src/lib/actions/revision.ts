@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache"
 import type { Prisma, Modalidad, Sede, Rol } from "@/generated/prisma/client"
 import type { RevisionFilters, RevisionPage } from "@/lib/types/revision"
 import { registrarAuditoriaStrict } from "@/lib/audit"
+import { verificarCupoCargo } from "@/lib/validations/cupo-cargo"
 
 // =====================================================================
 // Guard común — ADMIN o SUPERADMIN
@@ -474,7 +475,7 @@ export async function aprobarAgendaAction(agendaId: string) {
       id: true,
       estado: true,
       periodo: true,
-      docente: { select: { programa: true } },
+      docente: { select: { id: true, programa: true, tipoCargo: true, cargoAmbitoValor: true } },
       otrasActividadesDocencia: { select: { nombre: true } },
       actividadesInvestigacion: { select: { nombre: true } },
       actividadesProyeccionSocial: { select: { nombre: true } },
@@ -509,6 +510,17 @@ export async function aprobarAgendaAction(agendaId: string) {
       error: `No se puede aprobar: el docente ${conflicto.docenteNombre} del programa ${agenda.docente.programa} ya tiene aprobada la actividad "${conflicto.actividadNombre}" en el período ${agenda.periodo}.`,
     }
   }
+
+  // Art. 11: cupo único de cargo directivo. Bloquea aprobar a un segundo titular
+  // del mismo cargo+ámbito en el período (el gate real, ya que el cupo se "ocupa"
+  // con la agenda APROBADA).
+  const cupoError = await verificarCupoCargo({
+    periodo: agenda.periodo,
+    tipoCargo: agenda.docente.tipoCargo,
+    cargoAmbitoValor: agenda.docente.cargoAmbitoValor,
+    excluirDocenteId: agenda.docente.id,
+  })
+  if (cupoError) return { error: `No se puede aprobar: ${cupoError}` }
 
   await prisma.$transaction(async (tx) => {
     await tx.agendaSemestral.update({

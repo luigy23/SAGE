@@ -14,6 +14,7 @@ import {
 } from "@/lib/schemas/agenda-schema"
 import { resolveAgendaLimits } from "@/lib/rules/resolver"
 import { esCargoExentoGestion20, esJefeDePrograma } from "@/lib/utils/cargo"
+import { verificarCupoCargo } from "@/lib/validations/cupo-cargo"
 import type { Sede } from "@/generated/prisma/client"
 
 async function getAuthenticatedDocente() {
@@ -124,6 +125,7 @@ export async function upsertAgendaCompletaAction(
         requiereProyectoAprobado: true,
         aplicaUnoPorFacultad: true,
         aplicaUnoPorSede: true,
+        aplicaUnoPorPrograma: true,
         // Paso 1 (saneamiento Art. 11): cableamos el campo para que el motor
         // de validación lo tenga disponible. La regla dura de rechazar el
         // envío sin resolución del Rector se implementa en un paso aparte.
@@ -141,6 +143,7 @@ export async function upsertAgendaCompletaAction(
         requiereProyectoAprobado: item.requiereProyectoAprobado,
         aplicaUnoPorFacultad: item.aplicaUnoPorFacultad,
         aplicaUnoPorSede: item.aplicaUnoPorSede,
+        aplicaUnoPorPrograma: item.aplicaUnoPorPrograma,
         requiereResolucionRector: item.requiereResolucionRector,
       }
       topesActividades[topesKey(item.categoria, item.nombre)] = detalle
@@ -197,8 +200,35 @@ export async function upsertAgendaCompletaAction(
             }
           }
         }
+
+        if (tope.aplicaUnoPorPrograma) {
+          // Solo cuenta agendas APROBADAS de otros docentes del mismo programa
+          // (misma regla de estados que los cargos directivos).
+          const modelo = _modeloParaCategoria(cat)
+          const count = await _contarActividadCruzada(
+            prisma, modelo, nombre, periodo, docente.id, "programa", docente.programa
+          )
+          if (count > 0) {
+            return {
+              error: `"${nombre}" ya fue asignada a otro docente del programa ${docente.programa} en este período. El Art. 11 permite solo un responsable por programa.`,
+            }
+          }
+        }
       }
     }
+  }
+
+  // Art. 11: unicidad de cupo de cargo directivo (Decano/Jefe de Programa).
+  // Solo al enviar; bloquea si otro docente ya tiene el cargo+ámbito con agenda
+  // APROBADA en el período.
+  if (enviar) {
+    const cupoError = await verificarCupoCargo({
+      periodo,
+      tipoCargo: docente.tipoCargo,
+      cargoAmbitoValor: docente.cargoAmbitoValor,
+      excluirDocenteId: docente.id,
+    })
+    if (cupoError) return { error: cupoError }
   }
 
   // Borradores: solo validación estructural (tipos y transformaciones)
@@ -363,7 +393,7 @@ async function _contarActividadCruzada(
   nombre: string,
   periodo: string,
   docenteIdExcluido: string,
-  dimension: "facultad" | "sede",
+  dimension: "facultad" | "sede" | "programa",
   valor: string | null
 ): Promise<number> {
   if (!valor) return 0
@@ -381,15 +411,21 @@ async function _contarActividadCruzada(
         }
       : null
 
+  // "programa" usa la misma regla de estados que los cargos: solo ESTRICTAMENTE
+  // APROBADO ocupa el cupo. facultad/sede conservan ENVIADO+APROBADO (legacy).
+  const estados: ("ENVIADO" | "APROBADO")[] =
+    dimension === "programa" ? ["APROBADO"] : ["ENVIADO", "APROBADO"]
+
   return client[modelo].count({
     where: {
       nombre,
       ...(sedeFilter ?? {}),
       agenda: {
         periodo,
-        estado: { in: ["ENVIADO", "APROBADO"] },
+        estado: { in: estados },
         docenteId: { not: docenteIdExcluido },
         ...(dimension === "facultad" ? { docente: { facultad: valor } } : {}),
+        ...(dimension === "programa" ? { docente: { programa: valor } } : {}),
       },
     },
   })

@@ -4,43 +4,12 @@ import { signIn, auth, signOut } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { redirect } from "next/navigation"
-
-// =============================================
-// DICCIONARIO ESTRICTO: Facultad → Programa
-// Duplicado del frontend para validación server-side.
-// Impide corrupción de datos por payloads manipulados.
-// =============================================
-const FACULTAD_PROGRAMAS: Record<string, string[]> = {
-  "Ingeniería": [
-    "Ingeniería de Software",
-    "Ingeniería Civil",
-    "Ingeniería Agrícola",
-    "Ingeniería Electrónica",
-  ],
-  "Salud": [
-    "Medicina",
-    "Enfermería",
-  ],
-  "Educación": [
-    "Licenciatura en Educación Infantil",
-    "Licenciatura en Matemáticas",
-    "Licenciatura en Ciencias Naturales",
-  ],
-  "Economía y Administración": [
-    "Administración de Empresas",
-    "Contaduría Pública",
-    "Economía",
-  ],
-  "Ciencias Exactas y Naturales": [
-    "Biología",
-    "Matemática Aplicada",
-  ],
-  "Ciencias Sociales y Humanas": [
-    "Derecho",
-    "Psicología",
-    "Comunicación Social",
-  ],
-}
+import {
+  FACULTAD_PROGRAMAS,
+  FACULTADES,
+  PROGRAMAS,
+  CARGO_AMBITO,
+} from "@/lib/constants"
 
 // =============================================
 // DICCIONARIO DE MODALIDAD
@@ -162,6 +131,42 @@ export async function registerAction(_prevState: RegisterState, formData: FormDa
     return { error: `La sede "${sedeRaw}" no es válida.`, values }
   }
 
+  // ==========================================
+  // 4b. Condiciones académicas (Acuerdo 048) — se capturan en el registro.
+  // Override servidor CÁTEDRA (Lock #3): un catedrático no puede tener cargo.
+  // proyectosActivos NO se captura aquí: lo gobierna el módulo de proyectos.
+  // ==========================================
+  const isCatedraReg = modalidadTraducida === "CATEDRA"
+  const doctorado = (formData.get("doctorado") as string) === "true"
+  const tituloDoctoradoRaw = ((formData.get("tituloDoctorado") as string) || "").trim()
+  const tituloDoctorado = doctorado ? (tituloDoctoradoRaw || null) : null
+  const cargoAdministrativo = isCatedraReg
+    ? false
+    : (formData.get("cargoAdministrativo") as string) === "true"
+  const tipoCargoRaw = ((formData.get("tipoCargo") as string) || "").trim()
+  const tipoCargo = cargoAdministrativo ? (tipoCargoRaw || null) : null
+  if (cargoAdministrativo && !tipoCargo) {
+    return { error: "Debe especificar el tipo de cargo administrativo.", values }
+  }
+
+  // Ámbito del cargo ("¿de cuál?"). Solo para cargos que lo manejan; el valor
+  // debe pertenecer a la lista controlada. No se asume nada del programa/facultad.
+  const cargoCfg = tipoCargo ? CARGO_AMBITO[tipoCargo] : null
+  const cargoAmbitoValorRaw = ((formData.get("cargoAmbitoValor") as string) || "").trim()
+  let cargoAmbitoTipo: string | null = null
+  let cargoAmbitoValor: string | null = null
+  if (cargoAdministrativo && cargoCfg) {
+    if (!cargoAmbitoValorRaw) {
+      return { error: "Debe especificar el ámbito del cargo (¿de cuál?).", values }
+    }
+    const opciones = cargoCfg.lista === "FACULTADES" ? FACULTADES : PROGRAMAS
+    if (!opciones.includes(cargoAmbitoValorRaw)) {
+      return { error: `El ámbito "${cargoAmbitoValorRaw}" no es válido para el cargo seleccionado.`, values }
+    }
+    cargoAmbitoTipo = cargoCfg.tipo
+    cargoAmbitoValor = cargoAmbitoValorRaw
+  }
+
   const esModalidadTemporal = MODALIDADES_TEMPORALES_SET.has(modalidadTraducida)
   const semanasVinculacion = esModalidadTemporal && semanasVinculacionRaw
     ? parseInt(semanasVinculacionRaw, 10)
@@ -204,10 +209,14 @@ export async function registerAction(_prevState: RegisterState, formData: FormDa
         celular: celular || null,
         sedeBase: sedeFormateada as import("@/generated/prisma/client").Sede,
         modalidad: modalidadTraducida as import("@/generated/prisma/client").Modalidad,
-        // Flags dinámicos — hardcodeados en false al registrar.
-        // Se gestionan desde el Perfil del docente, NO en registro.
-        doctorado: false,
-        cargoAdministrativo: false,
+        // Condiciones académicas capturadas en el registro (Acuerdo 048).
+        doctorado,
+        tituloDoctorado,
+        cargoAdministrativo,
+        tipoCargo,
+        cargoAmbitoTipo: cargoAmbitoTipo as import("@/generated/prisma/client").AmbitoCargo | null,
+        cargoAmbitoValor,
+        // proyectosActivos lo gobierna el módulo de proyectos (no se setea aquí).
         proyectosActivos: false,
         semanasVinculacion,
       },
@@ -244,10 +253,10 @@ export async function loginAction(_prevState: unknown, formData: FormData) {
     const match = await bcrypt.compare(password, docente.password)
     if (match) {
       if (docente.estadoCuenta === "PENDIENTE") {
-        return { error: "Tu solicitud de registro está siendo revisada. Te avisaremos cuando sea aprobada." }
+        return { error: "Tu solicitud de registro está siendo revisada." }
       }
       if (docente.estadoCuenta === "INACTIVO") {
-        return { error: "Tu cuenta ha sido desactivada. Contactá al administrador para más información." }
+        return { error: "Tu cuenta ha sido desactivada. Contacta al administrador para más información." }
       }
       if (docente.estadoCuenta === "RECHAZADO") {
         try {
@@ -330,7 +339,6 @@ export async function reAplicarAction(_prevState: unknown, formData: FormData) {
       sedeBase: sedeFormateada as import("@/generated/prisma/client").Sede,
       celular: celular || null,
       estadoCuenta: "PENDIENTE",
-      perfilVerificado: false,
       semanasVinculacion,
     },
   })

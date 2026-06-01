@@ -27,7 +27,7 @@ export default async function SuperAdminPeriodosPage() {
         <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive dark:text-red-400">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <span>
-            No hay ningún semestre académico activo. Los docentes no pueden crear agendas.
+            No hay ningún semestre vigente. Los docentes no pueden crear agendas.
             Abre un período para reactivar el sistema.
           </span>
         </div>
@@ -46,7 +46,7 @@ export default async function SuperAdminPeriodosPage() {
               global actual).
               {periodoActivo && (
                 <span className="ml-2 font-medium text-green-700 dark:text-green-400">
-                  Semestre activo: <span className="font-mono">{periodoActivo.nombre}</span>
+                  Semestre vigente: <span className="font-mono">{periodoActivo.nombre}</span>
                 </span>
               )}
             </CardDescription>
@@ -88,11 +88,6 @@ export default async function SuperAdminPeriodosPage() {
                   >
                     <TableCell className="font-bold font-mono">
                       {periodo.nombre}
-                      {esActivo && (
-                        <Badge className="ml-2 bg-green-600 hover:bg-green-600 text-xs">
-                          ACTIVO
-                        </Badge>
-                      )}
                     </TableCell>
                     <TableCell>
                       {new Date(periodo.fechaInicio).toLocaleDateString("es-CO")}
@@ -108,7 +103,7 @@ export default async function SuperAdminPeriodosPage() {
                         variant={esActivo ? "default" : "secondary"}
                         className={esActivo ? "bg-green-600 hover:bg-green-700" : ""}
                       >
-                        {periodo.estado}
+                        {esActivo ? "VIGENTE" : "ARCHIVADO"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-center">

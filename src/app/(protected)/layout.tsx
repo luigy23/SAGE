@@ -12,6 +12,9 @@ export default async function ProtectedLayout({
   const session = await auth()
   if (!session?.user) redirect("/auth/login")
   if (session.user.estadoCuenta === "RECHAZADO") redirect("/cuenta-rechazada")
+  // Visto bueno único: solo cuentas ACTIVO (aprobadas) entran. PENDIENTE
+  // (sin aprobar) e INACTIVO (desactivada) van a la pantalla de espera.
+  if (session.user.estadoCuenta !== "ACTIVO") redirect("/cuenta-pendiente")
 
   return (
     <SidebarProvider>

@@ -364,7 +364,6 @@ export function ActividadCardRow({
                   />
                 </FormControl>
                 <FormDescription>
-                  Personaliza con detalles del caso real.
                 </FormDescription>
                 <FormMessage />
               </FormItem>

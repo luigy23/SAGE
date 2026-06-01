@@ -365,9 +365,9 @@ export async function getUsuarioSuperadmin(usuarioId: string) {
         tituloDoctorado: true,
         cargoAdministrativo: true,
         tipoCargo: true,
+        cargoAmbitoValor: true,
         proyectosActivos: true,
         semanasVinculacion: true,
-        perfilVerificado: true,
       },
     })
   } catch (error) {

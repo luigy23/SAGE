@@ -44,6 +44,7 @@ export type ActividadCatalogoOption = {
   restriccionTemporalAnos: number | null
   aplicaUnoPorFacultad: boolean
   aplicaUnoPorSede: boolean
+  aplicaUnoPorPrograma: boolean
   requiereResolucionRector: boolean
   requiereProyectoAprobado: boolean
   articuloOrigen: string | null

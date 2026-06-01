@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { GraduationCap, Briefcase, FolderOpen, ShieldCheck } from "lucide-react"
 import { esCargoExentoGestion20 } from "@/lib/utils/cargo"
 import { getModalidadLabel } from "@/lib/utils/modalidad"
+import { TIPOS_CARGO } from "@/lib/schemas/profile-schema"
 
 /**
  * Formatea valores legacy/importados de `tipoCargo` que vienen en SCREAMING_SNAKE_CASE
@@ -51,6 +52,18 @@ export function ProfileView({ docente }: { docente: ExtendedDocente }) {
   // así que normalizamos el display por separado sin afectar la detección.
   const exentoDel20 = tipoCargoActivo ? esCargoExentoGestion20(tipoCargoActivo) : false
   const tipoCargoLabel = tipoCargoActivo ? formatearTipoCargo(tipoCargoActivo) : null
+
+  // Nombre legible del cargo (preferir la etiqueta del catálogo TIPOS_CARGO sobre
+  // el formateo de texto libre) + su ámbito ("Programa / Facultad") para el header.
+  const tipoCargoNombre = tipoCargoActivo
+    ? (TIPOS_CARGO.find((c) => c.value === tipoCargoActivo)?.label ?? tipoCargoLabel)
+    : null
+  const cargoAmbitoActivo = docente.cargoAmbitoValor?.trim() || null
+  const cargoDisplay = tipoCargoNombre
+    ? cargoAmbitoActivo
+      ? `${tipoCargoNombre} - ${cargoAmbitoActivo}`
+      : tipoCargoNombre
+    : null
 
   const condiciones = [
     {
@@ -144,18 +157,16 @@ export function ProfileView({ docente }: { docente: ExtendedDocente }) {
                 </Badge>
               </dd>
             </div>
-            <div>
-              <dt className="text-sm font-medium text-muted-foreground">
-                Cargo Administrativo
-              </dt>
-              <dd className="text-sm">
-                {tipoCargoLabel ? (
-                  <Badge variant="secondary">{tipoCargoLabel}</Badge>
-                ) : (
-                  <span className="italic text-muted-foreground">Ninguno</span>
-                )}
-              </dd>
-            </div>
+            {cargoDisplay && (
+              <div>
+                <dt className="text-sm font-medium text-muted-foreground">
+                  Cargo Administrativo
+                </dt>
+                <dd className="text-sm">
+                  <Badge variant="secondary">{cargoDisplay}</Badge>
+                </dd>
+              </div>
+            )}
             {docente.semanasVinculacion != null && (
               <div>
                 <dt className="text-sm font-medium text-muted-foreground">
@@ -163,7 +174,7 @@ export function ProfileView({ docente }: { docente: ExtendedDocente }) {
                 </dt>
                 <dd className="text-sm">
                   {docente.semanasVinculacion} semanas
-                  <span className="ml-1 text-xs text-muted-foreground">(Art. 4c/4e/4f)</span>
+                  <span className="ml-1 text-xs text-muted-foreground"></span>
                 </dd>
               </div>
             )}
