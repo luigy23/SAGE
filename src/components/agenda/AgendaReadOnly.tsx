@@ -26,6 +26,7 @@ import {
   Clock3,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getSedeLabel } from "@/lib/utils/sede"
 
 // ==========================================
 // Sub-componente reutilizable: Sección de actividades
@@ -71,7 +72,7 @@ function SectionCard({
                   <span className="font-medium">{act.nombre}</span>
                   {act.sede && (
                     <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
-                      {act.sede}
+                      {getSedeLabel(act.sede)}
                     </span>
                   )}
                   {act.descripcion && (
@@ -382,7 +383,12 @@ export function AgendaReadOnly({
                       <span className="font-medium">{act.nombre}</span>
                       {act.sede && (
                         <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
-                          {act.sede}
+                          {getSedeLabel(act.sede)}
+                        </span>
+                      )}
+                      {act.cohortes && act.cohortes.length > 0 && (
+                        <span className="ml-2 rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                          Cohorte{act.cohortes.length > 1 ? "s" : ""}: {act.cohortes.join(", ")}
                         </span>
                       )}
                       {act.descripcion && (

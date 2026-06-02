@@ -36,12 +36,10 @@ const MODALIDADES = [
   { value: "CATEDRA", label: "Cátedra" },
   { value: "VISITANTE_TC", label: "Visitante Tiempo Completo" },
   { value: "VISITANTE_MT", label: "Visitante Medio Tiempo" },
+  { value: "CATEDRA_VISITANTE_TC", label: "Cátedra Visitante Tiempo Completo" },
+  { value: "CATEDRA_VISITANTE_MT", label: "Cátedra Visitante Medio Tiempo" },
   { value: "INVITADO", label: "Invitado" },
 ]
-
-const MODALIDADES_TEMPORALES = new Set([
-  "OCASIONAL_TC", "OCASIONAL_MT", "VISITANTE_TC", "VISITANTE_MT", "INVITADO",
-])
 
 function EyeIcon() {
   return (
@@ -63,7 +61,7 @@ function EyeOffIcon() {
   )
 }
 
-export function RegisterForm({ maxSemanas }: { maxSemanas: number }) {
+export function RegisterForm() {
   const [state, formAction, pending] = useActionState(registerAction, null)
   const v = state?.values
 
@@ -334,31 +332,6 @@ export function RegisterForm({ maxSemanas }: { maxSemanas: number }) {
               </Select>
             </div>
           </div>
-
-          {/* ── Semanas de vinculación — solo para modalidades con contrato temporal ── */}
-          {MODALIDADES_TEMPORALES.has(selectedModalidad) && (
-            <div className="space-y-2">
-              <Label htmlFor="semanasVinculacion" className={labelStyle}>
-                Semanas de vinculación <span className="text-gray-400 font-normal">(opcional)</span>
-              </Label>
-              <Input
-                id="semanasVinculacion"
-                name="semanasVinculacion"
-                type="number"
-                min={1}
-                max={maxSemanas}
-                placeholder={`Ej: ${maxSemanas}`}
-                className={inputStyle}
-                onInput={(e) => {
-                  const val = parseInt(e.currentTarget.value, 10)
-                  if (!isNaN(val)) e.currentTarget.value = String(Math.min(Math.max(val, 1), maxSemanas))
-                }}
-              />
-              <p className="text-xs text-gray-400">
-                Semanas de su contrato en este período (1–{maxSemanas}). Determina la carga proporcional. Si no lo sabe aún, puede completarlo después en su perfil.
-              </p>
-            </div>
-          )}
 
           {/* ── Separador: Condiciones académicas ── */}
           <div className="relative py-1">

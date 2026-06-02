@@ -22,6 +22,8 @@ const ETIQUETAS_CAMPO: Record<string, string> = {
   tituloDoctorado: "Título de doctorado",
   proyectosActivos: "Proyectos activos",
   semanasVinculacion: "Semanas de vinculación",
+  vinculacionDesde: "Inicio del contrato",
+  vinculacionHasta: "Fin del contrato",
   observacionesAdmin: "Observaciones",
   celular: "Celular",
   valor: "Valor",

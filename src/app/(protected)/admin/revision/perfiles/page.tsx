@@ -1,3 +1,4 @@
+import { getSedeLabel } from "@/lib/utils/sede"
 import Link from "next/link"
 import { listSolicitudesParaAdmin } from "@/lib/actions/solicitud-perfil"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -111,7 +112,7 @@ export default async function RevisionPerfilesPage({
                     <p className="font-medium">{s.docente.nombre}</p>
                     <p className="text-xs text-muted-foreground">
                       {s.docente.programa} · {s.docente.facultad} ·{" "}
-                      {s.docente.sedeBase}
+                      {getSedeLabel(s.docente.sedeBase)}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {camposCambiados.length === 0 ? (

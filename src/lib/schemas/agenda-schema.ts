@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { cohorteVigente } from "@/lib/utils/periodo"
 
 // Default semestral: 22 semanas (Acuerdo 048). Se sobreescribe vía
 // SUPERADMIN al crear el schema dinámico con `createAgendaSchema(...)`.
@@ -93,6 +94,9 @@ export function createActividadSchema(semanasPeriodo: number = DEFAULT_SEMANAS_P
     // dice aplicaUnoPorSede=true o topePorUnidad=SEDE. Informativa en el resto
     // (autocompletada desde docente.sedeBase en el wizard).
     sede: z.string().nullable().optional().default(null),
+    // Cohortes (períodos de ingreso, ej. "2026-1") para actividades medidas por
+    // COHORTE (Consejería, Art. 11). Vacío para el resto.
+    cohortes: z.array(z.string()).optional().default([]),
   }).transform((data) => {
     // Si el usuario llenó h/sem × semanas, ese cálculo gana; si no, se preserva
     // el `dedicacionPeriodo` ingresado directamente (modo "total semestre").
@@ -191,6 +195,7 @@ export function createAgendaSchema(
   topesActividades?: TopesActividadesMap,
   maxInvProySocialCatedra: number | null = null,
   maxGestionOverride?: number,
+  periodoActual?: string,
 ) {
   return createAgendaWizardBaseSchema(semanasPeriodo).superRefine((data, ctx) => {
     const totalHorasSemestrales = calcularTotalHoras(data);
@@ -299,7 +304,7 @@ export function createAgendaSchema(
     // Si la actividad no está en el mapa (texto libre legacy o genérico sin tope), se omite.
     if (topesActividades) {
       const validarTopesArray = (
-        arr: { nombre?: string; dedicacionPeriodo?: number; cantidadUnidades?: number; sede?: string | null }[],
+        arr: { nombre?: string; dedicacionPeriodo?: number; cantidadUnidades?: number; sede?: string | null; cohortes?: string[] }[],
         arrayName: "otrasActividadesDocencia" | "actividadesInvestigacion" | "actividadesProyeccionSocial" | "actividadesGestion",
         categoria: "DOCENCIA" | "INVESTIGACION" | "PROYECCION_SOCIAL" | "GESTION",
       ) => {
@@ -330,6 +335,38 @@ export function createAgendaSchema(
               message: `"${nombre}" requiere indicar la sede de ejecución (Art. 11 — "uno por sede").`,
               path: [arrayName, idx, "sede"],
             })
+          }
+
+          // Consejería (Art. 11): cohortes — entre 1 y unidadMax, y cada una vigente
+          // (≤ 6 semestres inclusive) respecto del período de la agenda.
+          if (tope.topePorUnidad === "COHORTE") {
+            const cohortes = (act.cohortes ?? []).filter((c) => c && c.trim() !== "")
+            const maxCohortes = tope.unidadMax ?? 1
+            if (cohortes.length === 0) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `"${nombre}" requiere indicar al menos una cohorte (período de ingreso).`,
+                path: [arrayName, idx, "cohortes"],
+              })
+            }
+            if (cohortes.length > maxCohortes) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `"${nombre}" admite máximo ${maxCohortes} cohorte(s) simultánea(s) (Art. 11).`,
+                path: [arrayName, idx, "cohortes"],
+              })
+            }
+            if (periodoActual) {
+              for (const c of cohortes) {
+                if (!cohorteVigente(c, periodoActual)) {
+                  ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: `La cohorte ${c} no es válida para ${periodoActual}: ya superó los 6 semestres de consejería o aún no inicia.`,
+                    path: [arrayName, idx, "cohortes"],
+                  })
+                }
+              }
+            }
           }
 
           if (tope.topePorUnidad !== "NINGUNA" && tope.topeSemestralH !== null) {
@@ -455,6 +492,7 @@ export const EMPTY_ACTIVIDAD: ActividadFormData = {
   dedicacionPeriodo: 0,
   cantidadUnidades: 0,
   sede: null,
+  cohortes: [],
 }
 
 export const DEFAULT_FORM_VALUES: AgendaWizardFormData = {

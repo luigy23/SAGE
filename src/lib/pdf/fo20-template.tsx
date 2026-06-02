@@ -3,6 +3,7 @@ import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer"
 import type { MonitoreoConRelaciones } from "@/lib/types/monitoreo"
 import { compararEjecucion } from "@/lib/types/monitoreo"
 import { Watermark } from "./shared/watermark"
+import { getSedeLabel } from "@/lib/utils/sede"
 
 const RED = "#9F1721"
 const RED_LIGHT = "#C0272F"
@@ -42,7 +43,7 @@ function buildSecciones(m: MonitoreoConRelaciones): Seccion[] {
     if (!r) continue
     basicas.push({
       titulo: `Docencia · ${c.numeroCurso} — ${c.nombreCurso}`,
-      detalle: c.sede ?? null,
+      detalle: c.sede ? getSedeLabel(c.sede) : null,
       horasPlanificadas: c.dedicacionPeriodo,
       horasEjecutadas: r.horasEjecutadas,
       productos: r.productosEntregados,

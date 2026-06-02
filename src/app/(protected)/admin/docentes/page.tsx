@@ -16,6 +16,7 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import Link from "next/link"
 import { Eye } from "lucide-react"
+import { getSedeLabel } from "@/lib/utils/sede"
 
 function estadoBadge(estado: string) {
   const map: Record<string, { className: string; label: string }> = {
@@ -88,7 +89,7 @@ export default async function AdminDocentesPage() {
                         <Badge variant="outline" className="text-[10px]">
                           {getModalidadLabel(docente.modalidad)}
                         </Badge>
-                        <span className="text-xs text-muted-foreground">{docente.sedeBase}</span>
+                        <span className="text-xs text-muted-foreground">{getSedeLabel(docente.sedeBase)}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-sm">

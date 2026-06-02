@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ProyectoStatusBadge } from "@/components/proyectos/ProyectoStatusBadge"
 import { Microscope, Inbox } from "lucide-react"
+import { formatFechaInicio } from "@/lib/utils"
+import { getSedeLabel } from "@/lib/utils/sede"
 
 export const metadata: Metadata = {
   title: "Revisión de Proyectos | SAGE",
@@ -124,13 +126,13 @@ export default async function RevisionProyectosPage({
                   <p className="font-medium">{p.docente.nombre}</p>
                   <p className="text-xs text-muted-foreground">
                     {p.docente.programa} · {p.docente.facultad} ·{" "}
-                    {p.docente.sedeBase}
+                    {getSedeLabel(p.docente.sedeBase)}
                   </p>
                   <p className="mt-0.5 text-sm">{p.titulo}</p>
                   <p className="text-xs text-muted-foreground">
                     {TIPO_LABEL[p.tipo] ?? p.tipo} ·{" "}
                     {ROL_LABEL[p.rolDocente] ?? p.rolDocente}
-                    {p.periodoInicio ? ` · ${p.periodoInicio}` : ""}
+                    {p.periodoInicio ? ` · ${formatFechaInicio(p.periodoInicio)}` : ""}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {new Date(p.createdAt).toLocaleDateString("es-CO", {

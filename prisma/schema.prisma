@@ -69,6 +69,20 @@ model Docente {
   cargoAmbitoValor    String?
   proyectosActivos    Boolean           @default(false)
   semanasVinculacion  Int?
+  // ===== Rango del contrato para modalidades temporales no-PLANTA (ocasional,
+  // visitante, cátedra visitante). Puede abarcar más de un periodo académico
+  // (ej. ocasional de ~11 meses). El sistema deriva los semestres cubiertos y las
+  // semanas por periodo cruzando este rango con las fechas de cada PeriodoAcademico.
+  vinculacionDesde    DateTime?
+  vinculacionHasta    DateTime?
+  // ===== Datos de vinculación del profesor INVITADO (Art. 4f) =====
+  // Solo aplican cuando modalidad === INVITADO. Son los términos que autoriza
+  // el Consejo Académico; los fija un ADMIN/SUPERADMIN al gestionar la cuenta.
+  invObjeto           String?
+  invFechaDesde       DateTime?
+  invFechaHasta       DateTime?
+  invHorasContratadas Int?
+  invAutorizadoCA     Boolean           @default(false)
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
   tituloDoctorado     String?
@@ -152,6 +166,9 @@ model ActividadDocencia {
   descripcion              String?
   dedicacionPeriodo        Float
   cantidadUnidades         Int?
+  // Cohortes (períodos de ingreso, ej. ["2026-1"]) que cubre la actividad cuando el
+  // catálogo la mide por COHORTE (Consejería). Vacío para el resto. Hasta `unidadMax`.
+  cohortes                 String[]
   // Sede de ejecución (Art. 11). Obligatoria solo si el catálogo dice
   // aplicaUnoPorSede=true o topePorUnidad=SEDE. Informativa en el resto.
   sede                     Sede?
@@ -557,6 +574,8 @@ enum Modalidad {
   CATEDRA
   VISITANTE_TC
   VISITANTE_MT
+  CATEDRA_VISITANTE_TC
+  CATEDRA_VISITANTE_MT
   INVITADO
 }
 

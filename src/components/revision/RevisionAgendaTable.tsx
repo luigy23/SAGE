@@ -15,6 +15,7 @@ import { es } from "date-fns/locale"
 import { Eye } from "lucide-react"
 import type { AgendaRow } from "@/lib/actions/revision"
 import { getModalidadLabel } from "@/lib/utils/modalidad"
+import { getSedeLabel } from "@/lib/utils/sede"
 
 const estadoBadge = (estado: string): "default" | "secondary" | "destructive" | "outline" => {
   if (estado === "ENVIADO") return "default"
@@ -72,7 +73,7 @@ export function RevisionAgendaTable({
               </TableCell>
               <TableCell className="text-sm">{a.docente.programa}</TableCell>
               <TableCell className="text-xs text-muted-foreground">
-                {a.docente.sedeBase}
+                {getSedeLabel(a.docente.sedeBase)}
               </TableCell>
               <TableCell className="font-mono text-sm">{a.periodo}</TableCell>
               <TableCell>

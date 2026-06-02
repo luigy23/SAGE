@@ -48,6 +48,8 @@ export type FormularioOwner = {
   id: string
   programa: string
   facultad: string
+  /** Modalidad del dueño. INVITADO escala la aprobación al Consejo Académico (SUPERADMIN). */
+  modalidad?: Modalidad
 }
 
 export type AutoridadFailure = { error: string }
@@ -145,6 +147,14 @@ export function assertPuedeAprobar(
   const autoridad = getAutoridadAcademica(actor)
   if (autoridad.tipo === null) {
     return { error: "No tienes autoridad académica para revisar este formulario." }
+  }
+  // Art. 4f: la agenda de un profesor INVITADO la autoriza el Consejo Académico,
+  // representado por el SUPERADMIN. El Jefe/Decano la proponen y crean, pero no la aprueban.
+  if (owner.modalidad === "INVITADO" && autoridad.tipo !== "SUPERADMIN") {
+    return {
+      error:
+        "La agenda de un profesor invitado requiere autorización del Consejo Académico (SuperAdmin). Tú puedes crearla y proponerla, pero no aprobarla.",
+    }
   }
   // SoD: nadie aprueba su propio formulario (excepto el SUPERADMIN, autoridad terminal).
   if (owner.id === actor.id && autoridad.tipo !== "SUPERADMIN") {

@@ -299,8 +299,9 @@ export function AgendaWizardForm({
       topesActividades,
       maxInvProySocialCatedra,
       maxGestion,
+      periodo,
     ),
-    [maxHoras, esEstricto, minDocencia, semanasAgenda, docente.doctorado, docente.cargoAdministrativo, docente.proyectosActivos, excluyeTopeGestion20, esJefeProg, topesActividades, maxInvProySocialCatedra, maxGestion]
+    [maxHoras, esEstricto, minDocencia, semanasAgenda, docente.doctorado, docente.cargoAdministrativo, docente.proyectosActivos, excluyeTopeGestion20, esJefeProg, topesActividades, maxInvProySocialCatedra, maxGestion, periodo]
   )
 
   const steps = useMemo(
@@ -326,7 +327,12 @@ export function AgendaWizardForm({
   // proyección social, gestión.
   // =========================================================
   const watchedData = useWatch({ control: form.control })
-  const horasTotalesPeriodo = maxHoras * semanasAgenda
+  // INVITADO (Art. 4f): el tope es absoluto (horas contratadas resueltas en el
+  // servidor) y NO escala con semanas. El resto de modalidades deriva de maxHoras×semanas.
+  const horasTotalesPeriodo =
+    docente.modalidad === "INVITADO" && agendaLimits?.horasTotalesPeriodo != null
+      ? agendaLimits.horasTotalesPeriodo
+      : maxHoras * semanasAgenda
 
   // Revalidar el formulario cuando el docente cambia las semanas de trabajo.
   // Esto asegura que los items que ya tenían semanas > semanasAgenda se marquen como inválidos.
@@ -515,6 +521,7 @@ export function AgendaWizardForm({
             sedeBase={docente.sedeBase}
             semanasPeriodo={semanasAgenda}
             esJefeDePrograma={esJefeProg}
+            periodo={periodo}
           />
         )
       case "investigacion":

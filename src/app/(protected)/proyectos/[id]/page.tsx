@@ -9,6 +9,7 @@ import { ProyectoStatusBadge } from "@/components/proyectos/ProyectoStatusBadge"
 import { EnviarProyectoButton } from "@/components/proyectos/EnviarProyectoButton"
 import { CancelarProyectoButton } from "@/components/proyectos/CancelarProyectoButton"
 import { ArrowLeft, Microscope, Clock } from "lucide-react"
+import { formatFechaInicio } from "@/lib/utils"
 
 export const metadata: Metadata = {
   title: "Detalle de Proyecto | SAGE",
@@ -113,7 +114,7 @@ export default async function DetalleProyectoPage({
                 <dt className="text-xs font-medium text-muted-foreground">
                   Periodo de inicio
                 </dt>
-                <dd>{proyecto.periodoInicio}</dd>
+                <dd>{formatFechaInicio(proyecto.periodoInicio)}</dd>
               </div>
             )}
             {proyecto.descripcion && (

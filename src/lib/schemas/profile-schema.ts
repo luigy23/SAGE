@@ -2,7 +2,7 @@ import { z } from "zod"
 
 /**
  * MODALIDADES válidas del Acuerdo 048
- * Prisma enum: PLANTA_TC | PLANTA_MT | OCASIONAL_TC | OCASIONAL_MT | CATEDRA | VISITANTE_TC | VISITANTE_MT | INVITADO
+ * Prisma enum: PLANTA_TC | PLANTA_MT | OCASIONAL_TC | OCASIONAL_MT | CATEDRA | VISITANTE_TC | VISITANTE_MT | CATEDRA_VISITANTE_TC | CATEDRA_VISITANTE_MT | INVITADO
  */
 export const MODALIDADES_ENUM = [
   "PLANTA_TC",
@@ -12,6 +12,8 @@ export const MODALIDADES_ENUM = [
   "CATEDRA",
   "VISITANTE_TC",
   "VISITANTE_MT",
+  "CATEDRA_VISITANTE_TC",
+  "CATEDRA_VISITANTE_MT",
   "INVITADO",
 ] as const
 
@@ -40,7 +42,8 @@ export const TIPOS_CARGO = [
  * - If all booleans are false, the form validates successfully (no errors).
  */
 const MODALIDADES_TEMPORALES = new Set([
-  "OCASIONAL_TC", "OCASIONAL_MT", "VISITANTE_TC", "VISITANTE_MT", "INVITADO",
+  "OCASIONAL_TC", "OCASIONAL_MT", "VISITANTE_TC", "VISITANTE_MT",
+  "CATEDRA_VISITANTE_TC", "CATEDRA_VISITANTE_MT", "INVITADO",
 ])
 
 export const profileSchema = z

@@ -22,12 +22,10 @@ const MODALIDADES = [
   { value: "CATEDRA", label: "Cátedra" },
   { value: "VISITANTE_TC", label: "Visitante Tiempo Completo" },
   { value: "VISITANTE_MT", label: "Visitante Medio Tiempo" },
+  { value: "CATEDRA_VISITANTE_TC", label: "Cátedra Visitante Tiempo Completo" },
+  { value: "CATEDRA_VISITANTE_MT", label: "Cátedra Visitante Medio Tiempo" },
   { value: "INVITADO", label: "Invitado" },
 ]
-
-const MODALIDADES_TEMPORALES = new Set([
-  "OCASIONAL_TC", "OCASIONAL_MT", "VISITANTE_TC", "VISITANTE_MT", "INVITADO",
-])
 
 interface Props {
   current: {
@@ -37,10 +35,9 @@ interface Props {
     sedeBase: string
     celular: string | null
   }
-  maxSemanas: number
 }
 
-export function ReAplicarForm({ current, maxSemanas }: Props) {
+export function ReAplicarForm({ current }: Props) {
   const [state, formAction, pending] = useActionState(reAplicarAction, null)
 
   const [selectedFacultad, setSelectedFacultad] = useState(current.facultad)
@@ -144,29 +141,6 @@ export function ReAplicarForm({ current, maxSemanas }: Props) {
           className={inputStyle}
         />
       </div>
-
-      {MODALIDADES_TEMPORALES.has(selectedModalidad) && (
-        <div className="space-y-2">
-          <Label className={labelStyle}>
-            Semanas de vinculación <span className="text-gray-400 font-normal">(opcional)</span>
-          </Label>
-          <Input
-            name="semanasVinculacion"
-            type="number"
-            min={1}
-            max={maxSemanas}
-            placeholder={`Ej: ${maxSemanas}`}
-            className={inputStyle}
-            onInput={(e) => {
-              const val = parseInt(e.currentTarget.value, 10)
-              if (!isNaN(val)) e.currentTarget.value = String(Math.min(Math.max(val, 1), maxSemanas))
-            }}
-          />
-          <p className="text-xs text-gray-400">
-            Semanas de su contrato en este período (1–{maxSemanas}). Puede completarlo después en su perfil.
-          </p>
-        </div>
-      )}
 
       <input type="hidden" name="sede" value={selectedSede} />
       <input type="hidden" name="modalidad" value={selectedModalidad} />

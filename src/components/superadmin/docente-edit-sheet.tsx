@@ -41,7 +41,7 @@ import {
   type EditarDocenteSuperadminInput,
 } from "@/lib/schemas/superadmin-docente-schema"
 import { TIPOS_CARGO } from "@/lib/schemas/profile-schema"
-import { CARGO_AMBITO, opcionesAmbito } from "@/lib/constants"
+import { CARGO_AMBITO } from "@/lib/constants"
 import { editarDocenteSuperadminAction } from "@/lib/actions/superadmin-docente-edit"
 
 const MODALIDADES = [
@@ -52,6 +52,8 @@ const MODALIDADES = [
   { value: "CATEDRA", label: "Cátedra" },
   { value: "VISITANTE_TC", label: "Visitante Tiempo Completo" },
   { value: "VISITANTE_MT", label: "Visitante Medio Tiempo" },
+  { value: "CATEDRA_VISITANTE_TC", label: "Cátedra Visitante Tiempo Completo" },
+  { value: "CATEDRA_VISITANTE_MT", label: "Cátedra Visitante Medio Tiempo" },
   { value: "INVITADO", label: "Invitado" },
 ] as const
 
@@ -67,6 +69,8 @@ const MODALIDADES_TEMPORALES = new Set([
   "OCASIONAL_MT",
   "VISITANTE_TC",
   "VISITANTE_MT",
+  "CATEDRA_VISITANTE_TC",
+  "CATEDRA_VISITANTE_MT",
   "INVITADO",
 ])
 
@@ -87,6 +91,20 @@ type Usuario = {
   cargoAmbitoValor: string | null
   proyectosActivos: boolean
   semanasVinculacion?: number | null
+  vinculacionDesde?: Date | null
+  vinculacionHasta?: Date | null
+  invObjeto?: string | null
+  invFechaDesde?: Date | null
+  invFechaHasta?: Date | null
+  invHorasContratadas?: number | null
+  invAutorizadoCA?: boolean
+}
+
+/** Convierte una fecha (Date | ISO string | null) al formato yyyy-mm-dd del input date. */
+function toDateInput(v: Date | string | null | undefined): string {
+  if (!v) return ""
+  const d = typeof v === "string" ? new Date(v) : v
+  return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10)
 }
 
 export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
@@ -111,6 +129,13 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
       cargoAmbitoValor: usuario.cargoAmbitoValor ?? "",
       proyectosActivos: usuario.proyectosActivos,
       semanasVinculacion: usuario.semanasVinculacion ?? undefined,
+      vinculacionDesde: toDateInput(usuario.vinculacionDesde),
+      vinculacionHasta: toDateInput(usuario.vinculacionHasta),
+      invObjeto: usuario.invObjeto ?? "",
+      invFechaDesde: toDateInput(usuario.invFechaDesde),
+      invFechaHasta: toDateInput(usuario.invFechaHasta),
+      invHorasContratadas: usuario.invHorasContratadas ?? undefined,
+      invAutorizadoCA: usuario.invAutorizadoCA ?? false,
     },
   })
 
@@ -132,6 +157,8 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
         cargoAmbitoValor: usuario.cargoAmbitoValor ?? "",
         proyectosActivos: usuario.proyectosActivos,
         semanasVinculacion: usuario.semanasVinculacion ?? undefined,
+        vinculacionDesde: toDateInput(usuario.vinculacionDesde),
+        vinculacionHasta: toDateInput(usuario.vinculacionHasta),
       })
     }
   }, [open, usuario, form])
@@ -143,11 +170,22 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
     name: "cargoAdministrativo",
   })
   const tipoCargoW = useWatch({ control: form.control, name: "tipoCargo" })
+  const programaW = useWatch({ control: form.control, name: "programa" })
+  const facultadW = useWatch({ control: form.control, name: "facultad" })
   const ambitoCfg = tipoCargoW ? CARGO_AMBITO[tipoCargoW] ?? null : null
-  const ambitoOpciones = opcionesAmbito(tipoCargoW)
+  // El ámbito de un cargo es SIEMPRE el propio del docente: jefe → su programa,
+  // decano/coordinador → su facultad. Una sola opción posible, no se puede elegir otra.
+  const programaActual = programaW || usuario.programa
+  const facultadActual = facultadW || usuario.facultad
+  const ambitoOpciones = ambitoCfg
+    ? [ambitoCfg.tipo === "PROGRAMA" ? programaActual : facultadActual]
+    : []
 
   const isCatedra = modalidad === "CATEDRA"
+  const isInvitado = modalidad === "INVITADO"
   const isModalidadTemporal = MODALIDADES_TEMPORALES.has(modalidad ?? "")
+  // Temporales con rango de contrato (ocasional/visitante/cátedra visitante); INVITADO usa inv*.
+  const isTemporalNoInvitado = isModalidadTemporal && !isInvitado
 
   // UI Lock — CATEDRA fuerza false
   useEffect(() => {
@@ -163,6 +201,19 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
   useEffect(() => {
     if (!doctorado) form.setValue("tituloDoctorado", "", { shouldValidate: true })
   }, [doctorado, form])
+
+  // Forzar el ámbito del cargo al propio del docente (su programa o su facultad),
+  // nunca otro. Si el cargo no maneja ámbito, no hace nada.
+  useEffect(() => {
+    const cfg = tipoCargoW ? CARGO_AMBITO[tipoCargoW] ?? null : null
+    if (cfg) {
+      form.setValue(
+        "cargoAmbitoValor",
+        cfg.tipo === "PROGRAMA" ? programaActual : facultadActual,
+        { shouldValidate: true },
+      )
+    }
+  }, [tipoCargoW, programaActual, facultadActual, form])
 
   // Si no hay cargo, limpiar tipoCargo y ámbito
   useEffect(() => {
@@ -333,6 +384,24 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
                 )}
               </div>
 
+              {isTemporalNoInvitado && (
+                <div className="space-y-2 rounded-md border border-blue-200 bg-blue-50/50 p-3 dark:border-blue-900 dark:bg-blue-950/30">
+                  <p className="text-xs text-muted-foreground">
+                    Rango del contrato. Si abarca varios semestres (p. ej. un ocasional de ~11
+                    meses), SAGE deriva automáticamente los periodos cubiertos y las semanas en
+                    cada uno. Si lo dejas vacío, se usa el número de semanas de vinculación.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Field label="Inicio del contrato" error={errors.vinculacionDesde?.message}>
+                      <Input type="date" {...form.register("vinculacionDesde")} />
+                    </Field>
+                    <Field label="Fin del contrato" error={errors.vinculacionHasta?.message}>
+                      <Input type="date" {...form.register("vinculacionHasta")} />
+                    </Field>
+                  </div>
+                </div>
+              )}
+
               {isCatedra && (
                 <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 dark:border-amber-800 dark:bg-amber-950">
                   <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
@@ -343,6 +412,57 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
                 </div>
               )}
             </section>
+
+            {isInvitado && (
+              <>
+                <Separator />
+                <section className="space-y-3">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    Datos de invitación (Art. 4f)
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Términos que autoriza el Consejo Académico. Las horas contratadas son la base
+                    del 100% (tope de la agenda); las fechas registran la duración real (puede ser
+                    de días). La aprobación de la agenda del invitado la hace el SuperAdmin.
+                  </p>
+                  <Field label="Objeto de la invitación" error={errors.invObjeto?.message}>
+                    <Input
+                      {...form.register("invObjeto")}
+                      placeholder="Ej: Seminario doctoral en IA, módulo de 3 días"
+                      maxLength={500}
+                    />
+                  </Field>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <Field label="Desde" error={errors.invFechaDesde?.message}>
+                      <Input type="date" {...form.register("invFechaDesde")} />
+                    </Field>
+                    <Field label="Hasta" error={errors.invFechaHasta?.message}>
+                      <Input type="date" {...form.register("invFechaHasta")} />
+                    </Field>
+                    <Field label="Horas contratadas" error={errors.invHorasContratadas?.message}>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={4000}
+                        {...form.register("invHorasContratadas", {
+                          setValueAs: (v) =>
+                            v === "" || v === null || v === undefined ? null : Number(v),
+                        })}
+                      />
+                    </Field>
+                  </div>
+                  <SwitchRow
+                    icon={<ShieldAlert className="h-4 w-4" />}
+                    label="Autorizado por el Consejo Académico"
+                    description="Art. 4f — autorización expresa del CA para la vinculación"
+                    checked={form.watch("invAutorizadoCA") ?? false}
+                    onChange={(v) =>
+                      form.setValue("invAutorizadoCA", v, { shouldValidate: true })
+                    }
+                  />
+                </section>
+              </>
+            )}
 
             <Separator />
 

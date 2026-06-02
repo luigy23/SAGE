@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { resolveGlobales } from "@/lib/rules/resolver"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { XCircle } from "lucide-react"
@@ -26,8 +25,6 @@ export default async function CuentaRechazadaPage() {
   })
 
   if (!docente) redirect("/auth/login")
-
-  const globales = await resolveGlobales(null)
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
@@ -92,7 +89,6 @@ export default async function CuentaRechazadaPage() {
                 sedeBase: docente.sedeBase,
                 celular: docente.celular,
               }}
-              maxSemanas={globales.semanasPeriodo}
             />
           </CardContent>
         </Card>

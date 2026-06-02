@@ -12,6 +12,19 @@ import {
 } from "@/lib/schemas/superadmin-docente-schema"
 import { CARGO_AMBITO, FACULTADES, PROGRAMAS } from "@/lib/constants"
 
+/**
+ * Modalidades temporales no-INVITADO que usan rango de fechas de contrato
+ * (ocasional, visitante, cátedra visitante). INVITADO tiene sus propios campos `inv*`.
+ */
+const MODALIDADES_VINCULACION_FECHAS = new Set<Modalidad>([
+  "OCASIONAL_TC",
+  "OCASIONAL_MT",
+  "VISITANTE_TC",
+  "VISITANTE_MT",
+  "CATEDRA_VISITANTE_TC",
+  "CATEDRA_VISITANTE_MT",
+])
+
 async function ensureSuperadmin() {
   const session = await auth()
   if (!session?.user || session.user.rol !== "SUPERADMIN") {
@@ -35,6 +48,13 @@ const CAMPOS_AUDITABLES = [
   "cargoAmbitoValor",
   "proyectosActivos",
   "semanasVinculacion",
+  "vinculacionDesde",
+  "vinculacionHasta",
+  "invObjeto",
+  "invFechaDesde",
+  "invFechaHasta",
+  "invHorasContratadas",
+  "invAutorizadoCA",
 ] as const
 
 type CampoAuditable = (typeof CAMPOS_AUDITABLES)[number]
@@ -135,8 +155,49 @@ export async function editarDocenteSuperadminAction(
     if (!opciones.includes(valor)) {
       return { error: `El ámbito "${valor}" no es válido para el cargo seleccionado.` }
     }
+    // El ámbito DEBE ser el propio del docente: un jefe de programa lo es de SU programa;
+    // un decano/coordinador, de SU facultad. Evita autoridad sobre un ámbito ajeno.
+    const ambitoPropio = (cfgAmbito.tipo === "PROGRAMA" ? data.programa : data.facultad)?.trim() || ""
+    if (valor !== ambitoPropio) {
+      return {
+        error: cfgAmbito.tipo === "PROGRAMA"
+          ? `Un Jefe de Programa solo puede serlo de su propio programa (${ambitoPropio}).`
+          : `Este cargo solo puede ejercerse sobre su propia facultad (${ambitoPropio}).`,
+      }
+    }
     finalCargoAmbitoTipo = cfgAmbito.tipo as AmbitoCargo
     finalCargoAmbitoValor = valor
+  }
+
+  // Datos de invitación (Art. 4f): solo se persisten para modalidad INVITADO; en
+  // cualquier otra modalidad se limpian a null/false (defensa en profundidad).
+  const esInvitado = data.modalidad === "INVITADO"
+  const parseFecha = (v: string | null | undefined): Date | null => {
+    if (!esInvitado || !v) return null
+    const d = new Date(v)
+    return isNaN(d.getTime()) ? null : d
+  }
+  const finalInvFechaDesde = parseFecha(data.invFechaDesde)
+  const finalInvFechaHasta = parseFecha(data.invFechaHasta)
+  if (finalInvFechaDesde && finalInvFechaHasta && finalInvFechaHasta < finalInvFechaDesde) {
+    return { error: "La fecha de fin de la invitación no puede ser anterior a la de inicio." }
+  }
+  const finalInvObjeto = esInvitado ? (data.invObjeto?.trim() || null) : null
+  const finalInvHorasContratadas = esInvitado ? (data.invHorasContratadas ?? null) : null
+  const finalInvAutorizadoCA = esInvitado ? (data.invAutorizadoCA ?? false) : false
+
+  // Rango de vinculación: solo para temporales no-INVITADO (ocasional/visitante/cátedra
+  // visitante). En cualquier otra modalidad se limpia a null (defensa en profundidad).
+  const esTemporalNoInvitado = MODALIDADES_VINCULACION_FECHAS.has(data.modalidad)
+  const parseVinc = (v: string | null | undefined): Date | null => {
+    if (!esTemporalNoInvitado || !v) return null
+    const d = new Date(v)
+    return isNaN(d.getTime()) ? null : d
+  }
+  const finalVinculacionDesde = parseVinc(data.vinculacionDesde)
+  const finalVinculacionHasta = parseVinc(data.vinculacionHasta)
+  if (finalVinculacionDesde && finalVinculacionHasta && finalVinculacionHasta < finalVinculacionDesde) {
+    return { error: "La fecha de fin de la vinculación no puede ser anterior a la de inicio." }
   }
 
   const updatePayload: Prisma.DocenteUpdateInput = {
@@ -155,6 +216,13 @@ export async function editarDocenteSuperadminAction(
     cargoAmbitoValor: finalCargoAmbitoValor,
     proyectosActivos: finalProyectosActivos,
     semanasVinculacion: data.semanasVinculacion ?? null,
+    vinculacionDesde: finalVinculacionDesde,
+    vinculacionHasta: finalVinculacionHasta,
+    invObjeto: finalInvObjeto,
+    invFechaDesde: finalInvFechaDesde,
+    invFechaHasta: finalInvFechaHasta,
+    invHorasContratadas: finalInvHorasContratadas,
+    invAutorizadoCA: finalInvAutorizadoCA,
   }
 
   const antesSnap = snapshot(docente as unknown as Record<string, unknown>)

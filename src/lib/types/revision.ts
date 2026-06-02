@@ -41,6 +41,8 @@ const MODALIDADES = new Set<Modalidad>([
   "CATEDRA",
   "VISITANTE_TC",
   "VISITANTE_MT",
+  "CATEDRA_VISITANTE_TC",
+  "CATEDRA_VISITANTE_MT",
   "INVITADO",
 ])
 

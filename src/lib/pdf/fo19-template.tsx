@@ -3,6 +3,7 @@ import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer"
 import type { AgendaConRelaciones } from "@/lib/types/agenda"
 import type { Docente } from "@/generated/prisma/client"
 import { Watermark } from "./shared/watermark"
+import { getSedeLabel } from "@/lib/utils/sede"
 
 const RED = "#9F1721"
 const BORDER = "#999999"
@@ -81,7 +82,7 @@ const MOD_OPTS = [
 ]
 
 function ModalidadRow({ modalidad }: { modalidad: string }) {
-  const isOtro = ["VISITANTE_TC", "VISITANTE_MT", "INVITADO"].includes(modalidad)
+  const isOtro = ["VISITANTE_TC", "VISITANTE_MT", "CATEDRA_VISITANTE_TC", "CATEDRA_VISITANTE_MT", "INVITADO"].includes(modalidad)
   return (
     <View style={s.modalidadRow}>
       <Text style={s.fieldLabel}>Modalidad/Dedicación: </Text>
@@ -280,7 +281,7 @@ export function FO19Document({ agenda, estado }: { agenda: AgendaConRelaciones; 
             cells={[
               c.numeroCurso,
               c.nombreCurso,
-              c.sede ?? "",
+              getSedeLabel(c.sede),
               c.horasPresenciales,
               c.creditos,
               c.semanas,

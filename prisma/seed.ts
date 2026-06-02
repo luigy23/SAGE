@@ -323,7 +323,7 @@ const catalogoActividades = [
     topeSemestralH: 48,
     topePorUnidad: "COHORTE" as const,
     unidadMax: 2,
-    descripcion: "Hasta 2 cohortes simultáneas, hasta sexto semestre",
+    descripcion: "Hasta 2 cohortes simultáneas. Un solo consejero por cohorte y programa; la consejería se mantiene 6 semestres desde el período de ingreso (validado por el sistema).",
     articuloOrigen: "Art. 11 — Docencia",
   },
   {

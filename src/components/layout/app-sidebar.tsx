@@ -38,7 +38,7 @@ import {
 import { signOutAction } from "@/lib/actions/sign-out"
 
 const navItems = [
-  { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  // { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Agenda Semestral", href: "/agenda", icon: Calendar },
   { title: "Monitoreo", href: "/monitoreo", icon: ClipboardCheck },
 ]
@@ -147,7 +147,7 @@ export function AppSidebar({
                       >
                         <Link href="/admin/revision">
                           <Search />
-                          <span>Revisión</span>
+                          <span>Revisión de solicitudes</span>
                         </Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>

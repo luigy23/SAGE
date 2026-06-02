@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { ArrowLeft, GraduationCap, ShieldAlert } from "lucide-react"
 import { getModalidadLabel } from "@/lib/utils/modalidad"
+import { getSedeLabel } from "@/lib/utils/sede"
 
 export default async function GestionAgendaDetailPage({
   params,
@@ -48,6 +49,11 @@ export default async function GestionAgendaDetailPage({
   const esPropia =
     agenda.docente.id === sesion.actor.id && sesion.autoridad.tipo !== "SUPERADMIN"
 
+  // Art. 4f: la agenda de un INVITADO la aprueba el Consejo Académico (SUPERADMIN).
+  // El Jefe/Decano la crean/proponen, pero no la aprueban/rechazan.
+  const esInvitadoSinAutoridad =
+    agenda.docente.modalidad === "INVITADO" && sesion.autoridad.tipo !== "SUPERADMIN"
+
   const periodoRow = await prisma.periodoAcademico.findUnique({
     where: { nombre: agenda.periodo },
     select: { id: true },
@@ -64,6 +70,9 @@ export default async function GestionAgendaDetailPage({
         proyectosActivos: agenda.docente.proyectosActivos,
         tipoCargo: agenda.docente.tipoCargo ?? null,
         semanasVinculacion: agenda.docente.semanasVinculacion ?? null,
+        vinculacionDesde: agenda.docente.vinculacionDesde ?? null,
+        vinculacionHasta: agenda.docente.vinculacionHasta ?? null,
+        invHorasContratadas: agenda.docente.invHorasContratadas ?? null,
       },
       periodoRow?.id ?? null
     ),
@@ -85,6 +94,11 @@ export default async function GestionAgendaDetailPage({
             <p className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
               <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
               Es tu propia agenda: la aprueba la autoridad del siguiente ámbito (tu Decano o el SuperAdmin).
+            </p>
+          ) : esInvitadoSinAutoridad ? (
+            <p className="flex items-center gap-1.5 rounded-md border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs text-blue-800 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+              <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
+              Profesor invitado (Art. 4f): la aprobación la autoriza el Consejo Académico (SuperAdmin). Puedes crearla y proponerla.
             </p>
           ) : (
             <>
@@ -151,7 +165,7 @@ export default async function GestionAgendaDetailPage({
             </div>
             <div>
               <dt className="text-xs font-medium text-muted-foreground">Sede</dt>
-              <dd className="text-sm font-medium">{agenda.docente.sedeBase}</dd>
+              <dd className="text-sm font-medium">{getSedeLabel(agenda.docente.sedeBase)}</dd>
             </div>
           </dl>
 

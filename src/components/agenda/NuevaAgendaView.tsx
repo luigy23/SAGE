@@ -7,6 +7,7 @@ import type { CursoMaestroOption } from "@/components/agenda/CursoMaestroSelecto
 import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatalogoSelector"
 import type { FormulasCursos } from "@/lib/actions/formulas"
 import type { AgendaLimits } from "@/lib/validations/agenda-rules"
+import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -36,6 +37,7 @@ export function NuevaAgendaView({
   semanasMaximas,
   formulas,
   agendaLimits,
+  defaultValues,
 }: {
   docente: Docente
   cursosMaestros: CursoMaestroOption[]
@@ -45,6 +47,7 @@ export function NuevaAgendaView({
   semanasMaximas?: number
   formulas?: FormulasCursos
   agendaLimits?: AgendaLimits
+  defaultValues?: AgendaWizardFormData
 }) {
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
 
@@ -62,6 +65,7 @@ export function NuevaAgendaView({
         semanasMaximas={semanasMaximas}
         formulas={formulas}
         agendaLimits={agendaLimits}
+        defaultValues={defaultValues}
       />
     )
   }

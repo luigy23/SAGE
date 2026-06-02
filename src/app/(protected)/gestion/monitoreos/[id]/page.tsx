@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, ShieldAlert } from "lucide-react"
 import { getModalidadLabel } from "@/lib/utils/modalidad"
+import { getSedeLabel } from "@/lib/utils/sede"
 
 export default async function GestionMonitoreoDetailPage({
   params,
@@ -54,6 +55,10 @@ export default async function GestionMonitoreoDetailPage({
   const esPropia =
     monitoreo.docente.id === sesion.actor.id && sesion.autoridad.tipo !== "SUPERADMIN"
 
+  // Art. 4f: el monitoreo de un INVITADO lo aprueba el Consejo Académico (SUPERADMIN).
+  const esInvitadoSinAutoridad =
+    monitoreo.docente.modalidad === "INVITADO" && sesion.autoridad.tipo !== "SUPERADMIN"
+
   const actores = [...detalle.rehabilitadores, ...detalle.editores]
 
   return (
@@ -70,6 +75,11 @@ export default async function GestionMonitoreoDetailPage({
             <p className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
               <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
               Es tu propio monitoreo: lo aprueba la autoridad del siguiente ámbito (tu Decano o el SuperAdmin).
+            </p>
+          ) : esInvitadoSinAutoridad ? (
+            <p className="flex items-center gap-1.5 rounded-md border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs text-blue-800 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+              <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
+              Profesor invitado (Art. 4f): la aprobación la autoriza el Consejo Académico (SuperAdmin).
             </p>
           ) : (
             <>
@@ -116,7 +126,7 @@ export default async function GestionMonitoreoDetailPage({
                 {monitoreo.periodo}
               </Badge>
               <Badge variant="outline">{getModalidadLabel(monitoreo.docente.modalidad)}</Badge>
-              <Badge variant="outline">{monitoreo.docente.sedeBase}</Badge>
+              <Badge variant="outline">{getSedeLabel(monitoreo.docente.sedeBase)}</Badge>
               <Badge
                 className={
                   monitoreo.estado === "ENVIADO"

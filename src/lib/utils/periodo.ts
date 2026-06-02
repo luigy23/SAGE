@@ -54,6 +54,16 @@ export function getMaxHoras(
     return { maxHoras: 20, esEstricto: false }
   }
 
+  // Cátedra Visitante TC: igual que Visitante TC (40 h/sem, no estricto)
+  if (modalidad === "CATEDRA_VISITANTE_TC") {
+    return { maxHoras: 40, esEstricto: false }
+  }
+
+  // Cátedra Visitante MT: igual que Visitante MT (20 h/sem, no estricto)
+  if (modalidad === "CATEDRA_VISITANTE_MT") {
+    return { maxHoras: 20, esEstricto: false }
+  }
+
   // Art. 4f — Invitado: hasta 100% según resolución CA, no estricto
   if (modalidad === "INVITADO") {
     return { maxHoras: 40, esEstricto: false }
@@ -91,6 +101,14 @@ export function getMinDocencia(
     // Art. 3 Par. 3: mínimo 60% de la agenda total (20h/sem × semanasPeriodo × 0.60)
     return Math.floor(20 * semanasPeriodo * 0.60)
   }
+  if (modalidad === "CATEDRA_VISITANTE_TC") {
+    // Igual que Visitante TC (Art. 3 Par. 3): 60% de 40h/sem × semanasPeriodo
+    return Math.floor(40 * semanasPeriodo * 0.60)
+  }
+  if (modalidad === "CATEDRA_VISITANTE_MT") {
+    // Igual que Visitante MT (Art. 3 Par. 3): 60% de 20h/sem × semanasPeriodo
+    return Math.floor(20 * semanasPeriodo * 0.60)
+  }
   // CATEDRA, INVITADO: sin mínimo de docencia
   return 0
 }
@@ -107,4 +125,67 @@ export function getMaxInvProySocialCatedra(
   semanasPeriodo: number,
 ): number | null {
   return modalidad === "CATEDRA" ? 4 * semanasPeriodo : null
+}
+
+// ============================================================
+// Aritmética de cohortes/períodos (Consejería — Art. 11)
+// ============================================================
+// Una "cohorte" es el período de ingreso (ej. "2026-1"). Un consejero queda
+// afiliado a esa cohorte y tiene derecho a consejería por 6 semestres INCLUSIVE
+// (el de inicio cuenta como el 1.º). Funciones puras / client-safe.
+
+/** Nombre de período por defecto válido (`YYYY-S`, con S ∈ {1,2}). */
+export const VENTANA_CONSEJERIA_SEMESTRES = 6
+
+/**
+ * Convierte "2026-1" en un ordinal comparable (`año*2 + (S-1)`).
+ * Retorna `NaN` si el formato no es `YYYY-1` / `YYYY-2`.
+ */
+export function ordinalPeriodo(nombre: string): number {
+  const m = /^(\d{4})-([12])$/.exec((nombre ?? "").trim())
+  if (!m) return NaN
+  return parseInt(m[1], 10) * 2 + (parseInt(m[2], 10) - 1)
+}
+
+/** Inverso de `ordinalPeriodo`: ordinal → "YYYY-S". */
+export function periodoDeOrdinal(ordinal: number): string {
+  return `${Math.floor(ordinal / 2)}-${(ordinal % 2) + 1}`
+}
+
+/**
+ * Semestres entre dos períodos (`hasta` − `desde`). Positivo si `hasta` es
+ * posterior. `NaN` si alguno tiene formato inválido.
+ */
+export function semestresEntre(desde: string, hasta: string): number {
+  return ordinalPeriodo(hasta) - ordinalPeriodo(desde)
+}
+
+/**
+ * Cohortes (períodos de ingreso) que aún tienen derecho a consejero respecto del
+ * período actual: el período actual y los `ventana-1` anteriores (6 inclusive).
+ * Ej. para "2026-1": ["2026-1","2025-2","2025-1","2024-2","2024-1","2023-2"].
+ */
+export function cohortesValidas(
+  periodoActual: string,
+  ventana: number = VENTANA_CONSEJERIA_SEMESTRES,
+): string[] {
+  const base = ordinalPeriodo(periodoActual)
+  if (Number.isNaN(base)) return []
+  const out: string[] = []
+  for (let i = 0; i < ventana; i++) out.push(periodoDeOrdinal(base - i))
+  return out
+}
+
+/**
+ * ¿La cohorte `cohorte` tiene derecho a consejero en el período `periodoAgenda`?
+ * Verdadero si la cohorte empezó en ese período o hasta 5 semestres antes
+ * (0 ≤ semestres transcurridos ≤ ventana-1). Falso si es futura o vencida.
+ */
+export function cohorteVigente(
+  cohorte: string,
+  periodoAgenda: string,
+  ventana: number = VENTANA_CONSEJERIA_SEMESTRES,
+): boolean {
+  const transcurridos = semestresEntre(cohorte, periodoAgenda)
+  return Number.isFinite(transcurridos) && transcurridos >= 0 && transcurridos <= ventana - 1
 }

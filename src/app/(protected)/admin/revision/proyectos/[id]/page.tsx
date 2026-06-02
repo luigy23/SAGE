@@ -9,6 +9,7 @@ import { AprobarProyectoButton } from "@/components/proyectos/AprobarProyectoBut
 import { RechazarProyectoDialog } from "@/components/proyectos/RechazarProyectoDialog"
 import { ArrowLeft, GraduationCap, Microscope } from "lucide-react"
 import { getModalidadLabel } from "@/lib/utils/modalidad"
+import { formatFechaInicio } from "@/lib/utils"
 
 export const metadata: Metadata = {
   title: "Detalle de Proyecto | SAGE Admin",
@@ -124,7 +125,7 @@ export default async function RevisionProyectoDetallePage({
                 <dt className="text-xs font-medium text-muted-foreground">
                   Periodo de inicio
                 </dt>
-                <dd>{proyecto.periodoInicio}</dd>
+                <dd>{formatFechaInicio(proyecto.periodoInicio)}</dd>
               </div>
             )}
             {proyecto.descripcion && (

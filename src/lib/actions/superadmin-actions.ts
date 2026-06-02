@@ -368,6 +368,13 @@ export async function getUsuarioSuperadmin(usuarioId: string) {
         cargoAmbitoValor: true,
         proyectosActivos: true,
         semanasVinculacion: true,
+        vinculacionDesde: true,
+        vinculacionHasta: true,
+        invObjeto: true,
+        invFechaDesde: true,
+        invFechaHasta: true,
+        invHorasContratadas: true,
+        invAutorizadoCA: true,
       },
     })
   } catch (error) {

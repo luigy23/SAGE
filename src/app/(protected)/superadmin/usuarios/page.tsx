@@ -1,3 +1,4 @@
+import { getSedeLabel } from "@/lib/utils/sede"
 import { listUsuarios } from "@/lib/actions/superadmin-actions"
 import {
   Table,
@@ -102,7 +103,7 @@ export default async function UsuariosPage() {
                         <Badge variant="outline" className="text-[10px]">
                           {getModalidadLabel(u.modalidad as any)}
                         </Badge>
-                        <span className="text-xs text-muted-foreground">{u.sedeBase}</span>
+                        <span className="text-xs text-muted-foreground">{getSedeLabel(u.sedeBase)}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-sm">

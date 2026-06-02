@@ -27,6 +27,7 @@ import {
   FormDescription,
 } from "@/components/ui/form"
 import { Trash2, AlertTriangle } from "lucide-react"
+import { cohortesValidas } from "@/lib/utils/periodo"
 
 type ArrayFieldName =
   | "actividadesInvestigacion"
@@ -63,6 +64,7 @@ export function ActividadCardRow({
   semanasPeriodo,
   sedeBase,
   proyectosActivos,
+  periodo,
   onRemove,
 }: {
   index: number
@@ -72,6 +74,7 @@ export function ActividadCardRow({
   semanasPeriodo: number
   sedeBase?: string | null
   proyectosActivos?: boolean
+  periodo?: string
   onRemove: () => void
 }) {
   const { control, setValue } = useFormContext<AgendaWizardFormData>()
@@ -127,6 +130,8 @@ export function ActividadCardRow({
   function handleSelect(act: ActividadCatalogoOption) {
     setValue(`${arrayName}.${index}.nombre`, act.nombre, { shouldValidate: true })
     setValue(`${arrayName}.${index}.cantidadUnidades`, 0)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setValue(`${arrayName}.${index}.cohortes` as any, [])
     // Pre-fill sede con sedeBase si la actividad la requiere y no hay valor.
     const necesitaSede = act.aplicaUnoPorSede || act.topePorUnidad === "SEDE"
     if (necesitaSede && !sedeWatched && sedeBase) {
@@ -143,6 +148,8 @@ export function ActividadCardRow({
     setValue(`${arrayName}.${index}.nombre`, "", { shouldValidate: true })
     setValue(`${arrayName}.${index}.dedicacionPeriodo`, 0)
     setValue(`${arrayName}.${index}.cantidadUnidades`, 0)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setValue(`${arrayName}.${index}.cohortes` as any, [])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setValue(`${arrayName}.${index}.sede` as any, null)
   }
@@ -178,8 +185,67 @@ export function ActividadCardRow({
       {nombre && (
         <div className="space-y-4">
 
-          {/* Input de cantidad de unidades (solo para actividades con topePorUnidad != NINGUNA) */}
-          {requiereUnidades && actividadCatalogo && (
+          {/* Cohorte(s) para actividades medidas por COHORTE (Consejería, Art. 11):
+              en vez del número, se eligen los períodos de ingreso válidos. */}
+          {actividadCatalogo?.topePorUnidad === "COHORTE" && (
+            <FormField
+              control={control}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              name={`${arrayName}.${index}.cohortes` as any}
+              render={({ field: f }) => {
+                const seleccionadas: string[] = Array.isArray(f.value) ? f.value : []
+                const maxCohortes = actividadCatalogo.unidadMax ?? 1
+                const opciones = periodo ? cohortesValidas(periodo) : []
+                const toggle = (c: string) => {
+                  const yaEsta = seleccionadas.includes(c)
+                  let next: string[]
+                  if (yaEsta) next = seleccionadas.filter((x) => x !== c)
+                  else if (seleccionadas.length >= maxCohortes) return
+                  else next = [...seleccionadas, c]
+                  f.onChange(next)
+                  setValue(`${arrayName}.${index}.cantidadUnidades`, next.length, { shouldValidate: true })
+                  if (actividadCatalogo.topeSemestralH !== null) {
+                    setValue(`${arrayName}.${index}.dedicacionPeriodo`, actividadCatalogo.topeSemestralH * next.length, { shouldValidate: true })
+                  }
+                }
+                return (
+                  <FormItem>
+                    <FormLabel>
+                      Cohorte(s) — período de ingreso
+                      <span className="ml-1 font-normal text-muted-foreground">(máx {maxCohortes})</span>
+                    </FormLabel>
+                    {opciones.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {opciones.map((c) => (
+                          <Button
+                            key={c}
+                            type="button"
+                            size="sm"
+                            variant={seleccionadas.includes(c) ? "default" : "outline"}
+                            onClick={() => toggle(c)}
+                          >
+                            {c}
+                          </Button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        No hay un período activo para calcular las cohortes.
+                      </p>
+                    )}
+                    <FormDescription>
+                      Un solo consejero por cohorte en el programa; la consejería dura 6 semestres
+                      desde el período de ingreso.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )
+              }}
+            />
+          )}
+
+          {/* Input de cantidad de unidades (solo para actividades con topePorUnidad != NINGUNA, excepto COHORTE) */}
+          {requiereUnidades && actividadCatalogo && actividadCatalogo.topePorUnidad !== "COHORTE" && (
             <FormField
               control={control}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any

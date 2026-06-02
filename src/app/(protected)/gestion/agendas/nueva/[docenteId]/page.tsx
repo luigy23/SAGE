@@ -5,11 +5,15 @@ import { getPeriodoActivoConFechas } from "@/lib/utils/periodo-server"
 import { AgendaWizardForm } from "@/components/agenda/AgendaWizardForm"
 import { AgendaReadOnly } from "@/components/agenda/AgendaReadOnly"
 import type { AgendaConRelaciones } from "@/lib/types/agenda"
-import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
+import { DEFAULT_FORM_VALUES, type AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import { resolveGlobales, resolveAgendaLimits } from "@/lib/rules/resolver"
 import { resolveFormulasCursosAction } from "@/lib/actions/formulas"
 import { getAutoridadDeSesion } from "@/lib/auth/get-autoridad"
 import { puedeGestionarFormulario, esModalidadNoPlanta } from "@/lib/auth/autoridad"
+import { TerminosInvitadoForm } from "@/components/gestion/TerminosInvitadoForm"
+import { PeriodosCubiertos } from "@/components/agenda/PeriodosCubiertos"
+import { CohortesConsejeros } from "@/components/agenda/CohortesConsejeros"
+import { getConsejeriaArrastrada } from "@/lib/consejeria"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -73,6 +77,9 @@ export default async function GestionNuevaAgendaPage({
         proyectosActivos: docente.proyectosActivos,
         tipoCargo: docente.tipoCargo ?? null,
         semanasVinculacion: docente.semanasVinculacion ?? null,
+        vinculacionDesde: docente.vinculacionDesde ?? null,
+        vinculacionHasta: docente.vinculacionHasta ?? null,
+        invHorasContratadas: docente.invHorasContratadas ?? null,
       },
       periodoRow?.id ?? null
     ),
@@ -169,6 +176,10 @@ export default async function GestionNuevaAgendaPage({
     },
   })
 
+  // Continuidad automática: si no hay agenda aún, arrastra la consejería vigente
+  // de la agenda previa del docente para no reescribir las cohortes cada semestre.
+  const arrastrada = agenda ? null : await getConsejeriaArrastrada(docente.id, periodo)
+
   // Si hay un BORRADOR delegado previo, pre-cargar sus datos al wizard.
   const defaultValues: AgendaWizardFormData | undefined = agenda
     ? {
@@ -191,6 +202,7 @@ export default async function GestionNuevaAgendaPage({
           dedicacionPeriodo: a.dedicacionPeriodo,
           cantidadUnidades: a.cantidadUnidades ?? 0,
           sede: a.sede ?? null,
+          cohortes: a.cohortes ?? [],
         })),
         actividadesInvestigacion: agenda.actividadesInvestigacion.map((a) => ({
           nombre: a.nombre,
@@ -200,6 +212,7 @@ export default async function GestionNuevaAgendaPage({
           dedicacionPeriodo: a.dedicacionPeriodo,
           cantidadUnidades: a.cantidadUnidades ?? 0,
           sede: a.sede ?? null,
+          cohortes: [],
         })),
         actividadesProyeccionSocial: agenda.actividadesProyeccionSocial.map((a) => ({
           nombre: a.nombre,
@@ -209,6 +222,7 @@ export default async function GestionNuevaAgendaPage({
           dedicacionPeriodo: a.dedicacionPeriodo,
           cantidadUnidades: 0,
           sede: a.sede ?? null,
+          cohortes: [],
         })),
         actividadesGestion: agenda.actividadesGestion.map((a) => ({
           nombre: a.nombre,
@@ -218,13 +232,48 @@ export default async function GestionNuevaAgendaPage({
           dedicacionPeriodo: a.dedicacionPeriodo,
           cantidadUnidades: 0,
           sede: a.sede ?? null,
+          cohortes: [],
         })),
       }
-    : undefined
+    : arrastrada
+      ? {
+          ...DEFAULT_FORM_VALUES,
+          otrasActividadesDocencia: [
+            {
+              nombre: arrastrada.nombre,
+              descripcion: "",
+              horasSemanales: 0,
+              semanas: 0,
+              dedicacionPeriodo: arrastrada.dedicacionPeriodo,
+              cantidadUnidades: arrastrada.cantidadUnidades,
+              sede: null,
+              cohortes: arrastrada.cohortes,
+            },
+          ],
+        }
+      : undefined
+
+  const toDateInput = (d: Date | null): string =>
+    d ? d.toISOString().slice(0, 10) : ""
 
   return (
     <div className="space-y-6">
       <Encabezado docente={docente} periodo={periodo} estado={agenda?.estado ?? null} />
+      <PeriodosCubiertos
+        vinculacionDesde={docente.vinculacionDesde}
+        vinculacionHasta={docente.vinculacionHasta}
+      />
+      <CohortesConsejeros programa={docente.programa} periodo={periodo} />
+      {docente.modalidad === "INVITADO" && (
+        <TerminosInvitadoForm
+          docenteId={docente.id}
+          invObjeto={docente.invObjeto ?? ""}
+          invFechaDesde={toDateInput(docente.invFechaDesde)}
+          invFechaHasta={toDateInput(docente.invFechaHasta)}
+          invHorasContratadas={docente.invHorasContratadas ?? null}
+          invAutorizadoCA={docente.invAutorizadoCA}
+        />
+      )}
       <AgendaWizardForm
         docente={docente}
         cursosMaestros={cursosMaestros}

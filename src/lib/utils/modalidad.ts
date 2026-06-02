@@ -29,6 +29,8 @@ const LABELS_CORTOS: Record<Modalidad, string> = {
   CATEDRA: "Cátedra",
   VISITANTE_TC: "Visitante Tiempo Completo",
   VISITANTE_MT: "Visitante Medio Tiempo",
+  CATEDRA_VISITANTE_TC: "Cátedra Visitante Tiempo Completo",
+  CATEDRA_VISITANTE_MT: "Cátedra Visitante Medio Tiempo",
   INVITADO: "Invitado",
 }
 
@@ -40,6 +42,8 @@ const LABELS_LARGOS: Record<Modalidad, string> = {
   CATEDRA: "Docente Catedrático",
   VISITANTE_TC: "Docente Visitante Tiempo Completo",
   VISITANTE_MT: "Docente Visitante Medio Tiempo",
+  CATEDRA_VISITANTE_TC: "Docente Cátedra Visitante Tiempo Completo",
+  CATEDRA_VISITANTE_MT: "Docente Cátedra Visitante Medio Tiempo",
   INVITADO: "Docente Invitado",
 }
 
@@ -108,6 +112,8 @@ export function getCargaSemestralCopy(
    * Si se omite, solo `sede` (sedeBase) decide — back-compat con callers viejos.
    */
   cursos?: Array<{ sede?: string | null; horasPresenciales: number; semanas: number }>,
+  /** INVITADO (Art. 4f): horas contratadas autorizadas por el Consejo Académico = base del 100%. */
+  invHorasContratadas?: number | null,
 ): CargaSemestralCopy {
   const labelLargo = getModalidadLabelLargo(modalidad)
 
@@ -185,10 +191,13 @@ export function getCargaSemestralCopy(
       }
     }
 
-    // ───── VISITANTE TC / MT — flexible por contrato ─────
+    // ───── VISITANTE TC / MT y CÁTEDRA VISITANTE TC / MT — flexible por contrato ─────
     case "VISITANTE_TC":
-    case "VISITANTE_MT": {
-      const horasSemanales = modalidad === "VISITANTE_TC" ? 40 : 20
+    case "VISITANTE_MT":
+    case "CATEDRA_VISITANTE_TC":
+    case "CATEDRA_VISITANTE_MT": {
+      const horasSemanales =
+        modalidad === "VISITANTE_TC" || modalidad === "CATEDRA_VISITANTE_TC" ? 40 : 20
       const horasTotales = horasSemanales * semanasPeriodo
       return {
         titulo: "Carga de referencia — según su contrato",
@@ -207,15 +216,22 @@ export function getCargaSemestralCopy(
 
     // ───── INVITADO — flexible con aprobación CA ─────
     case "INVITADO": {
+      // El 100% es lo CONTRATADO (horas autorizadas por el Consejo Académico),
+      // no 40h×semanas. Si no se capturó, cae a la referencia derivada.
+      const tieneContratadas = invHorasContratadas != null && invHorasContratadas > 0
       const horasSemanales = 40
-      const horasTotales = horasSemanales * semanasPeriodo
+      const horasTotales = tieneContratadas ? invHorasContratadas! : horasSemanales * semanasPeriodo
       return {
         titulo: "Carga aprobada por Consejo Académico",
-        resumen: `Hasta 100 % según resolución de vinculación (Art. 4f)`,
+        resumen: tieneContratadas
+          ? `${horasTotales} horas contratadas (hasta 100 %, Art. 4f)`
+          : `Hasta 100 % según resolución de vinculación (Art. 4f)`,
         descripcion:
           `Como docente invitado, su dedicación se aprueba por el Consejo Académico según los términos de su vinculación. ` +
-          `SAGE muestra ${horasTotales} horas como referencia institucional y permite el envío con cualquier carga registrada. ` +
-          `El jefe de programa validará el detalle durante el monitoreo.`,
+          (tieneContratadas
+            ? `Su vinculación autoriza ${horasTotales} horas para la labor experta contratada; SAGE usa esa cifra como tope de referencia. `
+            : `SAGE aún no tiene registradas sus horas contratadas; mostrará una referencia institucional y permitirá el envío con cualquier carga. `) +
+          `La aprobación final corresponde al Consejo Académico (SuperAdmin).`,
         tono: "flexible",
         articulo: "Art. 4f",
         horasTotales,

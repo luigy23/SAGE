@@ -26,7 +26,7 @@ export function proxy(request: NextRequest) {
 
   // Redirect authenticated users from root to dashboard
   if (pathname === "/") {
-    return NextResponse.redirect(new URL("/dashboard", request.url))
+    return NextResponse.redirect(new URL("/perfil", request.url))
   }
 
   return NextResponse.next()

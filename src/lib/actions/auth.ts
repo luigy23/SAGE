@@ -24,6 +24,8 @@ const DICCIONARIO_MODALIDAD: Record<string, string> = {
   "CATEDRA": "CATEDRA",
   "VISITANTE_TC": "VISITANTE_TC",
   "VISITANTE_MT": "VISITANTE_MT",
+  "CATEDRA_VISITANTE_TC": "CATEDRA_VISITANTE_TC",
+  "CATEDRA_VISITANTE_MT": "CATEDRA_VISITANTE_MT",
   "INVITADO": "INVITADO",
   // Legacy frontend abbreviations (backward compat)
   "TCP": "PLANTA_TC",
@@ -35,7 +37,8 @@ const DICCIONARIO_MODALIDAD: Record<string, string> = {
 // Modalidades válidas (must match Prisma enum exactly)
 const MODALIDADES_VALIDAS = new Set([
   "PLANTA_TC", "PLANTA_MT", "OCASIONAL_TC", "OCASIONAL_MT",
-  "CATEDRA", "VISITANTE_TC", "VISITANTE_MT", "INVITADO",
+  "CATEDRA", "VISITANTE_TC", "VISITANTE_MT",
+  "CATEDRA_VISITANTE_TC", "CATEDRA_VISITANTE_MT", "INVITADO",
 ])
 
 // Sedes válidas (must match Prisma enum exactly)
@@ -74,7 +77,8 @@ export async function registerAction(_prevState: RegisterState, formData: FormDa
   }
 
   const MODALIDADES_TEMPORALES_SET = new Set([
-    "OCASIONAL_TC", "OCASIONAL_MT", "VISITANTE_TC", "VISITANTE_MT", "INVITADO",
+    "OCASIONAL_TC", "OCASIONAL_MT", "VISITANTE_TC", "VISITANTE_MT",
+    "CATEDRA_VISITANTE_TC", "CATEDRA_VISITANTE_MT", "INVITADO",
   ])
 
   // ==========================================
@@ -162,6 +166,17 @@ export async function registerAction(_prevState: RegisterState, formData: FormDa
     const opciones = cargoCfg.lista === "FACULTADES" ? FACULTADES : PROGRAMAS
     if (!opciones.includes(cargoAmbitoValorRaw)) {
       return { error: `El ámbito "${cargoAmbitoValorRaw}" no es válido para el cargo seleccionado.`, values }
+    }
+    // El ámbito DEBE ser el propio del docente: jefe de programa → su programa;
+    // decano/coordinador → su facultad. Evita autoridad sobre un ámbito ajeno.
+    const ambitoPropio = (cargoCfg.tipo === "PROGRAMA" ? programa : facultad)?.trim() || ""
+    if (cargoAmbitoValorRaw !== ambitoPropio) {
+      return {
+        error: cargoCfg.tipo === "PROGRAMA"
+          ? `Un Jefe de Programa solo puede serlo de su propio programa (${ambitoPropio}).`
+          : `Este cargo solo puede ejercerse sobre su propia facultad (${ambitoPropio}).`,
+        values,
+      }
     }
     cargoAmbitoTipo = cargoCfg.tipo
     cargoAmbitoValor = cargoAmbitoValorRaw
@@ -317,7 +332,8 @@ export async function reAplicarAction(_prevState: unknown, formData: FormData) {
   }
 
   const esModalidadTemporalR = new Set([
-    "OCASIONAL_TC", "OCASIONAL_MT", "VISITANTE_TC", "VISITANTE_MT", "INVITADO",
+    "OCASIONAL_TC", "OCASIONAL_MT", "VISITANTE_TC", "VISITANTE_MT",
+    "CATEDRA_VISITANTE_TC", "CATEDRA_VISITANTE_MT", "INVITADO",
   ]).has(modalidadTraducida)
   const semanasVinculacion = esModalidadTemporalR && semanasVinculacionRaw
     ? parseInt(semanasVinculacionRaw, 10)

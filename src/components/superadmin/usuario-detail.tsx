@@ -9,6 +9,7 @@ import { DocenteEditSheet } from "@/components/superadmin/docente-edit-sheet"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import type { Rol } from "@/generated/prisma/client"
+import { getSedeLabel } from "@/lib/utils/sede"
 
 type UsuarioDetalle = {
   id: string
@@ -30,6 +31,13 @@ type UsuarioDetalle = {
   cargoAmbitoValor: string | null
   proyectosActivos: boolean
   semanasVinculacion?: number | null
+  vinculacionDesde?: Date | null
+  vinculacionHasta?: Date | null
+  invObjeto?: string | null
+  invFechaDesde?: Date | null
+  invFechaHasta?: Date | null
+  invHorasContratadas?: number | null
+  invAutorizadoCA?: boolean
 }
 
 const ROLE_VARIANT: Record<Rol, "default" | "secondary" | "outline"> = {
@@ -163,7 +171,7 @@ export function UsuarioDetail({ usuario }: { usuario: UsuarioDetalle }) {
             </div>
             <div>
               <dt className="text-sm font-medium text-muted-foreground">Sede</dt>
-              <dd className="text-sm">{usuario.sedeBase}</dd>
+              <dd className="text-sm">{getSedeLabel(usuario.sedeBase)}</dd>
             </div>
             <div>
               <dt className="text-sm font-medium text-muted-foreground">Cargo Administrativo</dt>

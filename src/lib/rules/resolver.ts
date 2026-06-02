@@ -13,6 +13,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { memoize } from "@/lib/rules/cache"
+import { semanasDeContratoEnPeriodo } from "@/lib/utils/vinculacion"
 import type {
   Modalidad,
   Sede,
@@ -118,6 +119,28 @@ function fallbackModalidad(
       }
     case "VISITANTE_MT":
       // Art. 4e: "según tipo de dedicación — medio tiempo" — derivado del semanal
+      return {
+        horasSemanalMax: 20,
+        horasSemestralMax: null,
+        horasSemestralEstricto: false,
+        minDocencia: null,
+        minDocenciaConProyectos: null,
+        maxInvProySocSemanal: null,
+        fuente: "fallback-048",
+      }
+    case "CATEDRA_VISITANTE_TC":
+      // Cátedra Visitante TC: mismas reglas que Visitante TC (Art. 4e) — distinción solo de nombre
+      return {
+        horasSemanalMax: 40,
+        horasSemestralMax: null,
+        horasSemestralEstricto: false,
+        minDocencia: null,
+        minDocenciaConProyectos: null,
+        maxInvProySocSemanal: null,
+        fuente: "fallback-048",
+      }
+    case "CATEDRA_VISITANTE_MT":
+      // Cátedra Visitante MT: mismas reglas que Visitante MT (Art. 4e) — distinción solo de nombre
       return {
         horasSemanalMax: 20,
         horasSemestralMax: null,
@@ -342,6 +365,16 @@ type DocenteParaResolver = {
   tipoCargo: string | null
   /** Semanas efectivas de contrato. Aplica a OCASIONAL/VISITANTE/INVITADO (Art. 4c/4e/4f). */
   semanasVinculacion: number | null
+  /**
+   * Rango del contrato (ocasional/visitante/cátedra visitante). Si está presente, las
+   * semanas efectivas del periodo se derivan del solape de este rango con las fechas del
+   * periodo, en vez de usar el número plano `semanasVinculacion`. Soporta contratos que
+   * abarcan varios semestres (ej. ocasional de ~11 meses).
+   */
+  vinculacionDesde?: Date | null
+  vinculacionHasta?: Date | null
+  /** Horas contratadas del INVITADO (base del 100%, Art. 4f). Solo INVITADO; null en el resto. */
+  invHorasContratadas?: number | null
 }
 
 /**
@@ -368,13 +401,38 @@ export async function resolveAgendaLimits(
   // Para OCASIONAL/VISITANTE/INVITADO, el techo viene del período de vinculación del contrato
   // (Art. 4c/4e/4f). PLANTA usa el semestral global.
   const MODALIDADES_VINCULACION = new Set([
-    "OCASIONAL_TC", "OCASIONAL_MT", "VISITANTE_TC", "VISITANTE_MT", "INVITADO",
+    "OCASIONAL_TC", "OCASIONAL_MT", "VISITANTE_TC", "VISITANTE_MT",
+    "CATEDRA_VISITANTE_TC", "CATEDRA_VISITANTE_MT", "INVITADO",
   ] as const)
-  const semanasEfectivas =
-    docente.semanasVinculacion != null &&
-    MODALIDADES_VINCULACION.has(docente.modalidad as never)
-      ? docente.semanasVinculacion
-      : globales.semanasPeriodo
+  const esVinculacionTemporal = MODALIDADES_VINCULACION.has(docente.modalidad as never)
+
+  // Semanas efectivas del periodo. Precedencia:
+  //   1. Rango de contrato (vinculacionDesde/Hasta) → solape con las fechas del periodo
+  //      (soporta contratos multi-semestre, p.ej. ocasional de ~11 meses).
+  //   2. Número plano `semanasVinculacion` (compatibilidad / captura manual).
+  //   3. Semanas del periodo global (PLANTA y fallback).
+  let semanasEfectivas = globales.semanasPeriodo
+  if (esVinculacionTemporal) {
+    let derivadasDeRango = 0
+    if (docente.vinculacionDesde && docente.vinculacionHasta && periodoId) {
+      const per = await prisma.periodoAcademico.findUnique({
+        where: { id: periodoId },
+        select: { fechaInicio: true, fechaFin: true },
+      })
+      if (per) {
+        derivadasDeRango = semanasDeContratoEnPeriodo(
+          docente.vinculacionDesde,
+          docente.vinculacionHasta,
+          per,
+        )
+      }
+    }
+    if (derivadasDeRango > 0) {
+      semanasEfectivas = derivadasDeRango
+    } else if (docente.semanasVinculacion != null) {
+      semanasEfectivas = docente.semanasVinculacion
+    }
+  }
 
   // semanasReales: lo que el docente elige para esta agenda (clampeado al techo efectivo).
   // Si no se pasa override, se usa el techo completo.
@@ -384,9 +442,14 @@ export async function resolveAgendaLimits(
 
   // horasTotalesPeriodo: si hay override de semanas, se recalcula siempre desde la tasa semanal.
   // Sin override, PLANTA_TC/MT usan el valor fijo del Acuerdo (880/440); los demás derivan.
-  const horasTotalesPeriodo = semanasAgendaOverride != null
-    ? modalidad.horasSemanalMax * semanasReales
-    : (modalidad.horasSemestralMax ?? modalidad.horasSemanalMax * semanasReales)
+  // INVITADO (Art. 4f): el 100% es lo CONTRATADO (horas absolutas autorizadas por el Consejo
+  // Académico), no 40h×semanas. Si no se capturó, cae al comportamiento flexible (derivado).
+  const horasTotalesPeriodo =
+    docente.modalidad === "INVITADO" && docente.invHorasContratadas != null
+      ? docente.invHorasContratadas
+      : semanasAgendaOverride != null
+        ? modalidad.horasSemanalMax * semanasReales
+        : (modalidad.horasSemestralMax ?? modalidad.horasSemanalMax * semanasReales)
 
   // Mínimo de docencia: si tiene proyectos activos, usa el reducido.
   // Para VISITANTE_TC/MT, el mínimo es porcentual (60% del total), escala con semanasReales.
@@ -396,7 +459,8 @@ export async function resolveAgendaLimits(
     : modalidad.minDocencia
 
   const esVisitante =
-    docente.modalidad === "VISITANTE_TC" || docente.modalidad === "VISITANTE_MT"
+    docente.modalidad === "VISITANTE_TC" || docente.modalidad === "VISITANTE_MT" ||
+    docente.modalidad === "CATEDRA_VISITANTE_TC" || docente.modalidad === "CATEDRA_VISITANTE_MT"
 
   const minDocencia =
     baseMinDocencia !== null

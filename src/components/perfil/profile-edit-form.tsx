@@ -66,6 +66,8 @@ const MODALIDADES = [
   { value: "CATEDRA", label: "Cátedra" },
   { value: "VISITANTE_TC", label: "Visitante Tiempo Completo" },
   { value: "VISITANTE_MT", label: "Visitante Medio Tiempo" },
+  { value: "CATEDRA_VISITANTE_TC", label: "Cátedra Visitante Tiempo Completo" },
+  { value: "CATEDRA_VISITANTE_MT", label: "Cátedra Visitante Medio Tiempo" },
   { value: "INVITADO", label: "Invitado" },
 ] as const
 
@@ -75,14 +77,6 @@ const SEDES = [
   { value: "GARZON", label: "Garzón" },
   { value: "LA_PLATA", label: "La Plata" },
 ] as const
-
-const MODALIDADES_TEMPORALES = new Set([
-  "OCASIONAL_TC",
-  "OCASIONAL_MT",
-  "VISITANTE_TC",
-  "VISITANTE_MT",
-  "INVITADO",
-])
 
 const formSchema = z.object({
   modalidad: z.enum(MODALIDADES_ENUM),
@@ -109,11 +103,11 @@ type ExtendedDocente = Docente & {
 }
 
 export function ProfileEditForm({
-  docente, maxSemanas,
+  docente,
   solicitudActiva,
   ultimaSolicitud,
 }: {
-  docente: ExtendedDocente; maxSemanas: number
+  docente: ExtendedDocente
   solicitudActiva: SolicitudCambioPerfil | null
   ultimaSolicitud: SolicitudCambioPerfil | null
 }) {
@@ -160,7 +154,6 @@ export function ProfileEditForm({
   const ambitoCfg = watchedTipoCargo ? CARGO_AMBITO[watchedTipoCargo] ?? null : null
   const ambitoOpciones = opcionesAmbito(watchedTipoCargo)
   const isCatedra = watchedModalidad === "CATEDRA"
-  const isModalidadTemporal = MODALIDADES_TEMPORALES.has(watchedModalidad ?? "")
 
   useEffect(() => {
     if (isCatedra) {
@@ -477,39 +470,6 @@ export function ProfileEditForm({
               )}
             />
 
-            {isModalidadTemporal && (
-              <FormField
-                control={form.control}
-                name="semanasVinculacion"
-                render={({ field }) => (
-                  <FormItem className="max-w-sm animate-in fade-in slide-in-from-top-2">
-                    <FormLabel>Semanas de vinculación</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={maxSemanas}
-                        placeholder={`Ej: ${maxSemanas}`}
-                        disabled={disabled}
-                        {...field}
-                        value={field.value ?? ""}
-                        onChange={(e) => {
-                          if (!e.target.value) return field.onChange(null)
-                          const clamped = Math.min(Math.max(parseInt(e.target.value, 10), 1), maxSemanas)
-                          e.target.value = String(clamped)
-                          field.onChange(clamped)
-                        }}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      
-                      Semanas de su contrato en este período (1–{maxSemanas}). Opcional — si se omite, SAGE usa {maxSemanas} semanas como referencia.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
           </CardContent>
         </Card>
 

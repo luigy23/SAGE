@@ -25,7 +25,7 @@ export default async function RevisionLayout({
   return (
     <div className="container mx-auto max-w-7xl py-8">
       <div className="mb-6 flex flex-col gap-1">
-        <h1 className="text-2xl font-bold">Revisión administrativa</h1>
+        <h1 className="text-2xl font-bold">Revisión de solicitudes</h1>
         <p className="text-sm text-muted-foreground">
           Aprueba solicitudes de cambio de perfil y valida los proyectos de los
           docentes. La revisión de agendas y monitoreos vive en tu sección de

@@ -23,6 +23,7 @@ import {
   Info,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getSedeLabel } from "@/lib/utils/sede"
 
 /**
  * Estado semántico de un indicador de validación.
@@ -156,7 +157,7 @@ export function StepRevision({
             <div>
               <span className="text-muted-foreground">Sede: </span>
               <Badge variant="secondary" className="ml-1">
-                {docente.sedeBase}
+                {getSedeLabel(docente.sedeBase)}
               </Badge>
             </div>
           </div>

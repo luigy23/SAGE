@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ProyectoStatusBadge } from "@/components/proyectos/ProyectoStatusBadge"
 import { Plus, Inbox, Microscope } from "lucide-react"
+import { formatFechaInicio } from "@/lib/utils"
 
 export const metadata: Metadata = {
   title: "Mis Proyectos | SAGE",
@@ -73,7 +74,7 @@ export default async function MisProyectosPage() {
                   <p className="text-xs text-muted-foreground">
                     {TIPO_LABEL[p.tipo] ?? p.tipo} ·{" "}
                     {ROL_LABEL[p.rolDocente] ?? p.rolDocente}
-                    {p.periodoInicio ? ` · ${p.periodoInicio}` : ""}
+                    {p.periodoInicio ? ` · ${formatFechaInicio(p.periodoInicio)}` : ""}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Creado el{" "}

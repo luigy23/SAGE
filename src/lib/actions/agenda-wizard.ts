@@ -64,10 +64,18 @@ async function resolverDocenteObjetivo(
     email: actorRow.email,
   }
 
-  // Flujo propio del docente — sin cambios respecto al comportamiento anterior.
+  // Flujo propio del docente. Solo los de PLANTA diligencian su propia agenda;
+  // a los No-Planta (cátedra, ocasional, visitante, cátedra visitante, invitado)
+  // se la elabora su jefe de programa por la vía delegada (Art. 4 Par.1 / Art. 6).
   if (!targetDocenteId || targetDocenteId === actorId) {
     const docente = await prisma.docente.findUnique({ where: { id: actorId } })
     if (!docente) return { error: "Docente no encontrado." }
+    if (esModalidadNoPlanta(docente.modalidad)) {
+      return {
+        error:
+          "Tu agenda (FO-19) la diligencia tu jefe de programa. Podrás consultarla aquí cuando esté lista.",
+      }
+    }
     return { docente, actor, delegada: false }
   }
 
@@ -143,6 +151,9 @@ export async function upsertAgendaCompletaAction(
     proyectosActivos: docente.proyectosActivos,
     tipoCargo: docente.tipoCargo,
     semanasVinculacion: docente.semanasVinculacion ?? null,
+    vinculacionDesde: docente.vinculacionDesde ?? null,
+    vinculacionHasta: docente.vinculacionHasta ?? null,
+    invHorasContratadas: docente.invHorasContratadas ?? null,
   }
 
   // Resolver base (sin override) para obtener semanasMaximas y validar el input
@@ -279,6 +290,24 @@ export async function upsertAgendaCompletaAction(
             }
           }
         }
+
+        if (tope.topePorUnidad === "COHORTE") {
+          // Consejería (Art. 11): un solo consejero por cohorte y programa. Por cada
+          // cohorte declarada, verificar que ningún otro docente del mismo programa
+          // ya la tenga en una agenda ENVIADA/APROBADA de este período.
+          const cohortes = ((act as ActividadInput).cohortes as string[] | undefined ?? [])
+            .filter((c) => typeof c === "string" && c.trim() !== "")
+          for (const cohorte of cohortes) {
+            const count = await _contarConsejeriaCohorteCruzada(
+              nombre, periodo, docente.id, docente.programa, cohorte
+            )
+            if (count > 0) {
+              return {
+                error: `La cohorte ${cohorte} ya tiene consejero asignado en el programa ${docente.programa} en este período. Solo puede haber un consejero por cohorte y programa.`,
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -299,7 +328,7 @@ export async function upsertAgendaCompletaAction(
   // Borradores: solo validación estructural (tipos y transformaciones)
   // Envío final: validación completa con reglas de negocio resueltas
   const schema = enviar
-    ? createAgendaSchema(limits.maxHorasSemanales, limits.esEstricto, flags, limits.minDocencia, limits.semanas, topesActividades, limits.maxInvProySocialCatedra)
+    ? createAgendaSchema(limits.maxHorasSemanales, limits.esEstricto, flags, limits.minDocencia, limits.semanas, topesActividades, limits.maxInvProySocialCatedra, undefined, periodo)
     : createAgendaWizardBaseSchema(limits.semanas)
 
   const parseResult = schema.safeParse(data)
@@ -377,6 +406,7 @@ export async function upsertAgendaCompletaAction(
             dedicacionPeriodo: act.dedicacionPeriodo,
             cantidadUnidades: act.cantidadUnidades || null,
             sede: (act.sede as Sede | null) ?? null,
+            cohortes: act.cohortes ?? [],
           })),
         })
       }
@@ -508,6 +538,34 @@ async function _contarActividadCruzada(
         docenteId: { not: docenteIdExcluido },
         ...(dimension === "facultad" ? { docente: { facultad: valor } } : {}),
         ...(dimension === "programa" ? { docente: { programa: valor } } : {}),
+      },
+    },
+  })
+}
+
+/**
+ * Cuenta otros docentes del mismo programa cuya Consejería (mismo nombre, mismo
+ * período, estado ENVIADO/APROBADO) ya cubre la cohorte dada. Soporta la regla
+ * "un consejero por cohorte y programa" (Art. 11). Cada cohorte (período de ingreso)
+ * de un programa tiene un único consejero. Solo aplica a ActividadDocencia, único
+ * modelo con la columna `cohortes`.
+ */
+async function _contarConsejeriaCohorteCruzada(
+  nombre: string,
+  periodo: string,
+  docenteIdExcluido: string,
+  programa: string,
+  cohorte: string,
+): Promise<number> {
+  return prisma.actividadDocencia.count({
+    where: {
+      nombre,
+      cohortes: { has: cohorte },
+      agenda: {
+        periodo,
+        estado: { in: ["ENVIADO", "APROBADO"] },
+        docenteId: { not: docenteIdExcluido },
+        docente: { programa },
       },
     },
   })

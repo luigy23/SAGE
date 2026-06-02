@@ -46,10 +46,83 @@ export function StepIdentificacion({
 }) {
   // Fuente única de copy: matriz dinámica del helper `modalidad.ts`
   // (Acuerdo 048 Art. 4 — diferencia obligación contractual vs tope permisivo).
-  const carga = getCargaSemestralCopy(docente.modalidad, docente.sedeBase, semanasPeriodo)
+  const carga = getCargaSemestralCopy(
+    docente.modalidad,
+    docente.sedeBase,
+    semanasPeriodo,
+    undefined,
+    docente.invHorasContratadas,
+  )
+
+  const fmtFecha = (d: Date | string | null | undefined): string => {
+    if (!d) return "—"
+    const date = typeof d === "string" ? new Date(d) : d
+    return isNaN(date.getTime())
+      ? "—"
+      : date.toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })
+  }
 
   return (
     <div className="space-y-6">
+      {/* Banner de invitación (Art. 4f) — términos de la vinculación */}
+      {docente.modalidad === "INVITADO" && (
+        <Card className="border-blue-300 bg-blue-50/60 dark:border-blue-800 dark:bg-blue-950/30">
+          <CardHeader>
+            <CardTitle className="text-base">Vinculación de profesor invitado (Art. 4f)</CardTitle>
+            <CardDescription>
+              Dedicación de hasta el 100% a la labor experta contratada. La aprobación final
+              corresponde al Consejo Académico (SuperAdmin).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <p className="text-xs text-muted-foreground">Objeto de la invitación</p>
+              <p className="font-medium">{docente.invObjeto?.trim() || "No registrado"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Horas contratadas (tope)</p>
+              <p className="font-medium">
+                {docente.invHorasContratadas != null
+                  ? `${docente.invHorasContratadas} h`
+                  : "No registradas (referencia flexible)"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Período de la invitación</p>
+              <p className="font-medium">
+                {fmtFecha(docente.invFechaDesde)} – {fmtFecha(docente.invFechaHasta)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Autorización del Consejo Académico</p>
+              <Badge variant={docente.invAutorizadoCA ? "default" : "secondary"}>
+                {docente.invAutorizadoCA ? "Autorizado" : "Pendiente"}
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Banner visitante / cátedra visitante (Art. 3 Par. 3) — mínimo de docencia */}
+      {(docente.modalidad === "VISITANTE_TC" ||
+        docente.modalidad === "VISITANTE_MT" ||
+        docente.modalidad === "CATEDRA_VISITANTE_TC" ||
+        docente.modalidad === "CATEDRA_VISITANTE_MT") && (
+        <Card className="border-amber-300 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/30">
+          <CardHeader>
+            <CardTitle className="text-base">Mínimo de docencia (Art. 3 Par. 3)</CardTitle>
+            <CardDescription>
+              Al menos el <span className="font-semibold">60% de la agenda</span> debe destinarse a
+              actividades de docencia. La carga total se ajusta a los términos del contrato; SAGE usa{" "}
+              <span className="font-semibold">{carga.horasTotales} h</span> como referencia y exige que
+              la docencia no sea inferior a{" "}
+              <span className="font-semibold">{Math.floor(carga.horasTotales * 0.6)} h</span>. Distribuya
+              las horas teniendo esto en cuenta antes de enviar.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+
       {/* Datos del docente */}
       <Card>
         <CardHeader>
@@ -152,35 +225,39 @@ export function StepIdentificacion({
             </Badge>
           </div>
 
-          <Separator className="my-4" />
-
-          {/* Selector de semanas de trabajo */}
-          <div className="mb-4 space-y-2">
-            <Label htmlFor="step1-semanas" className="text-sm font-medium">
-              Semanas de trabajo en este semestre
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Base: {semanasMaximas} semanas del período. Reduce si ingresás después del inicio del semestre.
-            </p>
-            <div className="flex items-center gap-3">
-              <Input
-                id="step1-semanas"
-                type="number"
-                min={1}
-                max={semanasMaximas}
-                value={semanasPeriodo}
-                onChange={(e) => {
-                  const raw = parseInt(e.target.value, 10)
-                  const clamped = Number.isNaN(raw) ? 1 : Math.min(Math.max(1, raw), semanasMaximas)
-                  onSemanasChange(clamped)
-                }}
-                className="w-24"
-              />
-              <span className="text-sm text-muted-foreground">
-                de {semanasMaximas} semanas máx.
-              </span>
-            </div>
-          </div>
+          {/* Selector de semanas de trabajo — no aplica a INVITADO (su tope son las
+              horas contratadas, no semanas; su duración se registra como fechas). */}
+          {docente.modalidad !== "INVITADO" && (
+            <>
+              <Separator className="my-4" />
+              <div className="mb-4 space-y-2">
+                <Label htmlFor="step1-semanas" className="text-sm font-medium">
+                  Semanas de trabajo en este semestre
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Base: {semanasMaximas} semanas del período. Reduce si ingresás después del inicio del semestre.
+                </p>
+                <div className="flex items-center gap-3">
+                  <Input
+                    id="step1-semanas"
+                    type="number"
+                    min={1}
+                    max={semanasMaximas}
+                    value={semanasPeriodo}
+                    onChange={(e) => {
+                      const raw = parseInt(e.target.value, 10)
+                      const clamped = Number.isNaN(raw) ? 1 : Math.min(Math.max(1, raw), semanasMaximas)
+                      onSemanasChange(clamped)
+                    }}
+                    className="w-24"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    de {semanasMaximas} semanas máx.
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
 
           <Separator className="my-4" />
 

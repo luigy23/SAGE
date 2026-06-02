@@ -29,6 +29,20 @@ export const editarDocenteSuperadminSchema = z.object({
   cargoAmbitoValor: z.string().trim().max(200).nullable().optional(),
   proyectosActivos: z.boolean(),
   semanasVinculacion: z.number().int().min(1).max(22).nullable().optional(),
+
+  // Rango del contrato para temporales no-INVITADO (ocasional/visitante/cátedra visitante).
+  // Llegan como string (yyyy-mm-dd) y se convierten en el server. Solo se persisten para
+  // esas modalidades; en cualquier otra se limpian a null.
+  vinculacionDesde: z.string().trim().nullable().optional(),
+  vinculacionHasta: z.string().trim().nullable().optional(),
+
+  // Datos de vinculación del INVITADO (Art. 4f). Solo se persisten si modalidad === INVITADO.
+  // Las fechas llegan como string (yyyy-mm-dd) desde el formulario y se convierten en el server.
+  invObjeto: z.string().trim().max(500).nullable().optional(),
+  invFechaDesde: z.string().trim().nullable().optional(),
+  invFechaHasta: z.string().trim().nullable().optional(),
+  invHorasContratadas: z.number().int().min(1).max(4000).nullable().optional(),
+  invAutorizadoCA: z.boolean().optional(),
 })
 
 export type EditarDocenteSuperadminInput = z.infer<

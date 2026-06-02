@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache"
 import type { TipoActividad } from "@/lib/types/agenda"
 import { validarVentanaAgenda } from "@/lib/actions/_utils/ventana-periodo"
 import { registrarAuditoria } from "@/lib/audit"
+import { esModalidadNoPlanta } from "@/lib/auth/autoridad"
 import type { Rol } from "@/generated/prisma/client"
 
 // ========================================
@@ -27,6 +28,27 @@ async function getOwnedBorradorAgenda(agendaId: string, userId: string) {
   return { agenda }
 }
 
+/**
+ * Autogestión: solo los docentes de PLANTA diligencian su propia agenda. A los
+ * No-Planta (cátedra, ocasional, visitante, cátedra visitante, invitado) se la
+ * elabora su jefe de programa (Art. 4 Par.1 / Art. 6). Devuelve `{ error }` si el
+ * docente en sesión no puede autogestionar; `null` si sí puede.
+ */
+async function assertAutogestionPermitida(userId: string): Promise<{ error: string } | null> {
+  const docente = await prisma.docente.findUnique({
+    where: { id: userId },
+    select: { modalidad: true },
+  })
+  if (!docente) return { error: "Docente no encontrado." }
+  if (esModalidadNoPlanta(docente.modalidad)) {
+    return {
+      error:
+        "Tu agenda (FO-19) la diligencia tu jefe de programa. Podrás consultarla aquí cuando esté lista.",
+    }
+  }
+  return null
+}
+
 // ========================================
 // Agenda CRUD
 // ========================================
@@ -34,6 +56,9 @@ async function getOwnedBorradorAgenda(agendaId: string, userId: string) {
 export async function createAgendaAction(_prevState: unknown, formData: FormData) {
   const user = await getAuthenticatedUser()
   if (!user) return { error: "No autenticado." }
+
+  const bloqueo = await assertAutogestionPermitida(user.id)
+  if (bloqueo) return bloqueo
 
   const periodo = formData.get("periodo") as string
 
@@ -63,6 +88,9 @@ export async function deleteAgendaAction(agendaId: string) {
   const user = await getAuthenticatedUser()
   if (!user) return { error: "No autenticado." }
 
+  const bloqueo = await assertAutogestionPermitida(user.id)
+  if (bloqueo) return bloqueo
+
   const result = await getOwnedBorradorAgenda(agendaId, user.id)
   if ("error" in result) return result
 
@@ -75,6 +103,9 @@ export async function deleteAgendaAction(agendaId: string) {
 export async function enviarAgendaAction(agendaId: string) {
   const user = await getAuthenticatedUser()
   if (!user) return { error: "No autenticado." }
+
+  const bloqueo = await assertAutogestionPermitida(user.id)
+  if (bloqueo) return bloqueo
 
   const result = await getOwnedBorradorAgenda(agendaId, user.id)
   if ("error" in result) return result

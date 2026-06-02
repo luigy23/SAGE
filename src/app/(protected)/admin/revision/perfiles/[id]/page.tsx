@@ -1,3 +1,4 @@
+import { getSedeLabel } from "@/lib/utils/sede"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { getSolicitudParaAdmin } from "@/lib/actions/solicitud-perfil"
@@ -99,7 +100,7 @@ export default async function RevisionSolicitudDetallePage({
               <dt className="text-xs font-medium text-muted-foreground">
                 Sede
               </dt>
-              <dd>{solicitud.docente.sedeBase}</dd>
+              <dd>{getSedeLabel(solicitud.docente.sedeBase)}</dd>
             </div>
           </dl>
         </CardContent>

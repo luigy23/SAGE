@@ -145,6 +145,19 @@ function aplicarReglasEstatutarias(
           error: `El ámbito "${valor}" no es válido para el cargo seleccionado.`,
         }
       }
+      // El ámbito DEBE ser el propio del docente: jefe de programa → su programa;
+      // decano/coordinador → su facultad. Evita autoridad sobre un ámbito ajeno.
+      const ambitoPropio = String(
+        (cfg.tipo === "PROGRAMA" ? resultante.programa : resultante.facultad) ?? ""
+      ).trim()
+      if (valor !== ambitoPropio) {
+        return {
+          cambios,
+          error: cfg.tipo === "PROGRAMA"
+            ? `Un Jefe de Programa solo puede serlo de su propio programa (${ambitoPropio}).`
+            : `Este cargo solo puede ejercerse sobre su propia facultad (${ambitoPropio}).`,
+        }
+      }
     }
   }
 

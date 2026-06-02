@@ -9,6 +9,10 @@ import type { AgendaConRelaciones } from "@/lib/types/agenda"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import { DiscardDraftButton } from "@/components/agenda/DiscardDraftButton"
 import { resolveGlobales, resolveAgendaLimits } from "@/lib/rules/resolver"
+import { esModalidadNoPlanta } from "@/lib/auth/autoridad"
+import { PeriodosCubiertos } from "@/components/agenda/PeriodosCubiertos"
+import { DEFAULT_FORM_VALUES } from "@/lib/schemas/agenda-schema"
+import { getConsejeriaArrastrada } from "@/lib/consejeria"
 import {
   Card,
   CardContent,
@@ -46,6 +50,10 @@ export default async function AgendaPage() {
   })
 
   if (!docente) redirect("/auth/login")
+
+  // No-Planta: el docente NO diligencia su propia agenda — su jefe de programa la
+  // elabora (Art. 4 Par.1 / Art. 6). Aquí solo puede consultarla en solo lectura.
+  const esNoPlanta = esModalidadNoPlanta(docente.modalidad)
 
   // ==========================================
   // 2. Periodo activo + parámetros globales (cascada DB → fallback)
@@ -92,6 +100,9 @@ export default async function AgendaPage() {
         proyectosActivos: docente.proyectosActivos,
         tipoCargo: docente.tipoCargo ?? null,
         semanasVinculacion: docente.semanasVinculacion ?? null,
+        vinculacionDesde: docente.vinculacionDesde ?? null,
+        vinculacionHasta: docente.vinculacionHasta ?? null,
+        invHorasContratadas: docente.invHorasContratadas ?? null,
       },
       periodoRow?.id ?? null
     ),
@@ -107,9 +118,10 @@ export default async function AgendaPage() {
     select: { estado: true },
   })
 
-  // Window check — only gates BORRADOR and new agendas, not already-processed ones
+  // Window check — only gates BORRADOR and new agendas, not already-processed ones.
+  // No-Planta nunca diligencia, así que la ventana de entrega no le aplica (solo lectura).
   const estadoBypassesWindow = ["ENVIADO", "APROBADO", "RECHAZADO"].includes(agendaEstadoQuick?.estado ?? "")
-  if (!estadoBypassesWindow) {
+  if (!estadoBypassesWindow && !esNoPlanta) {
     const now = new Date()
     const { agendaDesde, agendaHasta } = periodoInfo
 
@@ -304,6 +316,62 @@ export default async function AgendaPage() {
   // CASO A: No hay agenda → Vista de bienvenida
   // ==========================================
   if (!agenda) {
+    // No-Planta: no hay vista de creación propia. La elabora el jefe de programa.
+    if (esNoPlanta) {
+      return (
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold sm:text-3xl">Agenda Semestral (FO-19)</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Periodo actual:{" "}
+              <Badge variant="secondary" className="ml-1 text-xs">{periodo}</Badge>
+            </p>
+          </div>
+          <Card className="border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <FileText className="h-5 w-5 text-blue-600" />
+                Tu jefe de programa elaborará tu agenda
+              </CardTitle>
+              <CardDescription>
+                Por tu modalidad de vinculación, la Agenda Semestral (FO-19) del período{" "}
+                <span className="font-mono font-medium">{periodo}</span> la diligencia tu jefe de
+                programa. Podrás consultarla aquí en cuanto esté lista.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          <PeriodosCubiertos
+            vinculacionDesde={docente.vinculacionDesde}
+            vinculacionHasta={docente.vinculacionHasta}
+          />
+
+          {/* Lista de agendas de periodos anteriores */}
+          <PreviousAgendasList docenteId={docente.id} currentPeriodo={periodo} />
+        </div>
+      )
+    }
+
+    // Continuidad automática: pre-siembra la consejería vigente del docente.
+    const arrastrada = await getConsejeriaArrastrada(docente.id, periodo)
+    const nuevaDefaults: AgendaWizardFormData | undefined = arrastrada
+      ? {
+          ...DEFAULT_FORM_VALUES,
+          otrasActividadesDocencia: [
+            {
+              nombre: arrastrada.nombre,
+              descripcion: "",
+              horasSemanales: 0,
+              semanas: 0,
+              dedicacionPeriodo: arrastrada.dedicacionPeriodo,
+              cantidadUnidades: arrastrada.cantidadUnidades,
+              sede: null,
+              cohortes: arrastrada.cohortes,
+            },
+          ],
+        }
+      : undefined
+
     return (
       <div className="space-y-6">
         <div>
@@ -325,6 +393,7 @@ export default async function AgendaPage() {
           periodo={periodo}
           semanasPeriodo={semanasPeriodo}
           semanasMaximas={agendaLimits.semanasMaximas}
+          defaultValues={nuevaDefaults}
           formulas={formulas}
           agendaLimits={agendaLimits}
         />
@@ -342,6 +411,36 @@ export default async function AgendaPage() {
   // CASO B: BORRADOR → Resumen + Continuar Editando / Descartar
   // ==========================================
   if (agenda.estado === "BORRADOR") {
+    // No-Planta: el borrador lo está elaborando el jefe de programa. El docente
+    // solo lo consulta en solo lectura (no puede editar ni descartar).
+    if (esNoPlanta) {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-md border border-blue-200 bg-blue-50 p-4 text-sm dark:border-blue-900 dark:bg-blue-950">
+            <FileText className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+            <div>
+              <p className="font-semibold text-blue-900 dark:text-blue-200">
+                Agenda en preparación por tu jefe de programa
+              </p>
+              <p className="mt-0.5 text-blue-800 dark:text-blue-300">
+                Esta es una vista previa de solo lectura de tu Agenda Semestral (FO-19) para el
+                período <span className="font-mono font-medium">{agenda.periodo}</span>. Tu jefe de
+                programa la completará y enviará.
+              </p>
+            </div>
+          </div>
+          <PeriodosCubiertos
+            vinculacionDesde={docente.vinculacionDesde}
+            vinculacionHasta={docente.vinculacionHasta}
+          />
+          <AgendaReadOnly
+            agenda={agenda as AgendaConRelaciones}
+            semanasPeriodo={semanasPeriodo}
+          />
+        </div>
+      )
+    }
+
     // Transformar datos de Prisma → formato AgendaWizardFormData (RHF)
     const defaultValues: AgendaWizardFormData = {
       cursos: agenda.cursos.map((c) => ({
@@ -365,6 +464,7 @@ export default async function AgendaPage() {
           dedicacionPeriodo: a.dedicacionPeriodo,
           cantidadUnidades: a.cantidadUnidades ?? 0,
           sede: a.sede ?? null,
+          cohortes: a.cohortes ?? [],
         })
       ),
       actividadesInvestigacion: agenda.actividadesInvestigacion.map(
@@ -376,6 +476,7 @@ export default async function AgendaPage() {
           dedicacionPeriodo: a.dedicacionPeriodo,
           cantidadUnidades: a.cantidadUnidades ?? 0,
           sede: a.sede ?? null,
+          cohortes: [],
         })
       ),
       actividadesProyeccionSocial: agenda.actividadesProyeccionSocial.map(
@@ -387,6 +488,7 @@ export default async function AgendaPage() {
           dedicacionPeriodo: a.dedicacionPeriodo,
           cantidadUnidades: 0,
           sede: a.sede ?? null,
+          cohortes: [],
         })
       ),
       actividadesGestion: agenda.actividadesGestion.map((a) => ({
@@ -397,6 +499,7 @@ export default async function AgendaPage() {
         dedicacionPeriodo: a.dedicacionPeriodo,
         cantidadUnidades: 0,
         sede: a.sede ?? null,
+        cohortes: [],
       })),
     }
 

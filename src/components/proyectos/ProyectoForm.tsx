@@ -5,10 +5,19 @@ import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
+import { format, parse } from "date-fns"
+import { es } from "date-fns/locale"
+import { formatFechaInicio } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { Calendar } from "@/components/ui/calendar"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -16,9 +25,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 import { crearProyectoSchema, type CrearProyectoInput } from "@/lib/schemas/proyecto-schema"
 import { crearProyectoAction, enviarProyectoAction } from "@/lib/actions/proyecto-actions"
-import { Send, Save } from "lucide-react"
+import { Send, Save, CalendarIcon } from "lucide-react"
 
 const TIPO_OPTIONS = [
   { value: "INVESTIGACION", label: "Investigación" },
@@ -48,7 +58,7 @@ export function ProyectoForm() {
       tipo: undefined,
       rolDocente: undefined,
       entidadConvocatoria: "",
-      periodoInicio: "",
+      periodoInicio: undefined,
     },
   })
 
@@ -203,12 +213,42 @@ export function ProyectoForm() {
 
       {/* Periodo de inicio */}
       <div className="space-y-2">
-        <Label htmlFor="periodoInicio">Periodo de inicio</Label>
-        <Input
-          id="periodoInicio"
-          placeholder="ej. 2026-1 (opcional)"
-          {...form.register("periodoInicio")}
-        />
+        <Label htmlFor="periodoInicio">Fecha de inicio</Label>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              id="periodoInicio"
+              variant="outline"
+              className={cn(
+                "w-full justify-start text-left font-normal",
+                !form.watch("periodoInicio") && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {form.watch("periodoInicio")
+                ? formatFechaInicio(form.watch("periodoInicio")!)
+                : "Seleccionar fecha (opcional)"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={
+                form.watch("periodoInicio")
+                  ? parse(form.watch("periodoInicio")!, "yyyy-MM-dd", new Date())
+                  : undefined
+              }
+              onSelect={(date) =>
+                form.setValue(
+                  "periodoInicio",
+                  date ? format(date, "yyyy-MM-dd") : undefined
+                )
+              }
+              locale={es}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
         {form.formState.errors.periodoInicio && (
           <p className="text-xs text-destructive">
             {form.formState.errors.periodoInicio.message}

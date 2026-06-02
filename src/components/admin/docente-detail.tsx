@@ -6,6 +6,7 @@ import { getModalidadLabel } from "@/lib/utils/modalidad"
 import { DocenteAdminActions } from "@/components/admin/docente-admin-actions"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import { getSedeLabel } from "@/lib/utils/sede"
 
 type DocenteDetalle = {
   id: string
@@ -139,7 +140,7 @@ export function DocenteDetail({ docente }: { docente: DocenteDetalle }) {
             </div>
             <div>
               <dt className="text-sm font-medium text-muted-foreground">Sede</dt>
-              <dd className="text-sm">{docente.sedeBase}</dd>
+              <dd className="text-sm">{getSedeLabel(docente.sedeBase)}</dd>
             </div>
             <div>
               <dt className="text-sm font-medium text-muted-foreground">Cargo Administrativo</dt>

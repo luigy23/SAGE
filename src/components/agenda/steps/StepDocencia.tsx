@@ -249,6 +249,7 @@ export function StepDocencia({
   sedeBase,
   semanasPeriodo,
   esJefeDePrograma = false,
+  periodo,
 }: {
   cursosMaestros: CursoMaestroOption[]
   catalogoActividades: ActividadCatalogoOption[]
@@ -256,6 +257,7 @@ export function StepDocencia({
   sedeBase?: string | null
   semanasPeriodo: number
   esJefeDePrograma?: boolean
+  periodo?: string
 }) {
   const { control, setValue } = useFormContext<AgendaWizardFormData>()
 
@@ -388,6 +390,7 @@ export function StepDocencia({
               categoria="DOCENCIA"
               semanasPeriodo={semanasPeriodo}
               sedeBase={sedeBase}
+              periodo={periodo}
               onRemove={() => removeActDocencia(index)}
             />
           ))}
