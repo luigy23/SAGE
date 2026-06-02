@@ -15,27 +15,92 @@ import {
 import { resolveAgendaLimits } from "@/lib/rules/resolver"
 import { esCargoExentoGestion20, esJefeDePrograma } from "@/lib/utils/cargo"
 import { verificarCupoCargo } from "@/lib/validations/cupo-cargo"
-import type { Sede } from "@/generated/prisma/client"
+import {
+  assertPuedeGestionarDe,
+  esModalidadNoPlanta,
+} from "@/lib/auth/autoridad"
+import { registrarAuditoria } from "@/lib/audit"
+import type { Sede, Docente, Rol } from "@/generated/prisma/client"
 
-async function getAuthenticatedDocente() {
+type ActorIdentidad = { id: string; rol: Rol; nombre: string; email: string }
+type DocenteObjetivo = { docente: Docente; actor: ActorIdentidad; delegada: boolean }
+
+/**
+ * Resuelve sobre QUÉ docente se opera el wizard, preservando 100% el flujo propio.
+ *
+ *  - Sin `targetDocenteId` (o igual al usuario en sesión) → el docente en sesión
+ *    (comportamiento idéntico al anterior `getAuthenticatedDocente`).
+ *  - Con `targetDocenteId` distinto → creación/edición DELEGADA: exige que el actor
+ *    tenga autoridad académica sobre el ámbito del objetivo (scope) y que el objetivo
+ *    sea No-Planta (Art. 4 Par.1 / Art. 6). Fail-closed ante cualquier incumplimiento.
+ */
+async function resolverDocenteObjetivo(
+  targetDocenteId?: string,
+): Promise<DocenteObjetivo | { error: string }> {
   const session = await auth()
-  if (!session?.user?.id) return null
+  if (!session?.user?.id) {
+    return { error: "No autenticado. Inicia sesión e intenta de nuevo." }
+  }
+  const actorId = session.user.id
 
-  const docente = await prisma.docente.findUnique({
-    where: { id: session.user.id },
+  const actorRow = await prisma.docente.findUnique({
+    where: { id: actorId },
+    select: {
+      id: true,
+      rol: true,
+      estadoCuenta: true,
+      cargoAdministrativo: true,
+      tipoCargo: true,
+      cargoAmbitoValor: true,
+      nombre: true,
+      email: true,
+    },
   })
+  if (!actorRow) return { error: "Usuario no encontrado." }
+  const actor: ActorIdentidad = {
+    id: actorRow.id,
+    rol: actorRow.rol,
+    nombre: actorRow.nombre,
+    email: actorRow.email,
+  }
 
-  return docente
+  // Flujo propio del docente — sin cambios respecto al comportamiento anterior.
+  if (!targetDocenteId || targetDocenteId === actorId) {
+    const docente = await prisma.docente.findUnique({ where: { id: actorId } })
+    if (!docente) return { error: "Docente no encontrado." }
+    return { docente, actor, delegada: false }
+  }
+
+  // Flujo DELEGADO — el actor gestiona la agenda de otro docente de su ámbito.
+  const target = await prisma.docente.findUnique({ where: { id: targetDocenteId } })
+  if (!target) return { error: "El docente objetivo no existe." }
+
+  const denied = assertPuedeGestionarDe(actorRow, {
+    id: target.id,
+    programa: target.programa,
+    facultad: target.facultad,
+  })
+  if (denied) return denied
+
+  if (!esModalidadNoPlanta(target.modalidad)) {
+    return {
+      error:
+        "La creación delegada solo aplica a docentes No-Planta (cátedra, ocasional, visitante, invitado). Los de planta diligencian su propia agenda.",
+    }
+  }
+
+  return { docente: target, actor, delegada: true }
 }
 
 export async function upsertAgendaCompletaAction(
   payload: AgendaWizardPayload
 ): Promise<{ success: true; agendaId: string } | { error: string }> {
-  
-  const docente = await getAuthenticatedDocente()
-  if (!docente) {
-    return { error: "No autenticado. Inicia sesión e intenta de nuevo." }
+
+  const resuelto = await resolverDocenteObjetivo(payload.targetDocenteId)
+  if ("error" in resuelto) {
+    return { error: resuelto.error }
   }
+  const { docente, actor, delegada } = resuelto
 
   const { periodo, enviar, semanasAgenda, data } = payload
 
@@ -357,6 +422,23 @@ export async function upsertAgendaCompletaAction(
     })
 
     revalidatePath("/agenda")
+
+    // Trazabilidad de la gestión delegada (actor ≠ dueño). Silent-fail: nunca
+    // revierte el guardado de negocio.
+    if (delegada) {
+      await registrarAuditoria({
+        actorId: actor.id,
+        actorRol: actor.rol,
+        actorNombre: actor.nombre ?? actor.email ?? actor.id,
+        entidad: "AGENDA",
+        accion: enviar ? "CAMBIAR_ESTADO" : "ACTUALIZAR",
+        recursoId: result.id,
+        recursoDesc: `Agenda ${periodo} de ${docente.nombre}`,
+        observaciones: `Gestión delegada por ${actor.nombre} (${enviar ? "ENVIADO" : "BORRADOR"}).`,
+      })
+      revalidatePath("/gestion/agendas")
+    }
+
     return { success: true, agendaId: result.id }
   } catch (err) {
     const message =

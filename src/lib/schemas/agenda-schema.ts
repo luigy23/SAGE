@@ -426,6 +426,13 @@ export interface AgendaWizardPayload {
   enviar: boolean
   semanasAgenda: number
   data: AgendaWizardFormData
+  /**
+   * Creación/edición DELEGADA: id del docente objetivo (No-Planta) cuando un
+   * Jefe de Programa / Decano gestiona la agenda en su nombre. Si se omite o
+   * coincide con el usuario en sesión, el flujo es el propio del docente (sin
+   * cambios). La autorización (scope + modalidad No-Planta) se valida en servidor.
+   */
+  targetDocenteId?: string
 }
 
 export const EMPTY_CURSO: CursoAgendaFormData = {

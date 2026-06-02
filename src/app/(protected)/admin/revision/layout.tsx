@@ -1,13 +1,15 @@
 import Link from "next/link"
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { Calendar, ClipboardCheck, LayoutGrid, UserCog } from "lucide-react"
+import { LayoutGrid, UserCog, Microscope } from "lucide-react"
 
 /**
- * Layout del hub de revisión.
+ * Layout del hub de revisión OPERATIVA del ADMIN: Perfiles y Proyectos.
+ *
+ * Las agendas (FO-19) y monitoreos (FO-20) NO se revisan aquí: son competencia
+ * de la autoridad académica (Jefe/Decano/SUPERADMIN) en el módulo `/gestion`.
  *
  * Guard ADMIN/SUPERADMIN (el padre /admin ya lo asegura, defensa en profundidad).
- * Renderiza tabs de navegación entre Hub / Agendas / Monitoreos.
  */
 export default async function RevisionLayout({
   children,
@@ -25,8 +27,9 @@ export default async function RevisionLayout({
       <div className="mb-6 flex flex-col gap-1">
         <h1 className="text-2xl font-bold">Revisión administrativa</h1>
         <p className="text-sm text-muted-foreground">
-          Revisa agendas y monitoreos enviados por los docentes, rehabilita
-          formularios o consulta el historial de cambios.
+          Aprueba solicitudes de cambio de perfil y valida los proyectos de los
+          docentes. La revisión de agendas y monitoreos vive en tu sección de
+          gestión académica.
         </p>
       </div>
 
@@ -35,22 +38,16 @@ export default async function RevisionLayout({
           Resumen
         </TabLink>
         <TabLink
-          href="/admin/revision/agendas"
-          icon={<Calendar className="h-4 w-4" />}
-        >
-          Agendas
-        </TabLink>
-        <TabLink
-          href="/admin/revision/monitoreos"
-          icon={<ClipboardCheck className="h-4 w-4" />}
-        >
-          Monitoreos
-        </TabLink>
-        <TabLink
           href="/admin/revision/perfiles"
           icon={<UserCog className="h-4 w-4" />}
         >
           Perfiles
+        </TabLink>
+        <TabLink
+          href="/admin/revision/proyectos"
+          icon={<Microscope className="h-4 w-4" />}
+        >
+          Proyectos
         </TabLink>
       </nav>
 

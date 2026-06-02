@@ -2,15 +2,7 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Calendar,
-  ClipboardCheck,
-  UserCog,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  Microscope,
-} from "lucide-react"
+import { UserCog, Clock, Microscope } from "lucide-react"
 import { getRevisionCounts } from "@/lib/actions/revision"
 import { getPeriodos } from "@/lib/actions/periodo-actions"
 import { HubPeriodoSelector } from "@/components/revision/HubPeriodoSelector"
@@ -54,97 +46,7 @@ export default async function RevisionHubPage({
         <HubPeriodoSelector periodos={periodosOpts} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Calendar className="h-4 w-4" />
-              Agendas
-            </CardTitle>
-            <Badge variant="outline" className="text-xs">
-              FO-19
-            </Badge>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-3 gap-2 text-sm">
-              <Stat
-                label="Pendiente"
-                value={counts.agendas.enviadas}
-                accent="amber"
-                icon={<Clock className="h-3 w-3" />}
-              />
-              <Stat
-                label="Aprobado"
-                value={counts.agendas.aprobadas}
-                accent="green"
-                icon={<CheckCircle2 className="h-3 w-3" />}
-              />
-              <Stat
-                label="Rechazado"
-                value={counts.agendas.rechazadas}
-                accent="red"
-                icon={<XCircle className="h-3 w-3" />}
-              />
-            </div>
-            <Button asChild className="w-full">
-              <Link
-                href={
-                  periodoActivo
-                    ? `/admin/revision/agendas?periodo=${encodeURIComponent(periodoActivo)}`
-                    : "/admin/revision/agendas"
-                }
-              >
-                Ver listado
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ClipboardCheck className="h-4 w-4" />
-              Monitoreos
-            </CardTitle>
-            <Badge variant="outline" className="text-xs">
-              FO-20
-            </Badge>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-3 gap-2 text-sm">
-              <Stat
-                label="Pendiente"
-                value={counts.monitoreos.enviados}
-                accent="amber"
-                icon={<Clock className="h-3 w-3" />}
-              />
-              <Stat
-                label="Aprobado"
-                value={counts.monitoreos.aprobados}
-                accent="green"
-                icon={<CheckCircle2 className="h-3 w-3" />}
-              />
-              <Stat
-                label="Rechazado"
-                value={counts.monitoreos.rechazados}
-                accent="red"
-                icon={<XCircle className="h-3 w-3" />}
-              />
-            </div>
-            <Button asChild className="w-full">
-              <Link
-                href={
-                  periodoActivo
-                    ? `/admin/revision/monitoreos?periodo=${encodeURIComponent(periodoActivo)}`
-                    : "/admin/revision/monitoreos"
-                }
-              >
-                Ver listado
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <CardTitle className="flex items-center gap-2 text-base">

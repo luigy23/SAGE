@@ -24,7 +24,13 @@ const estadoBadge = (estado: string): "default" | "secondary" | "destructive" | 
   return "outline"
 }
 
-export function RevisionMonitoreoTable({ items }: { items: MonitoreoRow[] }) {
+export function RevisionMonitoreoTable({
+  items,
+  basePath = "/admin/revision/monitoreos",
+}: {
+  items: MonitoreoRow[]
+  basePath?: string
+}) {
   return (
     <div className="rounded-md border">
       <Table>
@@ -99,7 +105,7 @@ export function RevisionMonitoreoTable({ items }: { items: MonitoreoRow[] }) {
               <TableCell className="text-right">
                 <div className="flex items-center justify-end gap-1.5">
                   <Button asChild variant="ghost" size="sm" className="gap-1.5">
-                    <Link href={`/admin/revision/monitoreos/${m.id}`}>
+                    <Link href={`${basePath}/${m.id}`}>
                       <Eye className="h-3.5 w-3.5" />
                       Ver
                     </Link>

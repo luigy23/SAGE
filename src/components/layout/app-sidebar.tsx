@@ -18,6 +18,7 @@ import {
   Search,
   ShieldAlert,
   Microscope,
+  ClipboardList,
 } from "lucide-react"
 import {
   Sidebar,
@@ -50,8 +51,11 @@ const profileItem = { title: "Mi Perfil", href: "/perfil", icon: User }
 
 export function AppSidebar({
   user,
+  gestion,
 }: {
   user: { name?: string | null; email?: string | null; rol?: string }
+  /** Sección de autoridad académica (Jefe/Decano/SUPERADMIN). `null` si no aplica. */
+  gestion?: { label: string } | null
 }) {
   const pathname = usePathname()
 
@@ -92,6 +96,41 @@ export function AppSidebar({
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+
+              {/* AUTORIDAD ACADÉMICA — Jefe de Programa / Decano / SUPERADMIN.
+                  Aparece solo si el usuario tiene autoridad delegada (cargo). */}
+              {gestion && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton>
+                    <ClipboardList />
+                    <span className="font-semibold">{gestion.label}</span>
+                  </SidebarMenuButton>
+                  <SidebarMenuSub>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={pathname.startsWith("/gestion/agendas")}
+                      >
+                        <Link href="/gestion/agendas">
+                          <Calendar />
+                          <span>Agendas (FO-19)</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={pathname.startsWith("/gestion/monitoreos")}
+                      >
+                        <Link href="/gestion/monitoreos">
+                          <ClipboardCheck />
+                          <span>Monitoreos (FO-20)</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  </SidebarMenuSub>
+                </SidebarMenuItem>
+              )}
 
               {/* ADMIN ONLY LINKS - GRUPADOS (también accesible por SUPERADMIN) */}
               {(user.rol === "ADMIN" || user.rol === "SUPERADMIN") && (

@@ -77,6 +77,8 @@ model Docente {
   monitoreos          Monitoreo[]
   solicitudesCambioPerfil SolicitudCambioPerfil[]
   proyectos           ProyectoDocente[]
+  agendasAprobadas    AgendaSemestral[] @relation("AgendaAprobadaPor")
+  monitoreosAprobados Monitoreo[]       @relation("MonitoreoAprobadoPor")
 
   @@map("docentes")
 }
@@ -107,6 +109,8 @@ model AgendaSemestral {
   rehabilitadaCount           Int                         @default(0)
   ultimaRehabilitacion        DateTime?
   semanasAgenda               Int                         @default(22)
+  aprobadoPorId               String?
+  aprobadoEn                  DateTime?
   createdAt                   DateTime                    @default(now())
   updatedAt                   DateTime                    @updatedAt
   otrasActividadesDocencia    ActividadDocencia[]
@@ -114,6 +118,7 @@ model AgendaSemestral {
   actividadesInvestigacion    ActividadInvestigacion[]
   actividadesProyeccionSocial ActividadProyeccionSocial[]
   docente                     Docente                     @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+  aprobadoPor                 Docente?                    @relation("AgendaAprobadaPor", fields: [aprobadoPorId], references: [id], onDelete: SetNull)
   cursos                      CursoAgenda[]
   monitoreo                   Monitoreo?
   rehabilitaciones            RehabilitacionAgenda[]
@@ -428,8 +433,11 @@ model Monitoreo {
   rehabilitadaCount         Int                        @default(0)
   ultimaRehabilitacion      DateTime?
   observacionesAdmin        String?
+  aprobadoPorId             String?
+  aprobadoEn                DateTime?
   agenda                    AgendaSemestral            @relation(fields: [agendaId], references: [id], onDelete: Cascade)
   docente                   Docente                    @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+  aprobadoPor               Docente?                   @relation("MonitoreoAprobadoPor", fields: [aprobadoPorId], references: [id], onDelete: SetNull)
   rehabilitaciones          RehabilitacionMonitoreo[]
   reportesActividadDocencia ReporteActividadDocencia[]
   reportesDocencia          ReporteDocencia[]

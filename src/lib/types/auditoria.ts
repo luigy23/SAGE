@@ -115,6 +115,7 @@ export const ETIQUETAS_ENTIDAD: Record<TipoEntidad, string> = {
   MONITOREO: "Monitoreo",
   CURSO_MAESTRO: "Curso Maestro",
   SOLICITUD_PERFIL: "Solicitud de Perfil",
+  PROYECTO_DOCENTE: "Proyecto Docente",
 }
 
 export const ETIQUETAS_ACCION: Record<AccionAuditoria, string> = {

@@ -179,6 +179,8 @@ export function AgendaWizardForm({
   defaultSemanasAgenda,
   formulas = DEFAULT_FORMULAS,
   agendaLimits,
+  targetDocenteId,
+  redirectOnSuccess,
 }: {
   docente: Docente
   cursosMaestros: CursoMaestroOption[]
@@ -192,6 +194,13 @@ export function AgendaWizardForm({
   defaultSemanasAgenda?: number
   formulas?: FormulasCursos
   agendaLimits?: AgendaLimits
+  /**
+   * Gestión DELEGADA: id del docente objetivo cuando un Jefe/Decano crea o edita
+   * la agenda en su nombre. Si se omite, es el flujo propio del docente en sesión.
+   */
+  targetDocenteId?: string
+  /** Ruta a la que volver tras enviar (usado en el flujo delegado). */
+  redirectOnSuccess?: string
 }) {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState(0)
@@ -425,6 +434,7 @@ export function AgendaWizardForm({
         enviar: false,
         semanasAgenda,
         data,
+        targetDocenteId,
       })
 
       setIsSavingDraft(false)
@@ -465,13 +475,18 @@ export function AgendaWizardForm({
         enviar: true,
         semanasAgenda,
         data,
+        targetDocenteId,
       })
 
       if ("error" in result) {
         toast.error(result.error)
       } else {
         toast.success("¡Agenda enviada exitosamente!")
-        router.refresh()
+        if (redirectOnSuccess) {
+          router.push(redirectOnSuccess)
+        } else {
+          router.refresh()
+        }
       }
     })
   }

@@ -32,6 +32,13 @@ import { CARGO_AMBITO, type AmbitoConfig } from "@/lib/constants"
 const PATRON_JEFE_PROGRAMA = /\bjef(e|a|atura)\s+(de(l)?\s+)?programa\b/
 
 /**
+ * Patrón Decano / Decana / Decanatura. Extraído como constante para reutilizarse
+ * tanto en `PATRONES_CARGOS_EXENTOS` (Art. 10 exención del 20%) como en
+ * `esDecano()` (autoridad académica de ámbito FACULTAD).
+ */
+const PATRON_DECANO = /\bdecan(o|a|atura)\b/
+
+/**
  * Patrones regex (sobre texto normalizado: minúsculas + sin tildes) que
  * identifican cada cargo exento. Cubren variantes comunes:
  *   - "jefe de programa", "jefatura de programa", "jefe del programa", "jefe programa"
@@ -47,7 +54,7 @@ const PATRONES_CARGOS_EXENTOS: RegExp[] = [
   // Asesor / Asesora / Asesoria de Rectoría / Rector
   /\basesor(a|ia)?\s+(de(l)?\s+)?rector\w*\b/,
   // Decano / Decana / Decanatura
-  /\bdecan(o|a|atura)\b/,
+  PATRON_DECANO,
 ]
 
 /**
@@ -95,6 +102,20 @@ export function esJefeDePrograma(
 ): boolean {
   if (!tipoCargo || tipoCargo.trim() === "") return false
   return PATRON_JEFE_PROGRAMA.test(normalizar(tipoCargo))
+}
+
+/**
+ * Determina si el cargo del docente corresponde a "Decano" (autoridad académica
+ * de ámbito FACULTAD: preside el Consejo de Facultad — Acuerdo 048 Art. 6 — y
+ * realiza la auditoría pertinente — Art. 3).
+ *
+ * Usa el mismo `normalizar()` que el resto del módulo para tolerar tildes,
+ * mayúsculas y variantes ("Decana", "Decanatura"). Si `tipoCargo` es null/vacío
+ * retorna `false`.
+ */
+export function esDecano(tipoCargo: string | null | undefined): boolean {
+  if (!tipoCargo || tipoCargo.trim() === "") return false
+  return PATRON_DECANO.test(normalizar(tipoCargo))
 }
 
 /**
