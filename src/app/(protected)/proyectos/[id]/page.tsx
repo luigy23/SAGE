@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { ProyectoStatusBadge } from "@/components/proyectos/ProyectoStatusBadge"
 import { EnviarProyectoButton } from "@/components/proyectos/EnviarProyectoButton"
 import { CancelarProyectoButton } from "@/components/proyectos/CancelarProyectoButton"
+import { CorregirProyectoButton } from "@/components/proyectos/CorregirProyectoButton"
 import { ArrowLeft, Microscope, Clock } from "lucide-react"
 import { formatFechaInicio } from "@/lib/utils"
 
@@ -39,12 +40,16 @@ export default async function DetalleProyectoPage({
   const proyecto = await getProyectoDetalle(id)
   if (!proyecto) notFound()
 
-  // Solo el propio docente puede ver sus proyectos desde esta ruta
-  if (proyecto.docenteId !== session.user.id) notFound()
+  // Cualquier participante puede ver el proyecto; editar/enviar/retirar es solo del creador.
+  const miId = session.user.id
+  const esParticipante = proyecto.participantes.some((p) => p.docente.id === miId)
+  if (!esParticipante) notFound()
 
-  const puedeEnviar = proyecto.estado === "BORRADOR"
+  const esCreador = proyecto.creador.id === miId
+  const miRol = proyecto.participantes.find((p) => p.docente.id === miId)?.rol ?? null
+  const puedeEnviar = esCreador && proyecto.estado === "BORRADOR"
   const puedeCancelar =
-    proyecto.estado === "BORRADOR" || proyecto.estado === "ENVIADO"
+    esCreador && (proyecto.estado === "BORRADOR" || proyecto.estado === "ENVIADO")
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -97,9 +102,9 @@ export default async function DetalleProyectoPage({
             </div>
             <div>
               <dt className="text-xs font-medium text-muted-foreground">
-                Rol en el proyecto
+                Mi rol en el proyecto
               </dt>
-              <dd>{ROL_LABEL[proyecto.rolDocente] ?? proyecto.rolDocente}</dd>
+              <dd>{miRol ? (ROL_LABEL[miRol] ?? miRol) : "—"}</dd>
             </div>
             {proyecto.entidadConvocatoria && (
               <div>
@@ -125,6 +130,26 @@ export default async function DetalleProyectoPage({
                 <dd className="whitespace-pre-wrap">{proyecto.descripcion}</dd>
               </div>
             )}
+            <div className="sm:col-span-2">
+              <dt className="text-xs font-medium text-muted-foreground">
+                Participantes
+              </dt>
+              <dd>
+                <ul className="mt-1 space-y-1">
+                  {proyecto.participantes.map((p) => (
+                    <li key={p.id} className="flex items-center justify-between gap-2">
+                      <span>
+                        {p.docente.nombre}
+                        {p.docente.id === miId && " (vos)"} · {ROL_LABEL[p.rol] ?? p.rol}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {p.horasAsignadas != null ? `${p.horasAsignadas} h` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </dd>
+            </div>
           </dl>
         </CardContent>
       </Card>
@@ -139,14 +164,35 @@ export default async function DetalleProyectoPage({
         </div>
       )}
 
-      {proyecto.estado === "RECHAZADO" && proyecto.observacionesAdmin && (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950">
-          <p className="text-xs font-medium text-red-900 dark:text-red-200">
-            Motivo del rechazo
+      {proyecto.estado === "BORRADOR" && proyecto.observacionesAdmin && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950">
+          <p className="text-xs font-medium text-amber-900 dark:text-amber-200">
+            Recomendaciones de la última revisión (corregí esto antes de reenviar)
           </p>
-          <p className="mt-1 text-sm text-red-800 dark:text-red-300">
+          <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
             {proyecto.observacionesAdmin}
           </p>
+        </div>
+      )}
+
+      {proyecto.estado === "RECHAZADO" && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950">
+          <p className="text-xs font-medium text-red-900 dark:text-red-200">
+            Proyecto rechazado{proyecto.observacionesAdmin ? " — motivo" : ""}
+          </p>
+          {proyecto.observacionesAdmin && (
+            <p className="mt-1 text-sm text-red-800 dark:text-red-300">
+              {proyecto.observacionesAdmin}
+            </p>
+          )}
+          {esCreador && (
+            <>
+              <p className="mt-2 text-xs text-red-700 dark:text-red-400">
+                Podés corregirlo y reenviarlo sin esperar al revisor.
+              </p>
+              <CorregirProyectoButton proyectoId={id} />
+            </>
+          )}
         </div>
       )}
     </div>

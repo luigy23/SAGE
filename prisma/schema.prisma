@@ -90,7 +90,8 @@ model Docente {
   cursosGuardados     CursoGuardado[]
   monitoreos          Monitoreo[]
   solicitudesCambioPerfil SolicitudCambioPerfil[]
-  proyectos           ProyectoDocente[]
+  proyectosCreados        Proyecto[]             @relation("ProyectosCreados")
+  participacionesProyecto ParticipanteProyecto[]
   agendasAprobadas    AgendaSemestral[] @relation("AgendaAprobadaPor")
   monitoreosAprobados Monitoreo[]       @relation("MonitoreoAprobadoPor")
 
@@ -368,27 +369,46 @@ model RehabilitacionMonitoreo {
 /// Proyecto de investigación o proyección social del docente.
 /// Requiere aprobación del admin (Art. 3 Par. 1 Acuerdo 048) antes de poder
 /// registrar horas como Investigador Principal, Coinvestigador, Coordinador o
-/// Cogestor en la agenda semestral. La aprobación activa proyectosActivos en Docente.
-model ProyectoDocente {
-  id                  String           @id @default(cuid())
-  docenteId           String
+/// Proyecto de investigación o proyección social. Puede tener varios participantes
+/// (docentes con su rol). La aprobación activa proyectosActivos en TODOS los
+/// participantes. Las horas de cada participante las asigna el revisor al aprobar.
+model Proyecto {
+  id                  String                 @id @default(cuid())
   titulo              String
   descripcion         String?
   tipo                TipoProyecto
-  rolDocente          RolEnProyecto
   entidadConvocatoria String?
   periodoInicio       String?
-  estado              EstadoFormulario @default(BORRADOR)
+  estado              EstadoFormulario       @default(BORRADOR)
   observacionesAdmin  String?
+  creadorId           String
   revisadoPor         String?
   revisadoEn          DateTime?
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
 
-  docente             Docente          @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+  creador             Docente                @relation("ProyectosCreados", fields: [creadorId], references: [id], onDelete: Cascade)
+  participantes       ParticipanteProyecto[]
 
-  @@index([docenteId, estado])
-  @@map("proyectos_docente")
+  @@index([estado])
+  @@map("proyectos")
+}
+
+/// Participación de un docente en un proyecto, con su rol y las horas asignadas
+/// por el revisor al aprobar (≤ tope del rol). Único por (proyecto, docente).
+model ParticipanteProyecto {
+  id             String        @id @default(cuid())
+  proyectoId     String
+  docenteId      String
+  rol            RolEnProyecto
+  horasAsignadas Int?
+
+  proyecto       Proyecto      @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  docente        Docente       @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+
+  @@unique([proyectoId, docenteId])
+  @@index([docenteId])
+  @@map("participantes_proyecto")
 }
 
 /// Solicitud de cambio de datos de perfil del docente. Al enviarse va directo

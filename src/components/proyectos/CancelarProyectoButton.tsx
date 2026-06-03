@@ -16,7 +16,10 @@ import {
 import { Button } from "@/components/ui/button"
 import { XCircle } from "lucide-react"
 import { toast } from "sonner"
-import { cancelarProyectoAction } from "@/lib/actions/proyecto-actions"
+import {
+  eliminarProyectoAction,
+  retirarProyectoAction,
+} from "@/lib/actions/proyecto-actions"
 
 export function CancelarProyectoButton({
   proyectoId,
@@ -32,13 +35,14 @@ export function CancelarProyectoButton({
 
   function handleCancelar() {
     startTransition(async () => {
-      const res = await cancelarProyectoAction(proyectoId)
+      // Borrador → eliminar (definitivo). Enviado → retirar (vuelve a borrador).
+      const res = esBorrador
+        ? await eliminarProyectoAction(proyectoId)
+        : await retirarProyectoAction(proyectoId)
       if ("error" in res) {
         toast.error(res.error)
       } else {
-        toast.success(
-          esBorrador ? "Proyecto eliminado" : "Proyecto cancelado",
-        )
+        toast.success(esBorrador ? "Borrador eliminado" : "Proyecto retirado a borrador")
         router.push("/proyectos")
       }
     })
@@ -54,18 +58,18 @@ export function CancelarProyectoButton({
           disabled={pending}
         >
           <XCircle className="h-3.5 w-3.5" />
-          {esBorrador ? "Eliminar borrador" : "Cancelar envío"}
+          {esBorrador ? "Eliminar borrador" : "Retirar"}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {esBorrador ? "¿Eliminar este borrador?" : "¿Cancelar este envío?"}
+            {esBorrador ? "¿Eliminar este borrador?" : "¿Retirar este proyecto?"}
           </AlertDialogTitle>
           <AlertDialogDescription>
             {esBorrador
               ? "El proyecto se eliminará definitivamente y no podrás recuperarlo."
-              : "El proyecto volverá al estado RECHAZADO y saldrá de la cola de revisión."}
+              : "El proyecto volverá a borrador para que puedas corregirlo y reenviarlo."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -75,7 +79,7 @@ export function CancelarProyectoButton({
             onClick={handleCancelar}
             disabled={pending}
           >
-            {pending ? "Procesando..." : esBorrador ? "Sí, eliminar" : "Sí, cancelar"}
+            {pending ? "Procesando..." : esBorrador ? "Sí, eliminar" : "Sí, retirar"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

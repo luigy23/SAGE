@@ -52,7 +52,7 @@ export default async function UsuariosPage() {
           <CardTitle className="text-2xl font-bold">Usuarios y Roles</CardTitle>
           <CardDescription>
             Gestiona el rol (DOCENTE / ADMIN / SUPERADMIN) y el estado de cuenta de cada usuario.
-            Jerarquía: SUPERADMIN &gt; ADMIN &gt; DOCENTE.
+           
           </CardDescription>
         </CardHeader>
         <CardContent>

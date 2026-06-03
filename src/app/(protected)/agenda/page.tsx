@@ -11,6 +11,7 @@ import { DiscardDraftButton } from "@/components/agenda/DiscardDraftButton"
 import { resolveGlobales, resolveAgendaLimits } from "@/lib/rules/resolver"
 import { esModalidadNoPlanta } from "@/lib/auth/autoridad"
 import { PeriodosCubiertos } from "@/components/agenda/PeriodosCubiertos"
+import { CorregirAgendaButton } from "@/components/agenda/CorregirAgendaButton"
 import { DEFAULT_FORM_VALUES } from "@/lib/schemas/agenda-schema"
 import { getConsejeriaArrastrada } from "@/lib/consejeria"
 import {
@@ -595,6 +596,18 @@ export default async function AgendaPage() {
           </CardContent>
         </Card>
 
+        {/* Recomendaciones de la última revisión (si esta agenda fue rechazada antes) */}
+        {agenda.observacionesAdmin && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950">
+            <p className="text-xs font-medium text-amber-900 dark:text-amber-200">
+              Recomendaciones de la última revisión (corregí esto antes de reenviar)
+            </p>
+            <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+              {agenda.observacionesAdmin}
+            </p>
+          </div>
+        )}
+
         {/* Wizard con datos pre-cargados (Continuar Editando) */}
         <AgendaWizardForm
           docente={docente}
@@ -648,7 +661,10 @@ export default async function AgendaPage() {
                   </h3>
                   <p className="text-sm leading-relaxed text-red-800/90 dark:text-red-300/90">
                     Tu Agenda Semestral (FO-19) para el período{" "}
-                    <span className="font-mono font-semibold">{agenda.periodo}</span> fue rechazada por el administrador. Contactá a tu coordinador para que habilite la corrección.
+                    <span className="font-mono font-semibold">{agenda.periodo}</span> fue rechazada por el administrador.
+                    {esNoPlanta
+                      ? " Tu jefe de programa la corregirá."
+                      : " Podés corregirla y reenviarla (respetando la ventana de entrega)."}
                   </p>
                   {agenda.observacionesAdmin && (
                     <div className="mt-3 rounded-lg border border-red-200/80 bg-white/70 px-4 py-3 dark:border-red-900/50 dark:bg-red-950/50">
@@ -660,6 +676,7 @@ export default async function AgendaPage() {
                       </p>
                     </div>
                   )}
+                  {!esNoPlanta && <CorregirAgendaButton agendaId={agenda.id} />}
                 </div>
               </div>
             </div>

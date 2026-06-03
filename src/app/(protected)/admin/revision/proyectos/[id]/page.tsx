@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { ProyectoStatusBadge } from "@/components/proyectos/ProyectoStatusBadge"
 import { AprobarProyectoButton } from "@/components/proyectos/AprobarProyectoButton"
 import { RechazarProyectoDialog } from "@/components/proyectos/RechazarProyectoDialog"
+import { RehabilitarProyectoButton } from "@/components/proyectos/RehabilitarProyectoButton"
 import { ArrowLeft, GraduationCap, Microscope } from "lucide-react"
 import { getModalidadLabel } from "@/lib/utils/modalidad"
 import { formatFechaInicio } from "@/lib/utils"
@@ -51,13 +52,16 @@ export default async function RevisionProyectoDetallePage({
           <div className="flex flex-wrap gap-2">
             <AprobarProyectoButton
               proyectoId={proyecto.id}
-              docenteName={proyecto.docente.nombre}
+              docenteName={proyecto.creador.nombre}
             />
             <RechazarProyectoDialog
               proyectoId={proyecto.id}
-              docenteName={proyecto.docente.nombre}
+              docenteName={proyecto.creador.nombre}
             />
           </div>
+        )}
+        {proyecto.estado === "APROBADO" && (
+          <RehabilitarProyectoButton proyectoId={proyecto.id} />
         )}
       </div>
 
@@ -67,13 +71,13 @@ export default async function RevisionProyectoDetallePage({
           <div>
             <CardTitle className="flex items-center gap-2">
               <GraduationCap className="h-5 w-5" />
-              {proyecto.docente.nombre}
+              {proyecto.creador.nombre}
             </CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              {proyecto.docente.email}
+              {proyecto.creador.email}
             </p>
             <p className="text-xs text-muted-foreground">
-              {getModalidadLabel(proyecto.docente.modalidad)}
+              {getModalidadLabel(proyecto.creador.modalidad)}
             </p>
           </div>
           <ProyectoStatusBadge estado={proyecto.estado} />
@@ -106,11 +110,22 @@ export default async function RevisionProyectoDetallePage({
               </dt>
               <dd>{TIPO_LABEL[proyecto.tipo] ?? proyecto.tipo}</dd>
             </div>
-            <div>
+            <div className="sm:col-span-2">
               <dt className="text-xs font-medium text-muted-foreground">
-                Rol del docente
+                Participantes
               </dt>
-              <dd>{ROL_LABEL[proyecto.rolDocente] ?? proyecto.rolDocente}</dd>
+              <dd>
+                <ul className="mt-1 space-y-1">
+                  {proyecto.participantes.map((p) => (
+                    <li key={p.id} className="flex items-center justify-between gap-2">
+                      <span>{p.docente.nombre} · {ROL_LABEL[p.rol] ?? p.rol}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {p.horasAsignadas != null ? `${p.horasAsignadas} h` : "horas sin asignar"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </dd>
             </div>
             {proyecto.entidadConvocatoria && (
               <div>

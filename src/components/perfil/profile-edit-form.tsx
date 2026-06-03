@@ -9,7 +9,7 @@ import { z } from "zod"
 import type { Docente, SolicitudCambioPerfil } from "@/generated/prisma/client"
 import { TIPOS_CARGO, MODALIDADES_ENUM } from "@/lib/schemas/profile-schema"
 import { SEDES_ENUM } from "@/lib/schemas/solicitud-perfil-schema"
-import { CARGO_AMBITO, opcionesAmbito } from "@/lib/constants"
+import { CARGO_AMBITO, FACULTADES, FACULTAD_PROGRAMAS } from "@/lib/constants"
 import {
   crearSolicitudCambioPerfilAction,
   cancelarSolicitudCambioPerfilAction,
@@ -150,9 +150,15 @@ export function ProfileEditForm({
     name: "cargoAdministrativo",
   })
   const watchedTipoCargo = useWatch({ control: form.control, name: "tipoCargo" })
+  const watchedPrograma = useWatch({ control: form.control, name: "programa" })
+  const watchedFacultad = useWatch({ control: form.control, name: "facultad" })
 
   const ambitoCfg = watchedTipoCargo ? CARGO_AMBITO[watchedTipoCargo] ?? null : null
-  const ambitoOpciones = opcionesAmbito(watchedTipoCargo)
+  // El ámbito de un cargo es SIEMPRE el propio del docente: jefe → su programa,
+  // decano/coordinador → su facultad. Una sola opción posible, no se elige otra.
+  const ambitoPropio = ambitoCfg
+    ? (ambitoCfg.tipo === "PROGRAMA" ? watchedPrograma : watchedFacultad) || ""
+    : ""
   const isCatedra = watchedModalidad === "CATEDRA"
 
   useEffect(() => {
@@ -173,6 +179,18 @@ export function ProfileEditForm({
       form.setValue("cargoAmbitoValor", "", { shouldValidate: true })
     }
   }, [watchedCargo, form])
+
+  // Forzar el ámbito del cargo al propio del docente (su programa o facultad), nunca otro.
+  useEffect(() => {
+    const cfg = watchedTipoCargo ? CARGO_AMBITO[watchedTipoCargo] ?? null : null
+    if (cfg) {
+      form.setValue(
+        "cargoAmbitoValor",
+        (cfg.tipo === "PROGRAMA" ? watchedPrograma : watchedFacultad) || "",
+        { shouldValidate: true },
+      )
+    }
+  }, [watchedTipoCargo, watchedPrograma, watchedFacultad, form])
 
   function onSubmit(data: FormValues) {
     if (tienePendiente) return
@@ -348,36 +366,58 @@ export function ProfileEditForm({
           <CardContent className="space-y-4">
             <FormField
               control={form.control}
-              name="programa"
+              name="facultad"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Programa *</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      value={field.value ?? ""}
-                      disabled={disabled}
-                      placeholder="Ej: Ingeniería de Sistemas"
-                    />
-                  </FormControl>
+                  <FormLabel>Facultad *</FormLabel>
+                  <Select
+                    value={field.value ?? ""}
+                    onValueChange={(v) => {
+                      field.onChange(v)
+                      // Si el programa actual no pertenece a la nueva facultad, limpiarlo.
+                      if (!FACULTAD_PROGRAMAS[v]?.includes(watchedPrograma ?? "")) {
+                        form.setValue("programa", "", { shouldValidate: true })
+                      }
+                    }}
+                    disabled={disabled}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar facultad" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {FACULTADES.map((f) => (
+                        <SelectItem key={f} value={f}>{f}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <FormField
               control={form.control}
-              name="facultad"
+              name="programa"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Facultad *</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      value={field.value ?? ""}
-                      disabled={disabled}
-                      placeholder="Ej: Ingeniería"
-                    />
-                  </FormControl>
+                  <FormLabel>Programa *</FormLabel>
+                  <Select
+                    value={field.value ?? ""}
+                    onValueChange={field.onChange}
+                    disabled={disabled || !watchedFacultad}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder={watchedFacultad ? "Seleccionar programa" : "Selecciona una facultad primero"} />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {(FACULTAD_PROGRAMAS[watchedFacultad ?? ""] ?? []).map((p) => (
+                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -634,37 +674,20 @@ export function ProfileEditForm({
                 />
               )}
 
-              {/* "¿De cuál?" — ámbito específico del cargo. No se asume nada. */}
+              {/* Ámbito del cargo: SIEMPRE es el propio del docente, no se elige. */}
               {watchedCargo && !isCatedra && ambitoCfg && (
-                <FormField
-                  control={form.control}
-                  name="cargoAmbitoValor"
-                  render={({ field }) => (
-                    <FormItem className="animate-in fade-in slide-in-from-top-2 ml-14">
-                      <FormLabel>Programa / Facultad</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value || ""}
-                        disabled={disabled}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="w-full sm:max-w-xs">
-                            <SelectValue placeholder={ambitoCfg.tipo === "FACULTAD" ? "Seleccionar facultad" : "Seleccionar programa"} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {ambitoOpciones.map((op) => (
-                            <SelectItem key={op} value={op}>{op}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>
-                        Indica específicamente cuál corresponde a tu cargo.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="ml-14 animate-in fade-in slide-in-from-top-2">
+                  <p className="text-sm">
+                    <span className="font-medium">
+                      {ambitoCfg.tipo === "FACULTAD" ? "Facultad" : "Programa"} del cargo:
+                    </span>{" "}
+                    {ambitoPropio || "—"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Tu cargo corresponde a tu {" "}
+                    {ambitoCfg.tipo === "FACULTAD" ? "facultad" : "programa"} .
+                  </p>
+                </div>
               )}
             </div>
 

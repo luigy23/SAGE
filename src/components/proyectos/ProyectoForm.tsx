@@ -1,6 +1,6 @@
 "use client"
 
-import { useTransition } from "react"
+import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -28,6 +28,10 @@ import {
 import { cn } from "@/lib/utils"
 import { crearProyectoSchema, type CrearProyectoInput } from "@/lib/schemas/proyecto-schema"
 import { crearProyectoAction, enviarProyectoAction } from "@/lib/actions/proyecto-actions"
+import {
+  ParticipantesSelector,
+  type DocenteParticipante,
+} from "@/components/proyectos/ParticipantesSelector"
 import { Send, Save, CalendarIcon } from "lucide-react"
 
 const TIPO_OPTIONS = [
@@ -46,9 +50,21 @@ const ROL_POR_TIPO: Record<string, { value: string; label: string }[]> = {
   ],
 }
 
-export function ProyectoForm() {
+export function ProyectoForm({ creadorId }: { creadorId: string }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
+  const [participantes, setParticipantes] = useState<DocenteParticipante[]>([])
+
+  function actualizarParticipantes(lista: DocenteParticipante[]) {
+    setParticipantes(lista)
+    form.setValue(
+      "participantes",
+      lista.map((p) => ({
+        docenteId: p.id,
+        rol: p.rol as "INVESTIGADOR_PRINCIPAL" | "COINVESTIGADOR" | "COORDINADOR" | "COGESTOR",
+      })),
+    )
+  }
 
   const form = useForm<CrearProyectoInput>({
     resolver: zodResolver(crearProyectoSchema),
@@ -123,6 +139,8 @@ export function ProyectoForm() {
           onValueChange={(val) => {
             form.setValue("tipo", val as CrearProyectoInput["tipo"])
             form.setValue("rolDocente", undefined as unknown as CrearProyectoInput["rolDocente"])
+            // Los roles dependen del tipo: al cambiarlo, limpiar participantes.
+            actualizarParticipantes([])
           }}
           value={form.watch("tipo") ?? ""}
         >
@@ -178,6 +196,22 @@ export function ProyectoForm() {
             {form.formState.errors.rolDocente.message}
           </p>
         )}
+      </div>
+
+      {/* Participantes adicionales */}
+      <div className="space-y-2">
+        <Label>Otros participantes</Label>
+        <p className="text-xs text-muted-foreground">
+          Agregá a los demás docentes del proyecto y asigná su rol. Debe haber exactamente un{" "}
+          {tipoSeleccionado === "PROYECCION_SOCIAL" ? "Coordinador" : "Investigador Principal"} en
+          total (contándote a vos).
+        </p>
+        <ParticipantesSelector
+          value={participantes}
+          onChange={actualizarParticipantes}
+          tipo={tipoSeleccionado}
+          excluirIds={[creadorId]}
+        />
       </div>
 
       {/* Descripción */}

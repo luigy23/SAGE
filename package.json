@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "prisma generate && next dev",
-    "dev:fresh": "prisma generate && node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && next dev",
-    "build": "prisma generate && next build",
+    "dev": "prisma generate && next dev --webpack",
+    "dev:fresh": "prisma generate && node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && next dev --webpack",
+    "build": "prisma generate && next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx prisma/seed.ts",

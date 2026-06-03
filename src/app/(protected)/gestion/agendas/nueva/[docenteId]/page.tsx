@@ -13,6 +13,7 @@ import { puedeGestionarFormulario, esModalidadNoPlanta } from "@/lib/auth/autori
 import { TerminosInvitadoForm } from "@/components/gestion/TerminosInvitadoForm"
 import { PeriodosCubiertos } from "@/components/agenda/PeriodosCubiertos"
 import { CohortesConsejeros } from "@/components/agenda/CohortesConsejeros"
+import { CorregirAgendaButton } from "@/components/agenda/CorregirAgendaButton"
 import { getConsejeriaArrastrada } from "@/lib/consejeria"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -127,6 +128,22 @@ export default async function GestionNuevaAgendaPage({
     return (
       <div className="space-y-4">
         <Encabezado docente={docente} periodo={periodo} estado={agenda.estado} />
+        {agenda.estado === "RECHAZADO" && (
+          <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950">
+            <p className="text-xs font-medium text-red-900 dark:text-red-200">
+              Agenda rechazada{agenda.observacionesAdmin ? " — motivo" : ""}
+            </p>
+            {agenda.observacionesAdmin && (
+              <p className="mt-1 text-sm text-red-800 dark:text-red-300">
+                {agenda.observacionesAdmin}
+              </p>
+            )}
+            <p className="mt-2 text-xs text-red-700 dark:text-red-400">
+              Como tú diligencias la agenda de este docente, podés corregirla y reenviarla.
+            </p>
+            <CorregirAgendaButton agendaId={agenda.id} />
+          </div>
+        )}
         <AgendaReadOnly
           agenda={agenda as AgendaConRelaciones}
           semanasPeriodo={semanasPeriodo}

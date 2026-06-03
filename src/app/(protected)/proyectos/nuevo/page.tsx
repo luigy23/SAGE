@@ -36,7 +36,7 @@ export default async function NuevoProyectoPage() {
           </p>
         </CardHeader>
         <CardContent>
-          <ProyectoForm />
+          <ProyectoForm creadorId={session.user.id} />
         </CardContent>
       </Card>
     </div>

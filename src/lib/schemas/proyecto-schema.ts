@@ -1,5 +1,26 @@
 import { z } from "zod"
 
+export const ROLES_POR_TIPO = {
+  INVESTIGACION: ["INVESTIGADOR_PRINCIPAL", "COINVESTIGADOR"],
+  PROYECCION_SOCIAL: ["COORDINADOR", "COGESTOR"],
+} as const
+
+/** Rol "líder" (único por proyecto) según el tipo. */
+export const ROL_LIDER = {
+  INVESTIGACION: "INVESTIGADOR_PRINCIPAL",
+  PROYECCION_SOCIAL: "COORDINADOR",
+} as const
+
+export const participanteSchema = z.object({
+  docenteId: z.string().min(1, "Falta el docente."),
+  rol: z.enum([
+    "INVESTIGADOR_PRINCIPAL",
+    "COINVESTIGADOR",
+    "COORDINADOR",
+    "COGESTOR",
+  ]),
+})
+
 export const crearProyectoSchema = z.object({
   titulo: z
     .string()
@@ -15,6 +36,9 @@ export const crearProyectoSchema = z.object({
   ),
   entidadConvocatoria: z.string().max(200).optional(),
   periodoInicio: z.string().max(20).optional(),
+  // Participantes ADICIONALES (sin el creador, que se agrega aparte con `rolDocente`).
+  participantes: z.array(participanteSchema).optional(),
 })
 
 export type CrearProyectoInput = z.infer<typeof crearProyectoSchema>
+export type ParticipanteInput = z.infer<typeof participanteSchema>
