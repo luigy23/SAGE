@@ -34,6 +34,7 @@ export function NuevaAgendaView({
   catalogoActividades,
   periodo,
   semanasPeriodo,
+  semanasClases,
   semanasMaximas,
   formulas,
   agendaLimits,
@@ -44,6 +45,7 @@ export function NuevaAgendaView({
   catalogoActividades: ActividadCatalogoOption[]
   periodo: string
   semanasPeriodo: number
+  semanasClases: number
   semanasMaximas?: number
   formulas?: FormulasCursos
   agendaLimits?: AgendaLimits
@@ -62,6 +64,7 @@ export function NuevaAgendaView({
         catalogoActividades={catalogoActividades}
         periodo={periodo}
         semanasPeriodo={semanasPeriodo}
+        semanasClases={semanasClases}
         semanasMaximas={semanasMaximas}
         formulas={formulas}
         agendaLimits={agendaLimits}

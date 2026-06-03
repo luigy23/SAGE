@@ -221,6 +221,14 @@ export async function resolveModalidad(
 
 export type ParametrosGlobales = {
   semanasPeriodo: number
+  /** Semanas por defecto para cátedra (Art. 4d). */
+  semanasPeriodoCatedra: number
+  /** Semanas por defecto para ocasionales — fallback si no hay fechas de contrato (Art. 4c). */
+  semanasPeriodoOcasional: number
+  /** Semanas por defecto para visitantes/cátedra visitante — fallback si no hay fechas de contrato (Art. 4e). */
+  semanasPeriodoVisitante: number
+  /** Semanas de clase — base del cálculo de horas de los CURSOS, independiente de las semanas del contrato. */
+  semanasClases: number
   horasPorCredito: number
   toleranciaValidacionSemanal: number
   limiteGestionPorcentaje: number
@@ -232,6 +240,10 @@ export type ParametrosGlobales = {
 
 const FALLBACK_GLOBALES: Omit<ParametrosGlobales, "fuente"> = {
   semanasPeriodo: 22,
+  semanasPeriodoCatedra: 16,
+  semanasPeriodoOcasional: 16,
+  semanasPeriodoVisitante: 16,
+  semanasClases: 16,
   horasPorCredito: 48,
   toleranciaValidacionSemanal: 0.5,
   limiteGestionPorcentaje: 0.20,
@@ -275,6 +287,10 @@ export async function resolveGlobales(
 
     const result: ParametrosGlobales = {
       semanasPeriodo: get("semanas_periodo", semanasFromDates ?? FALLBACK_GLOBALES.semanasPeriodo, (s) => parseInt(s, 10)),
+      semanasPeriodoCatedra: get("semanas_periodo_catedra", FALLBACK_GLOBALES.semanasPeriodoCatedra, (s) => parseInt(s, 10)),
+      semanasPeriodoOcasional: get("semanas_periodo_ocasional", FALLBACK_GLOBALES.semanasPeriodoOcasional, (s) => parseInt(s, 10)),
+      semanasPeriodoVisitante: get("semanas_periodo_visitante", FALLBACK_GLOBALES.semanasPeriodoVisitante, (s) => parseInt(s, 10)),
+      semanasClases: get("semanas_clases", FALLBACK_GLOBALES.semanasClases, (s) => parseInt(s, 10)),
       horasPorCredito: get("horas_por_credito", FALLBACK_GLOBALES.horasPorCredito, (s) => parseInt(s, 10)),
       toleranciaValidacionSemanal: get("tolerancia_validacion_semanal", FALLBACK_GLOBALES.toleranciaValidacionSemanal, parseFloat),
       limiteGestionPorcentaje: get("limite_gestion_porcentaje", FALLBACK_GLOBALES.limiteGestionPorcentaje, parseFloat),
@@ -378,6 +394,34 @@ type DocenteParaResolver = {
 }
 
 /**
+ * Semanas base por defecto según modalidad. Reemplaza el plano `semanasPeriodo`
+ * como punto de partida del cálculo:
+ *   - PLANTA / INVITADO → semanasPeriodo global (22)
+ *   - CÁTEDRA → semanasPeriodoCatedra (16)
+ *   - OCASIONAL → semanasPeriodoOcasional (fallback si no hay fechas de contrato)
+ *   - VISITANTE / CÁTEDRA_VISITANTE → semanasPeriodoVisitante (idem)
+ */
+function semanasBasePorModalidad(
+  modalidad: Modalidad,
+  globales: ParametrosGlobales
+): number {
+  switch (modalidad) {
+    case "CATEDRA":
+      return globales.semanasPeriodoCatedra
+    case "OCASIONAL_TC":
+    case "OCASIONAL_MT":
+      return globales.semanasPeriodoOcasional
+    case "VISITANTE_TC":
+    case "VISITANTE_MT":
+    case "CATEDRA_VISITANTE_TC":
+    case "CATEDRA_VISITANTE_MT":
+      return globales.semanasPeriodoVisitante
+    default:
+      return globales.semanasPeriodo
+  }
+}
+
+/**
  * Resuelve los `AgendaLimits` desde DB para un docente concreto y período.
  * Es el reemplazo async de `getAgendaLimits()` (síncrono, fallback hardcoded).
  *
@@ -410,8 +454,8 @@ export async function resolveAgendaLimits(
   //   1. Rango de contrato (vinculacionDesde/Hasta) → solape con las fechas del periodo
   //      (soporta contratos multi-semestre, p.ej. ocasional de ~11 meses).
   //   2. Número plano `semanasVinculacion` (compatibilidad / captura manual).
-  //   3. Semanas del periodo global (PLANTA y fallback).
-  let semanasEfectivas = globales.semanasPeriodo
+  //   3. Default por modalidad (cátedra=16, ocasional/visitante parametrizables; PLANTA=22 global).
+  let semanasEfectivas = semanasBasePorModalidad(docente.modalidad, globales)
   if (esVinculacionTemporal) {
     let derivadasDeRango = 0
     if (docente.vinculacionDesde && docente.vinculacionHasta && periodoId) {

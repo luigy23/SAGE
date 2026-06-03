@@ -281,6 +281,7 @@ export default async function GestionNuevaAgendaPage({
         periodo={periodo}
         defaultValues={defaultValues}
         semanasPeriodo={semanasPeriodo}
+        semanasClases={globales.semanasClases}
         semanasMaximas={agendaLimits.semanasMaximas}
         defaultSemanasAgenda={agenda?.semanasAgenda}
         formulas={formulas}

@@ -13,6 +13,7 @@ import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatal
 import type { FormulasCursos } from "@/lib/actions/formulas"
 import { ActividadCardRow } from "@/components/agenda/ActividadCardRow"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Card,
   CardContent,
@@ -53,11 +54,11 @@ const FACTOR_FALLBACK: Record<string, { factorHoras: number; constanteSuma: numb
 // ==========================================
 export function SilentDedicacionCalc({
   cursoIndex,
-  semanasPeriodo,
+  semanasClases,
   formulas,
 }: {
   cursoIndex: number
-  semanasPeriodo: number
+  semanasClases: number
   formulas: FormulasCursos
 }) {
   const { setValue } = useFormContext<AgendaWizardFormData>()
@@ -70,17 +71,15 @@ export function SilentDedicacionCalc({
   const tipoCurso = useWatch({ name: `cursos.${cursoIndex}.tipoCurso` as any }) as string | null | undefined
 
   useEffect(() => {
-    // Corrige borradores con semanas desactualizadas respecto al periodo institucional vigente
-    if (Number(semanas) !== semanasPeriodo) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setValue(`cursos.${cursoIndex}.semanas` as any, semanasPeriodo)
-    }
     const horas = Number(horasPresenciales) || 0
     // Usa formula de DB (o fallback Acuerdo 048 Art. 3 Par. 4) según tipo de curso
     const f = formulas[tipoCurso as keyof FormulasCursos] ?? FACTOR_FALLBACK[tipoCurso ?? ""] ?? { factorHoras: 1.5, constanteSuma: 1 }
     const semanales = horas > 0 ? (horas * f.factorHoras) + f.constanteSuma : 0
-    setValue(`cursos.${cursoIndex}.dedicacionPeriodo`, semanales * semanasPeriodo, { shouldValidate: true })
-  }, [horasPresenciales, semanas, semanasPeriodo, cursoIndex, setValue, tipoCurso, formulas])
+    // El curso se calcula sobre sus SEMANAS DE CLASE (campo `semanas`, default 16),
+    // no sobre las semanas del contrato. Si el campo aún no tiene valor, usa el default.
+    const semanasEf = Number(semanas) > 0 ? Number(semanas) : semanasClases
+    setValue(`cursos.${cursoIndex}.dedicacionPeriodo`, semanales * semanasEf, { shouldValidate: true })
+  }, [horasPresenciales, semanas, semanasClases, cursoIndex, setValue, tipoCurso, formulas])
 
   // Renders nothing — purely a side-effect hook
   return null
@@ -94,6 +93,7 @@ function CursoCardRow({
   cursosMaestros,
   modalidad,
   sedeBase,
+  semanasPeriodo,
   onSelect,
   onClear,
   onRemove,
@@ -102,6 +102,8 @@ function CursoCardRow({
   cursosMaestros: CursoMaestroOption[]
   modalidad: string
   sedeBase?: string | null
+  /** Tope máximo de semanas elegibles (= semanas del contrato de la agenda). */
+  semanasPeriodo: number
   onSelect: (curso: CursoMaestroOption) => void
   onClear: () => void
   onRemove: () => void
@@ -111,7 +113,6 @@ function CursoCardRow({
   const nombreCurso = useWatch({ name: `cursos.${index}.nombreCurso` }) as string
   const creditos = useWatch({ name: `cursos.${index}.creditos` }) as number
   const horasPresenciales = useWatch({ name: `cursos.${index}.horasPresenciales` }) as number
-  const semanas = useWatch({ name: `cursos.${index}.semanas` }) as number
   const dedicacionPeriodo = useWatch({ name: `cursos.${index}.dedicacionPeriodo` }) as number
 
   const selected = !!numeroCurso
@@ -164,8 +165,28 @@ function CursoCardRow({
               <p className="font-semibold tabular-nums">{horasPresenciales}</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Semanas</p>
-              <p className="font-semibold tabular-nums">{semanas}</p>
+              <p className="text-xs text-muted-foreground">Semanas de clase</p>
+              <FormField
+                control={control}
+                name={`cursos.${index}.semanas`}
+                render={({ field: f }) => (
+                  <FormItem className="space-y-0">
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={semanasPeriodo}
+                        value={f.value ?? ""}
+                        onChange={(e) =>
+                          f.onChange(e.target.value === "" ? "" : Number(e.target.value))
+                        }
+                        className="h-7 w-16 px-2 py-0 font-semibold tabular-nums"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Total semestre (Art. 048)</p>
@@ -248,6 +269,7 @@ export function StepDocencia({
   modalidad,
   sedeBase,
   semanasPeriodo,
+  semanasClases,
   esJefeDePrograma = false,
   periodo,
 }: {
@@ -255,10 +277,16 @@ export function StepDocencia({
   catalogoActividades: ActividadCatalogoOption[]
   modalidad: string
   sedeBase?: string | null
+  /** Semanas del contrato — tope máximo de semanas por curso. */
   semanasPeriodo: number
+  /** Semanas de clase por defecto para nuevos cursos (independiente del contrato). */
+  semanasClases: number
   esJefeDePrograma?: boolean
   periodo?: string
 }) {
+  // Default de semanas para un curso nuevo: las semanas de clase (16),
+  // nunca por encima del tope del contrato.
+  const semanasCursoDefault = Math.min(semanasClases, semanasPeriodo)
   const { control, setValue } = useFormContext<AgendaWizardFormData>()
 
   const {
@@ -283,7 +311,7 @@ export function StepDocencia({
     setValue(`cursos.${index}.nombreCurso`, curso.nombre, { shouldValidate: true })
     setValue(`cursos.${index}.creditos`, curso.creditos)
     setValue(`cursos.${index}.horasPresenciales`, horasPresenciales)
-    setValue(`cursos.${index}.semanas`, semanasPeriodo)
+    setValue(`cursos.${index}.semanas`, semanasCursoDefault)
   }
 
   function handleCursoMaestroClear(index: number) {
@@ -345,6 +373,7 @@ export function StepDocencia({
               cursosMaestros={cursosMaestros}
               modalidad={modalidad}
               sedeBase={sedeBase}
+              semanasPeriodo={semanasPeriodo}
               onSelect={(curso) => handleCursoMaestroSelect(index, curso)}
               onClear={() => handleCursoMaestroClear(index)}
               onRemove={() => removeCurso(index)}
@@ -354,7 +383,7 @@ export function StepDocencia({
           <Button
             type="button"
             variant="outline"
-            onClick={() => appendCurso({ ...EMPTY_CURSO, semanas: semanasPeriodo, sede: sedeBase ?? "" })}
+            onClick={() => appendCurso({ ...EMPTY_CURSO, semanas: semanasCursoDefault, sede: sedeBase ?? "" })}
             className="w-full border-dashed"
           >
             <Plus className="mr-2 h-4 w-4" />

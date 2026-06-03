@@ -5,13 +5,21 @@ import { cohorteVigente } from "@/lib/utils/periodo"
 // SUPERADMIN al crear el schema dinámico con `createAgendaSchema(...)`.
 export const DEFAULT_SEMANAS_PERIODO = 22
 
+// Semanas de CLASE por defecto: base del cálculo de horas de los cursos,
+// independiente de las semanas del contrato. Aunque el contrato sea de 22
+// semanas, las clases corren 16. Parametrizable vía `semanas_clases` (SUPERADMIN).
+export const DEFAULT_SEMANAS_CLASES = 16
+
 const FACTOR_POR_TIPO: Record<string, { factorHoras: number; constanteSuma: number }> = {
   TEORICO: { factorHoras: 2, constanteSuma: 1 },
   TEORICO_PRACTICO: { factorHoras: 1.5, constanteSuma: 1 },
   PRACTICO: { factorHoras: 1, constanteSuma: 1 },
 }
 
-export function createCursoAgendaSchema(semanasPeriodo: number = DEFAULT_SEMANAS_PERIODO) {
+export function createCursoAgendaSchema(
+  semanasPeriodo: number = DEFAULT_SEMANAS_PERIODO,
+  semanasClases: number = DEFAULT_SEMANAS_CLASES,
+) {
   return z.object({
     // FK al catálogo maestro. null cuando el curso se ingresó a mano (no se eligió del catálogo).
     // Es la única señal real de "este CursoAgenda usa este CursoMaestro" — sostén del safeguard
@@ -33,23 +41,28 @@ export function createCursoAgendaSchema(semanasPeriodo: number = DEFAULT_SEMANAS
       .int("Debe ser un número entero")
       .min(0, "No puede ser negativo")
       .max(15, "Revise el valor. Un curso no suele exceder 15 créditos."),
+    // Semanas de CLASE del curso. Default = semanas_clases (16), tope = semanas
+    // del contrato (semanasPeriodo). Independiente de las semanas del contrato.
     semanas: z.coerce
       .number()
       .int("Debe ser un número entero")
       .min(0, "No puede ser negativo")
-      .max(semanasPeriodo, `Máximo ${semanasPeriodo} semanas por semestre.`),
+      .max(semanasPeriodo, `Máximo ${semanasPeriodo} semanas por semestre.`)
+      .default(semanasClases),
 
     dedicacionPeriodo: z.coerce.number().optional().default(0),
   }).transform((data) => {
     // Art. 3 Par. 4 Acuerdo 048: factor varía según tipo de curso.
-    // Usa semanasPeriodo (del closure) en vez de data.semanas para coincidir
-    // exactamente con SilentDedicacionCalc y evitar divergencia en el mensaje de error.
+    // El curso se calcula sobre sus SEMANAS DE CLASE (data.semanas, default 16),
+    // no sobre las semanas del contrato. Coincide con SilentDedicacionCalc, que
+    // también multiplica por el campo `semanas` del curso.
     // Guard horas > 0 igual al de SilentDedicacionCalc (constanteSuma no aplica si no hay horas).
     const f = FACTOR_POR_TIPO[data.tipoCurso ?? "TEORICO_PRACTICO"] ?? { factorHoras: 1.5, constanteSuma: 1 }
     const horasSemanalesCalculadas = data.horasPresenciales > 0
       ? (data.horasPresenciales * f.factorHoras) + f.constanteSuma
       : 0
-    const calculoLegalTotal = horasSemanalesCalculadas * semanasPeriodo
+    const semanasClasesEf = Number(data.semanas) > 0 ? Number(data.semanas) : semanasClases
+    const calculoLegalTotal = horasSemanalesCalculadas * semanasClasesEf
 
     return {
       ...data,
@@ -114,9 +127,12 @@ export function createActividadSchema(semanasPeriodo: number = DEFAULT_SEMANAS_P
 export const actividadSchema = createActividadSchema()
 export type ActividadFormData = z.infer<typeof actividadSchema>
 
-export function createAgendaWizardBaseSchema(semanasPeriodo: number = DEFAULT_SEMANAS_PERIODO) {
+export function createAgendaWizardBaseSchema(
+  semanasPeriodo: number = DEFAULT_SEMANAS_PERIODO,
+  semanasClases: number = DEFAULT_SEMANAS_CLASES,
+) {
   return z.object({
-    cursos: z.array(createCursoAgendaSchema(semanasPeriodo)).default([]),
+    cursos: z.array(createCursoAgendaSchema(semanasPeriodo, semanasClases)).default([]),
     otrasActividadesDocencia: z.array(createActividadSchema(semanasPeriodo)).default([]),
     actividadesInvestigacion: z.array(createActividadSchema(semanasPeriodo)).default([]),
     actividadesProyeccionSocial: z.array(createActividadSchema(semanasPeriodo)).default([]),
@@ -196,8 +212,9 @@ export function createAgendaSchema(
   maxInvProySocialCatedra: number | null = null,
   maxGestionOverride?: number,
   periodoActual?: string,
+  semanasClases: number = DEFAULT_SEMANAS_CLASES,
 ) {
-  return createAgendaWizardBaseSchema(semanasPeriodo).superRefine((data, ctx) => {
+  return createAgendaWizardBaseSchema(semanasPeriodo, semanasClases).superRefine((data, ctx) => {
     const totalHorasSemestrales = calcularTotalHoras(data);
     const maxHorasSemestrales = maxHoras * semanasPeriodo; // tope semestral derivado del semanal
     const TOLERANCIA_SEMANAL = 0.5;

@@ -12,7 +12,7 @@ import {
   type TopesActividadesMap,
   type ActividadTopeDetalle,
 } from "@/lib/schemas/agenda-schema"
-import { resolveAgendaLimits } from "@/lib/rules/resolver"
+import { resolveAgendaLimits, resolveGlobales } from "@/lib/rules/resolver"
 import { esCargoExentoGestion20, esJefeDePrograma } from "@/lib/utils/cargo"
 import { verificarCupoCargo } from "@/lib/validations/cupo-cargo"
 import {
@@ -169,6 +169,9 @@ export async function upsertAgendaCompletaAction(
 
   // Resolver con semanasAgenda para obtener los límites escalados
   const limits = await resolveAgendaLimits(docenteParaResolver, periodoRow.id, semanasAgenda)
+
+  // Semanas de clase (base del cálculo de horas de los cursos, independiente del contrato).
+  const globales = await resolveGlobales(periodoRow.id)
 
   const flags = {
     doctorado: docente.doctorado,
@@ -328,8 +331,8 @@ export async function upsertAgendaCompletaAction(
   // Borradores: solo validación estructural (tipos y transformaciones)
   // Envío final: validación completa con reglas de negocio resueltas
   const schema = enviar
-    ? createAgendaSchema(limits.maxHorasSemanales, limits.esEstricto, flags, limits.minDocencia, limits.semanas, topesActividades, limits.maxInvProySocialCatedra, undefined, periodo)
-    : createAgendaWizardBaseSchema(limits.semanas)
+    ? createAgendaSchema(limits.maxHorasSemanales, limits.esEstricto, flags, limits.minDocencia, limits.semanas, topesActividades, limits.maxInvProySocialCatedra, undefined, periodo, globales.semanasClases)
+    : createAgendaWizardBaseSchema(limits.semanas, globales.semanasClases)
 
   const parseResult = schema.safeParse(data)
 

@@ -175,6 +175,7 @@ export function AgendaWizardForm({
   periodo,
   defaultValues,
   semanasPeriodo,
+  semanasClases,
   semanasMaximas,
   defaultSemanasAgenda,
   formulas = DEFAULT_FORMULAS,
@@ -188,6 +189,8 @@ export function AgendaWizardForm({
   periodo: string
   defaultValues?: AgendaWizardFormData
   semanasPeriodo: number
+  /** Semanas de clase — base del cálculo de horas de los cursos (default 16, independiente del contrato). */
+  semanasClases: number
   /** Techo máximo de semanas elegibles (semanasVinculacion o semanasPeriodo global). */
   semanasMaximas?: number
   /** Semanas guardadas en el BORRADOR (si existe). */
@@ -300,8 +303,9 @@ export function AgendaWizardForm({
       maxInvProySocialCatedra,
       maxGestion,
       periodo,
+      semanasClases,
     ),
-    [maxHoras, esEstricto, minDocencia, semanasAgenda, docente.doctorado, docente.cargoAdministrativo, docente.proyectosActivos, excluyeTopeGestion20, esJefeProg, topesActividades, maxInvProySocialCatedra, maxGestion, periodo]
+    [maxHoras, esEstricto, minDocencia, semanasAgenda, docente.doctorado, docente.cargoAdministrativo, docente.proyectosActivos, excluyeTopeGestion20, esJefeProg, topesActividades, maxInvProySocialCatedra, maxGestion, periodo, semanasClases]
   )
 
   const steps = useMemo(
@@ -520,6 +524,7 @@ export function AgendaWizardForm({
             modalidad={docente.modalidad}
             sedeBase={docente.sedeBase}
             semanasPeriodo={semanasAgenda}
+            semanasClases={semanasClases}
             esJefeDePrograma={esJefeProg}
             periodo={periodo}
           />
@@ -570,7 +575,7 @@ export function AgendaWizardForm({
         <SilentDedicacionCalc
           key={i}
           cursoIndex={i}
-          semanasPeriodo={semanasAgenda}
+          semanasClases={semanasClases}
           formulas={formulas ?? DEFAULT_FORMULAS}
         />
       ))}
