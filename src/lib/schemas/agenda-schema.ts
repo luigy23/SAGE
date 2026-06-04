@@ -97,6 +97,13 @@ export function createActividadSchema(semanasPeriodo: number = DEFAULT_SEMANAS_P
     // Cohortes (períodos de ingreso, ej. "2026-1") para actividades medidas por
     // COHORTE (Consejería, Art. 11). Vacío para el resto.
     cohortes: z.array(z.string()).optional().default([]),
+    // Cohortes NUEVAS agregadas en esta edición, con la duración elegida (1..6
+    // semestres). Solo Consejería; al ENVIAR se crean los compromisos.
+    cohortesCompromiso: z
+      .array(z.object({ cohorte: z.string(), semestres: z.coerce.number().int().min(1).max(6) }))
+      .optional(),
+    // Proyecto aprobado vinculado (actividades que requieren proyecto aprobado).
+    proyectoId: z.string().nullable().optional(),
   }).transform((data) => {
     // Si el usuario llenó h/sem × semanas, ese cálculo gana; si no, se preserva
     // el `dedicacionPeriodo` ingresado directamente (modo "total semestre").
@@ -493,6 +500,8 @@ export const EMPTY_ACTIVIDAD: ActividadFormData = {
   cantidadUnidades: 0,
   sede: null,
   cohortes: [],
+  cohortesCompromiso: [],
+  proyectoId: null,
 }
 
 export const DEFAULT_FORM_VALUES: AgendaWizardFormData = {

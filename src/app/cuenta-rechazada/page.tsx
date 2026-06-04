@@ -77,7 +77,7 @@ export default async function CuentaRechazadaPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Actualizar información y reenviar</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Revisá y corregí tus datos institucionales antes de reenviar la solicitud.
+              Revisa y corrige tus datos institucionales antes de reenviar la solicitud.
             </p>
           </CardHeader>
           <CardContent>

@@ -11,7 +11,7 @@ import {
 } from "@/components/agenda/CursoMaestroSelector"
 import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatalogoSelector"
 import type { FormulasCursos } from "@/lib/actions/formulas"
-import { ActividadCardRow } from "@/components/agenda/ActividadCardRow"
+import { ActividadCardRow, type ConsejeriaCardData } from "@/components/agenda/ActividadCardRow"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -250,6 +250,7 @@ export function StepDocencia({
   semanasPeriodo,
   esJefeDePrograma = false,
   periodo,
+  consejeria,
 }: {
   cursosMaestros: CursoMaestroOption[]
   catalogoActividades: ActividadCatalogoOption[]
@@ -258,6 +259,7 @@ export function StepDocencia({
   semanasPeriodo: number
   esJefeDePrograma?: boolean
   periodo?: string
+  consejeria?: ConsejeriaCardData
 }) {
   const { control, setValue } = useFormContext<AgendaWizardFormData>()
 
@@ -391,6 +393,7 @@ export function StepDocencia({
               semanasPeriodo={semanasPeriodo}
               sedeBase={sedeBase}
               periodo={periodo}
+              consejeria={consejeria}
               onRemove={() => removeActDocencia(index)}
             />
           ))}

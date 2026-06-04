@@ -1,17 +1,21 @@
 import { getCohortesConsejeros } from "@/lib/consejeria"
+import { LiberarCohorteButton } from "@/components/agenda/LiberarCohorteButton"
 import { Users } from "lucide-react"
 
 /**
  * Panel embebido (no es una vista del menú): muestra, donde el jefe arma la agenda,
- * las cohortes vigentes del programa y quién es su consejero en el período — para ver
- * de un vistazo qué cohortes están cubiertas y cuáles sin asignar. Server Component.
+ * las cohortes vigentes del programa, su consejero y "Sem X de Y" en el período. Si
+ * `canLiberar`, ofrece el botón para liberar el compromiso antes de tiempo.
+ * Server Component.
  */
 export async function CohortesConsejeros({
   programa,
   periodo,
+  canLiberar = false,
 }: {
   programa: string
   periodo: string
+  canLiberar?: boolean
 }) {
   const filas = await getCohortesConsejeros(programa, periodo)
   if (filas.length === 0) return null
@@ -28,10 +32,20 @@ export async function CohortesConsejeros({
       </p>
       <ul className="divide-y">
         {filas.map((f) => (
-          <li key={f.cohorte} className="flex items-center justify-between py-1">
+          <li key={f.cohorte} className="flex items-center justify-between gap-2 py-1">
             <span className="font-mono text-xs">{f.cohorte}</span>
             {f.consejero ? (
-              <span className="text-xs font-medium">{f.consejero}</span>
+              <span className="flex items-center gap-2 text-xs">
+                <span className="font-medium">{f.consejero}</span>
+                {f.semestreActual != null && f.semestresCompromiso != null && (
+                  <span className="text-muted-foreground">
+                    Sem {f.semestreActual}/{f.semestresCompromiso}
+                  </span>
+                )}
+                {canLiberar && f.compromisoId && (
+                  <LiberarCohorteButton compromisoId={f.compromisoId} />
+                )}
+              </span>
             ) : (
               <span className="text-xs text-muted-foreground">— sin consejero</span>
             )}

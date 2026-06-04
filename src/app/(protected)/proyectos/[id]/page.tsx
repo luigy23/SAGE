@@ -3,6 +3,8 @@ import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { getProyectoDetalle } from "@/lib/actions/proyecto-actions"
+import { getPeriodos } from "@/lib/actions/periodo-actions"
+import { periodosQueAbarca } from "@/lib/utils/periodo"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ProyectoStatusBadge } from "@/components/proyectos/ProyectoStatusBadge"
@@ -39,6 +41,13 @@ export default async function DetalleProyectoPage({
 
   const proyecto = await getProyectoDetalle(id)
   if (!proyecto) notFound()
+
+  const periodos = (await getPeriodos()).map((p) => ({
+    nombre: p.nombre,
+    fechaInicio: p.fechaInicio,
+    fechaFin: p.fechaFin,
+  }))
+  const semestres = periodosQueAbarca(proyecto.fechaInicio, proyecto.fechaFin, periodos)
 
   // Cualquier participante puede ver el proyecto; editar/enviar/retirar es solo del creador.
   const miId = session.user.id
@@ -114,12 +123,25 @@ export default async function DetalleProyectoPage({
                 <dd>{proyecto.entidadConvocatoria}</dd>
               </div>
             )}
-            {proyecto.periodoInicio && (
+            {(proyecto.fechaInicio || proyecto.fechaFin) && (
               <div>
                 <dt className="text-xs font-medium text-muted-foreground">
-                  Periodo de inicio
+                  Tiempo del proyecto
                 </dt>
-                <dd>{formatFechaInicio(proyecto.periodoInicio)}</dd>
+                <dd>
+                  {proyecto.fechaInicio
+                    ? formatFechaInicio(new Date(proyecto.fechaInicio).toISOString().slice(0, 10))
+                    : "—"}{" "}
+                  →{" "}
+                  {proyecto.fechaFin
+                    ? formatFechaInicio(new Date(proyecto.fechaFin).toISOString().slice(0, 10))
+                    : "—"}
+                  {semestres.length > 0 && (
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      Semestres: {semestres.join(", ")}
+                    </span>
+                  )}
+                </dd>
               </div>
             )}
             {proyecto.descripcion && (
@@ -140,7 +162,7 @@ export default async function DetalleProyectoPage({
                     <li key={p.id} className="flex items-center justify-between gap-2">
                       <span>
                         {p.docente.nombre}
-                        {p.docente.id === miId && " (vos)"} · {ROL_LABEL[p.rol] ?? p.rol}
+                        {p.docente.id === miId && " (tu)"} · {ROL_LABEL[p.rol] ?? p.rol}
                       </span>
                       <span className="text-xs text-muted-foreground">
                         {p.horasAsignadas != null ? `${p.horasAsignadas} h` : ""}

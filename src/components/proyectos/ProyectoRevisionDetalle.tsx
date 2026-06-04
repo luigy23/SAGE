@@ -1,20 +1,17 @@
-import type { Metadata } from "next"
 import Link from "next/link"
-import { notFound } from "next/navigation"
-import { getProyectoDetalle } from "@/lib/actions/proyecto-actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ProyectoStatusBadge } from "@/components/proyectos/ProyectoStatusBadge"
-import { AprobarProyectoButton } from "@/components/proyectos/AprobarProyectoButton"
+import { ProyectoAprobarPanel } from "@/components/proyectos/ProyectoAprobarPanel"
 import { RechazarProyectoDialog } from "@/components/proyectos/RechazarProyectoDialog"
 import { RehabilitarProyectoButton } from "@/components/proyectos/RehabilitarProyectoButton"
 import { ArrowLeft, GraduationCap, Microscope } from "lucide-react"
 import { getModalidadLabel } from "@/lib/utils/modalidad"
 import { formatFechaInicio } from "@/lib/utils"
+import { periodosQueAbarca, type PeriodoRango } from "@/lib/utils/periodo"
+import type { getProyectoDetalle } from "@/lib/actions/proyecto-actions"
 
-export const metadata: Metadata = {
-  title: "Detalle de Proyecto | SAGE Admin",
-}
+type ProyectoDetalle = NonNullable<Awaited<ReturnType<typeof getProyectoDetalle>>>
 
 const TIPO_LABEL: Record<string, string> = {
   INVESTIGACION: "Investigación",
@@ -28,44 +25,72 @@ const ROL_LABEL: Record<string, string> = {
   COGESTOR: "Cogestor",
 }
 
-export default async function RevisionProyectoDetallePage({
-  params,
+/**
+ * Vista de revisión de un proyecto, compartida por la ruta de admin
+ * (`/admin/revision/proyectos/[id]`) y la de autoridad académica
+ * (`/gestion/proyectos/[id]`). La autorización real la imponen las server
+ * actions (`verificarRevisor`); aquí solo se muestran las acciones.
+ */
+export function ProyectoRevisionDetalle({
+  proyecto,
+  puedeRevisar,
+  topes,
+  periodos,
+  backHref,
+  backLabel = "Volver al listado",
 }: {
-  params: Promise<{ id: string }>
+  proyecto: ProyectoDetalle
+  puedeRevisar: boolean
+  topes?: Record<string, number>
+  periodos: PeriodoRango[]
+  backHref: string
+  backLabel?: string
 }) {
-  const { id } = await params
-  const proyecto = await getProyectoDetalle(id)
-  if (!proyecto) notFound()
-
-  const puedeRevisar = proyecto.estado === "ENVIADO"
+  const fechaInicioStr = proyecto.fechaInicio
+    ? new Date(proyecto.fechaInicio).toISOString().slice(0, 10)
+    : undefined
+  const fechaFinStr = proyecto.fechaFin
+    ? new Date(proyecto.fechaFin).toISOString().slice(0, 10)
+    : undefined
+  const semestres = periodosQueAbarca(proyecto.fechaInicio, proyecto.fechaFin, periodos)
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Button asChild variant="ghost" size="sm" className="w-fit gap-1.5">
-          <Link href="/admin/revision/proyectos">
+          <Link href={backHref}>
             <ArrowLeft className="h-4 w-4" />
-            Volver al listado
+            {backLabel}
           </Link>
         </Button>
         {puedeRevisar && (
-          <div className="flex flex-wrap gap-2">
-            <AprobarProyectoButton
-              proyectoId={proyecto.id}
-              docenteName={proyecto.creador.nombre}
-            />
-            <RechazarProyectoDialog
-              proyectoId={proyecto.id}
-              docenteName={proyecto.creador.nombre}
-            />
-          </div>
+          <RechazarProyectoDialog
+            proyectoId={proyecto.id}
+            docenteName={proyecto.creador.nombre}
+          />
         )}
         {proyecto.estado === "APROBADO" && (
           <RehabilitarProyectoButton proyectoId={proyecto.id} />
         )}
       </div>
 
-      {/* Docente info */}
+      {/* Panel de aprobación inline: horas + tiempo, antes de aprobar */}
+      {puedeRevisar && (
+        <ProyectoAprobarPanel
+          proyectoId={proyecto.id}
+          participantes={proyecto.participantes.map((p) => ({
+            docenteId: p.docenteId,
+            nombre: p.docente.nombre,
+            rol: p.rol,
+          }))}
+          topes={topes}
+          fechaInicioInicial={fechaInicioStr}
+          fechaFinInicial={fechaFinStr}
+          periodos={periodos}
+        />
+      )}
+
+      {/* Docente creador */}
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
           <div>
@@ -84,7 +109,7 @@ export default async function RevisionProyectoDetallePage({
         </CardHeader>
       </Card>
 
-      {/* Proyecto info */}
+      {/* Proyecto */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -92,24 +117,36 @@ export default async function RevisionProyectoDetallePage({
             {proyecto.titulo}
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Enviado el{" "}
-            {new Date(proyecto.createdAt).toLocaleString("es-CO")}
+            Enviado el {new Date(proyecto.createdAt).toLocaleString("es-CO")}
           </p>
           {proyecto.revisadoEn && (
             <p className="text-xs text-muted-foreground">
-              Revisado el{" "}
-              {new Date(proyecto.revisadoEn).toLocaleString("es-CO")}
+              Revisado el {new Date(proyecto.revisadoEn).toLocaleString("es-CO")}
             </p>
           )}
         </CardHeader>
         <CardContent>
           <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-xs font-medium text-muted-foreground">
-                Tipo
-              </dt>
+              <dt className="text-xs font-medium text-muted-foreground">Tipo</dt>
               <dd>{TIPO_LABEL[proyecto.tipo] ?? proyecto.tipo}</dd>
             </div>
+            {(fechaInicioStr || fechaFinStr) && (
+              <div>
+                <dt className="text-xs font-medium text-muted-foreground">
+                  Tiempo del proyecto
+                </dt>
+                <dd>
+                  {fechaInicioStr ? formatFechaInicio(fechaInicioStr) : "—"} →{" "}
+                  {fechaFinStr ? formatFechaInicio(fechaFinStr) : "—"}
+                  {semestres.length > 0 && (
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      Semestres: {semestres.join(", ")}
+                    </span>
+                  )}
+                </dd>
+              </div>
+            )}
             <div className="sm:col-span-2">
               <dt className="text-xs font-medium text-muted-foreground">
                 Participantes
@@ -118,7 +155,9 @@ export default async function RevisionProyectoDetallePage({
                 <ul className="mt-1 space-y-1">
                   {proyecto.participantes.map((p) => (
                     <li key={p.id} className="flex items-center justify-between gap-2">
-                      <span>{p.docente.nombre} · {ROL_LABEL[p.rol] ?? p.rol}</span>
+                      <span>
+                        {p.docente.nombre} · {ROL_LABEL[p.rol] ?? p.rol}
+                      </span>
                       <span className="text-xs text-muted-foreground">
                         {p.horasAsignadas != null ? `${p.horasAsignadas} h` : "horas sin asignar"}
                       </span>

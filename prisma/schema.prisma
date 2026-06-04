@@ -94,8 +94,40 @@ model Docente {
   participacionesProyecto ParticipanteProyecto[]
   agendasAprobadas    AgendaSemestral[] @relation("AgendaAprobadaPor")
   monitoreosAprobados Monitoreo[]       @relation("MonitoreoAprobadoPor")
+  compromisosConsejeria ConsejeriaCompromiso[]
 
   @@map("docentes")
+}
+
+enum EstadoCompromiso {
+  ACTIVO
+  LIBERADO
+}
+
+/**
+ * Compromiso de consejería de un docente sobre una cohorte (Art. 11). Fuente de
+ * verdad del compromiso multi-semestre: el docente elige por cuántos semestres la
+ * asume y el sistema la reserva (exclusiva por programa+cohorte) hasta cumplirse o
+ * liberarse. Se reserva al ENVIAR la agenda y se libera si la agenda se rechaza.
+ */
+model ConsejeriaCompromiso {
+  id                  String           @id @default(cuid())
+  docenteId           String
+  programa            String
+  cohorte             String           // período de ingreso, ej. "2025-2"
+  periodoInicio       String           // período en que el docente asumió, ej. "2026-1"
+  semestresCompromiso Int              // 1..(6 - semestres transcurridos)
+  estado              EstadoCompromiso @default(ACTIVO)
+  creadaEnPeriodo     String           // período cuya agenda creó el compromiso (para liberar al rechazar)
+  liberadoPor         String?
+  liberadoEn          DateTime?
+  createdAt           DateTime         @default(now())
+
+  docente Docente @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+
+  @@index([programa, cohorte, estado])
+  @@index([docenteId, estado])
+  @@map("consejeria_compromisos")
 }
 
 model CursoGuardado {
@@ -190,6 +222,10 @@ model ActividadInvestigacion {
   dedicacionPeriodo    Float
   cantidadUnidades     Int?
   sede                 Sede?
+  // Proyecto aprobado vinculado (Investigador Principal/Coinvestigador): las horas
+  // de la actividad salen de las horas asignadas al docente en ese proyecto.
+  proyectoId           String?
+  proyecto             Proyecto?             @relation(fields: [proyectoId], references: [id], onDelete: SetNull)
   agenda               AgendaSemestral       @relation(fields: [agendaId], references: [id], onDelete: Cascade)
   reporteInvestigacion ReporteInvestigacion?
 
@@ -204,6 +240,9 @@ model ActividadProyeccionSocial {
   descripcion       String?
   dedicacionPeriodo Float
   sede              Sede?
+  // Proyecto aprobado vinculado (Coordinador/Cogestor).
+  proyectoId        String?
+  proyecto          Proyecto?          @relation(fields: [proyectoId], references: [id], onDelete: SetNull)
   agenda            AgendaSemestral    @relation(fields: [agendaId], references: [id], onDelete: Cascade)
   reporteProyeccion ReporteProyeccion?
 
@@ -379,6 +418,10 @@ model Proyecto {
   tipo                TipoProyecto
   entidadConvocatoria String?
   periodoInicio       String?
+  // Tiempo del proyecto: el profesor lo propone, el revisor lo confirma/ajusta al
+  // aprobar. De estas fechas se derivan los períodos académicos (semestres) que abarca.
+  fechaInicio         DateTime?
+  fechaFin            DateTime?
   estado              EstadoFormulario       @default(BORRADOR)
   observacionesAdmin  String?
   creadorId           String
@@ -387,8 +430,10 @@ model Proyecto {
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
 
-  creador             Docente                @relation("ProyectosCreados", fields: [creadorId], references: [id], onDelete: Cascade)
-  participantes       ParticipanteProyecto[]
+  creador                  Docente                     @relation("ProyectosCreados", fields: [creadorId], references: [id], onDelete: Cascade)
+  participantes            ParticipanteProyecto[]
+  actividadesInvestigacion ActividadInvestigacion[]
+  actividadesProyeccion    ActividadProyeccionSocial[]
 
   @@index([estado])
   @@map("proyectos")

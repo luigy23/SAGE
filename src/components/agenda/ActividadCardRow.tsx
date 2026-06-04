@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { useFormContext, useWatch } from "react-hook-form"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import {
@@ -18,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { SEDES } from "@/lib/constants"
+import type { ProyectoAprobadoOpcion } from "@/lib/actions/proyecto-actions"
 import {
   FormField,
   FormItem,
@@ -27,7 +29,12 @@ import {
   FormDescription,
 } from "@/components/ui/form"
 import { Trash2, AlertTriangle } from "lucide-react"
-import { cohortesValidas } from "@/lib/utils/periodo"
+
+/** Datos de consejería para la tarjeta COHORTE: compromisos amarrados + cohortes disponibles. */
+export type ConsejeriaCardData = {
+  compromisos: { cohorte: string; semestreActual: number; semestresCompromiso: number }[]
+  disponibles: { cohorte: string; maxSemestres: number }[]
+}
 
 type ArrayFieldName =
   | "actividadesInvestigacion"
@@ -64,7 +71,8 @@ export function ActividadCardRow({
   semanasPeriodo,
   sedeBase,
   proyectosActivos,
-  periodo,
+  proyectosAprobados,
+  consejeria,
   onRemove,
 }: {
   index: number
@@ -74,17 +82,36 @@ export function ActividadCardRow({
   semanasPeriodo: number
   sedeBase?: string | null
   proyectosActivos?: boolean
+  proyectosAprobados?: ProyectoAprobadoOpcion[]
+  consejeria?: ConsejeriaCardData
   periodo?: string
   onRemove: () => void
 }) {
   const { control, setValue } = useFormContext<AgendaWizardFormData>()
+  // Estado local del selector "agregar cohorte nueva".
+  const [nuevaCohorte, setNuevaCohorte] = useState("")
+  const [nuevaDuracion, setNuevaDuracion] = useState(1)
 
   const nombre = useWatch({ name: `${arrayName}.${index}.nombre` }) as string
   const dedicacionPeriodo = useWatch({ name: `${arrayName}.${index}.dedicacionPeriodo` }) as number
   const cantidadUnidades = (useWatch({ name: `${arrayName}.${index}.cantidadUnidades` }) as number) || 0
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const proyectoIdSel = useWatch({ name: `${arrayName}.${index}.proyectoId` as any }) as string | null | undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cohortesCompromisoW = useWatch({ name: `${arrayName}.${index}.cohortesCompromiso` as any }) as
+    | { cohorte: string; semestres: number }[]
+    | undefined
 
   const actividadCatalogo = catalogo.find(
     (a) => a.categoria === categoria && a.nombre === nombre
+  )
+
+  // Actividades que exigen proyecto aprobado (Investigador Principal / Coinvestigador /
+  // Coordinador / Cogestor). Las horas salen de las horas asignadas al docente en el
+  // proyecto (las puso el revisor al aprobar) y quedan bloqueadas a ese valor.
+  const requiereProyecto = actividadCatalogo?.requiereProyectoAprobado === true
+  const proyectosElegibles = (proyectosAprobados ?? []).filter(
+    (p) => p.tipo === categoria
   )
 
   const requiereUnidades =
@@ -132,6 +159,10 @@ export function ActividadCardRow({
     setValue(`${arrayName}.${index}.cantidadUnidades`, 0)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setValue(`${arrayName}.${index}.cohortes` as any, [])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setValue(`${arrayName}.${index}.cohortesCompromiso` as any, [])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setValue(`${arrayName}.${index}.proyectoId` as any, null)
     // Pre-fill sede con sedeBase si la actividad la requiere y no hay valor.
     const necesitaSede = act.aplicaUnoPorSede || act.topePorUnidad === "SEDE"
     if (necesitaSede && !sedeWatched && sedeBase) {
@@ -151,7 +182,11 @@ export function ActividadCardRow({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setValue(`${arrayName}.${index}.cohortes` as any, [])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setValue(`${arrayName}.${index}.cohortesCompromiso` as any, [])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setValue(`${arrayName}.${index}.sede` as any, null)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setValue(`${arrayName}.${index}.proyectoId` as any, null)
   }
 
   return (
@@ -185,8 +220,63 @@ export function ActividadCardRow({
       {nombre && (
         <div className="space-y-4">
 
-          {/* Cohorte(s) para actividades medidas por COHORTE (Consejería, Art. 11):
-              en vez del número, se eligen los períodos de ingreso válidos. */}
+          {/* Proyecto aprobado vinculado (Investigador Principal / Coinvestigador /
+              Coordinador / Cogestor): las horas salen de las horas asignadas al
+              docente en el proyecto y quedan bloqueadas a ese valor. */}
+          {requiereProyecto && (
+            <FormField
+              control={control}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              name={`${arrayName}.${index}.proyectoId` as any}
+              render={({ field: f }) => (
+                <FormItem>
+                  <FormLabel>Proyecto aprobado vinculado</FormLabel>
+                  {proyectosElegibles.length > 0 ? (
+                    <Select
+                      value={(f.value as string) || ""}
+                      onValueChange={(v) => {
+                        f.onChange(v || null)
+                        const proy = proyectosElegibles.find((p) => p.id === v)
+                        if (proy) {
+                          setValue(
+                            `${arrayName}.${index}.dedicacionPeriodo`,
+                            proy.horasAsignadas,
+                            { shouldValidate: true }
+                          )
+                        }
+                      }}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar proyecto aprobado" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {proyectosElegibles.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.titulo} — {p.horasAsignadas}h
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                      No tienes proyectos aprobados de este tipo donde participes. Regístralo en{" "}
+                      <span className="font-medium">Mis Proyectos</span>; cuando el revisor lo
+                      apruebe y te asigne horas, aparecerá aquí.
+                    </p>
+                  )}
+                  <FormDescription>
+                    Las horas de esta actividad salen de las horas que el revisor te asignó en el
+                    proyecto. No se editan a mano.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
+          {/* Consejería (COHORTE): cohortes amarradas (bloqueadas) + agregar nuevas con duración. */}
           {actividadCatalogo?.topePorUnidad === "COHORTE" && (
             <FormField
               control={control}
@@ -195,47 +285,153 @@ export function ActividadCardRow({
               render={({ field: f }) => {
                 const seleccionadas: string[] = Array.isArray(f.value) ? f.value : []
                 const maxCohortes = actividadCatalogo.unidadMax ?? 1
-                const opciones = periodo ? cohortesValidas(periodo) : []
-                const toggle = (c: string) => {
-                  const yaEsta = seleccionadas.includes(c)
-                  let next: string[]
-                  if (yaEsta) next = seleccionadas.filter((x) => x !== c)
-                  else if (seleccionadas.length >= maxCohortes) return
-                  else next = [...seleccionadas, c]
+                const compromisos = consejeria?.compromisos ?? []
+                const boundSet = new Set(compromisos.map((c) => c.cohorte))
+                const agregadas = seleccionadas.filter((x) => !boundSet.has(x))
+                const nuevasActual = cohortesCompromisoW ?? []
+                const disponibles = (consejeria?.disponibles ?? []).filter(
+                  (d) => !seleccionadas.includes(d.cohorte),
+                )
+                const puedeAgregar = seleccionadas.length < maxCohortes && disponibles.length > 0
+                const maxDeNueva =
+                  disponibles.find((d) => d.cohorte === nuevaCohorte)?.maxSemestres ?? 0
+
+                const setCohortes = (
+                  next: string[],
+                  nuevas: { cohorte: string; semestres: number }[],
+                ) => {
                   f.onChange(next)
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  setValue(`${arrayName}.${index}.cohortesCompromiso` as any, nuevas, { shouldValidate: true })
                   setValue(`${arrayName}.${index}.cantidadUnidades`, next.length, { shouldValidate: true })
-                  if (actividadCatalogo.topeSemestralH !== null) {
-                    setValue(`${arrayName}.${index}.dedicacionPeriodo`, actividadCatalogo.topeSemestralH * next.length, { shouldValidate: true })
-                  }
                 }
+                const agregar = () => {
+                  if (!nuevaCohorte || nuevaDuracion < 1) return
+                  setCohortes(
+                    [...seleccionadas, nuevaCohorte],
+                    [...nuevasActual, { cohorte: nuevaCohorte, semestres: nuevaDuracion }],
+                  )
+                  setNuevaCohorte("")
+                  setNuevaDuracion(1)
+                }
+                const quitar = (c: string) => {
+                  setCohortes(
+                    seleccionadas.filter((x) => x !== c),
+                    nuevasActual.filter((n) => n.cohorte !== c),
+                  )
+                }
+
                 return (
                   <FormItem>
                     <FormLabel>
-                      Cohorte(s) — período de ingreso
+                      Consejería — cohortes (período de ingreso)
                       <span className="ml-1 font-normal text-muted-foreground">(máx {maxCohortes})</span>
                     </FormLabel>
-                    {opciones.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {opciones.map((c) => (
-                          <Button
-                            key={c}
-                            type="button"
-                            size="sm"
-                            variant={seleccionadas.includes(c) ? "default" : "outline"}
-                            onClick={() => toggle(c)}
-                          >
-                            {c}
-                          </Button>
-                        ))}
+
+                    {/* Amarradas: bloqueadas, sin borrar */}
+                    {compromisos.map((c) => (
+                      <div
+                        key={c.cohorte}
+                        className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm"
+                      >
+                        <span>
+                          📌 Cohorte <span className="font-mono font-medium">{c.cohorte}</span>
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          Compromiso: semestre {c.semestreActual} de {c.semestresCompromiso}
+                        </span>
                       </div>
+                    ))}
+
+                    {/* Agregadas en esta edición: removibles */}
+                    {agregadas.map((c) => {
+                      const dur = nuevasActual.find((n) => n.cohorte === c)?.semestres
+                      return (
+                        <div
+                          key={c}
+                          className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+                        >
+                          <span>
+                            Cohorte <span className="font-mono font-medium">{c}</span>
+                            {dur ? (
+                              <span className="ml-1 text-xs text-muted-foreground">
+                                · {dur} semestre{dur !== 1 ? "s" : ""}
+                              </span>
+                            ) : null}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive"
+                            onClick={() => quitar(c)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      )
+                    })}
+
+                    {/* Agregar nueva cohorte */}
+                    {puedeAgregar ? (
+                      <div className="flex flex-wrap items-end gap-2 rounded-md border border-dashed p-2">
+                        <div className="min-w-[140px] flex-1 space-y-1">
+                          <span className="text-xs text-muted-foreground">Cohorte disponible</span>
+                          <Select
+                            value={nuevaCohorte}
+                            onValueChange={(v) => {
+                              setNuevaCohorte(v)
+                              setNuevaDuracion(1)
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Elegir cohorte" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {disponibles.map((d) => (
+                                <SelectItem key={d.cohorte} value={d.cohorte}>
+                                  {d.cohorte}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="w-36 space-y-1">
+                          <span className="text-xs text-muted-foreground">¿Cuántos semestres?</span>
+                          <Select
+                            value={String(nuevaDuracion)}
+                            onValueChange={(v) => setNuevaDuracion(Number(v))}
+                            disabled={!nuevaCohorte}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({ length: maxDeNueva }, (_, i) => i + 1).map((n) => (
+                                <SelectItem key={n} value={String(n)}>
+                                  {n}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button type="button" size="sm" onClick={agregar} disabled={!nuevaCohorte}>
+                          Agregar
+                        </Button>
+                      </div>
+                    ) : seleccionadas.length >= maxCohortes ? (
+                      <p className="text-xs text-muted-foreground">
+                        Alcanzaste el máximo de {maxCohortes} cohortes.
+                      </p>
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        No hay un período activo para calcular las cohortes.
+                        No hay cohortes disponibles para asumir en este programa.
                       </p>
                     )}
+
                     <FormDescription>
-                      Un solo consejero por cohorte en el programa; la consejería dura 6 semestres
-                      desde el período de ingreso.
+                      Un solo consejero por cohorte en el programa. Al enviar la agenda se reserva la
+                      cohorte; si te la rechazan, vuelve a quedar disponible.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -367,6 +563,7 @@ export function ActividadCardRow({
                         name={f.name}
                         ref={f.ref}
                         onBlur={f.onBlur}
+                        disabled={requiereProyecto && Boolean(proyectoIdSel)}
                         value={f.value === 0 ? "" : f.value}
                         placeholder="0"
                         onChange={(e) => {
@@ -379,6 +576,11 @@ export function ActividadCardRow({
                         }}
                       />
                     </FormControl>
+                    {requiereProyecto && Boolean(proyectoIdSel) && (
+                      <FormDescription>
+                        Horas fijadas por el proyecto vinculado.
+                      </FormDescription>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}

@@ -1,6 +1,7 @@
-import { getSedeLabel } from "@/lib/utils/sede"
+import type { Metadata } from "next"
 import Link from "next/link"
-import { listSolicitudesParaAdmin } from "@/lib/actions/solicitud-perfil"
+import { getSedeLabel } from "@/lib/utils/sede"
+import { listSolicitudesParaGestion } from "@/lib/actions/solicitud-perfil"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -12,15 +13,18 @@ import {
   ETIQUETAS_CAMPOS,
 } from "@/lib/schemas/solicitud-perfil-schema"
 
+export const metadata: Metadata = {
+  title: "Solicitudes de perfil | Gestión SAGE",
+}
+
 type SP = Record<string, string | string[] | undefined>
 
 function pickString(sp: SP, key: string): string | undefined {
   const v = sp[key]
-  if (Array.isArray(v)) return v[0]
-  return v
+  return Array.isArray(v) ? v[0] : v
 }
 
-export default async function RevisionPerfilesPage({
+export default async function GestionPerfilesPage({
   searchParams,
 }: {
   searchParams: Promise<SP>
@@ -36,12 +40,14 @@ export default async function RevisionPerfilesPage({
   const q = pickString(sp, "q") ?? ""
   const page = Number(pickString(sp, "page") ?? 1)
 
-  const data = await listSolicitudesParaAdmin({
+  const data = await listSolicitudesParaGestion({
     estado,
     q: q || undefined,
     page,
     perPage: 20,
   })
+
+  const ambito = data.autoridad?.ambitoValor
 
   return (
     <Card>
@@ -52,17 +58,24 @@ export default async function RevisionPerfilesPage({
             Solicitudes de cambio de perfil
           </CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">
-            Cambios de datos de docentes pendientes de aprobación. Por defecto se
-            muestran las solicitudes en estado{" "}
-            <span className="font-mono">ENVIADO</span>.
+            Cambios de datos de los docentes
+            {ambito ? (
+              <>
+                {" "}
+                de <span className="font-medium text-foreground">{ambito}</span>
+              </>
+            ) : (
+              " de toda la universidad"
+            )}
+            . Por defecto se muestran las que están en{" "}
+            <span className="font-mono">ENVIADO</span>. Los cambios de cargo
+            administrativo solo los aprueba el SuperAdmin.
           </p>
         </div>
 
         <form className="flex flex-wrap items-end gap-3" action="" method="get">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">
-              Estado
-            </label>
+            <label className="text-xs font-medium text-muted-foreground">Estado</label>
             <select
               name="estado"
               defaultValue={estado}
@@ -75,14 +88,8 @@ export default async function RevisionPerfilesPage({
             </select>
           </div>
           <div className="flex-1 space-y-1 min-w-[200px]">
-            <label className="text-xs font-medium text-muted-foreground">
-              Buscar docente
-            </label>
-            <Input
-              name="q"
-              defaultValue={q}
-              placeholder="Nombre, cédula o email"
-            />
+            <label className="text-xs font-medium text-muted-foreground">Buscar docente</label>
+            <Input name="q" defaultValue={q} placeholder="Nombre, cédula o email" />
           </div>
           <Button type="submit" size="sm">
             Filtrar
@@ -95,7 +102,7 @@ export default async function RevisionPerfilesPage({
           <div className="flex flex-col items-center gap-3 py-12 text-center">
             <Inbox className="h-10 w-10 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
-              No hay solicitudes con estos filtros.
+              No hay solicitudes con estos filtros en tu ámbito.
             </p>
           </div>
         ) : (
@@ -104,10 +111,7 @@ export default async function RevisionPerfilesPage({
               const cambios = s.camposDespues as Record<string, unknown>
               const camposCambiados = CAMPOS_EDITABLES.filter((c) => c in cambios)
               return (
-                <li
-                  key={s.id}
-                  className="flex flex-wrap items-center gap-3 p-3"
-                >
+                <li key={s.id} className="flex flex-wrap items-center gap-3 p-3">
                   <div className="flex-1 min-w-0">
                     <p className="font-medium">{s.docente.nombre}</p>
                     <p className="text-xs text-muted-foreground">
@@ -116,9 +120,7 @@ export default async function RevisionPerfilesPage({
                     </p>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {camposCambiados.length === 0 ? (
-                        <span className="text-xs text-muted-foreground">
-                          Sin cambios
-                        </span>
+                        <span className="text-xs text-muted-foreground">Sin cambios</span>
                       ) : (
                         camposCambiados.map((c) => (
                           <Badge key={c} variant="outline" className="text-xs">
@@ -131,9 +133,7 @@ export default async function RevisionPerfilesPage({
                   <div className="flex items-center gap-3">
                     <SolicitudEstadoBadge estado={s.estado} />
                     <Button asChild size="sm" variant="outline">
-                      <Link href={`/admin/revision/perfiles/${s.id}`}>
-                        Revisar
-                      </Link>
+                      <Link href={`/gestion/perfiles/${s.id}`}>Revisar</Link>
                     </Button>
                   </div>
                 </li>
@@ -151,7 +151,7 @@ export default async function RevisionPerfilesPage({
               {data.page > 1 && (
                 <Button asChild size="sm" variant="outline">
                   <Link
-                    href={`/admin/revision/perfiles?estado=${estado}&q=${encodeURIComponent(q)}&page=${data.page - 1}`}
+                    href={`/gestion/perfiles?estado=${estado}&q=${encodeURIComponent(q)}&page=${data.page - 1}`}
                   >
                     Anterior
                   </Link>
@@ -160,7 +160,7 @@ export default async function RevisionPerfilesPage({
               {data.page < data.totalPages && (
                 <Button asChild size="sm" variant="outline">
                   <Link
-                    href={`/admin/revision/perfiles?estado=${estado}&q=${encodeURIComponent(q)}&page=${data.page + 1}`}
+                    href={`/gestion/perfiles?estado=${estado}&q=${encodeURIComponent(q)}&page=${data.page + 1}`}
                   >
                     Siguiente
                   </Link>

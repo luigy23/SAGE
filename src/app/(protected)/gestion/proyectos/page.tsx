@@ -1,39 +1,28 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { getProyectosParaAdmin } from "@/lib/actions/proyecto-actions"
+import {
+  getProyectosParaGestion,
+  getEstadisticasProyectosGestion,
+} from "@/lib/actions/proyecto-actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ProyectoStatusBadge } from "@/components/proyectos/ProyectoStatusBadge"
+import { ProyectoRevisionListItem } from "@/components/proyectos/ProyectoRevisionListItem"
+import { PanelProyectosActivos } from "@/components/proyectos/PanelProyectosActivos"
 import { Microscope, Inbox } from "lucide-react"
-import { formatFechaInicio } from "@/lib/utils"
-import { getSedeLabel } from "@/lib/utils/sede"
 
 export const metadata: Metadata = {
-  title: "Revisión de Proyectos | SAGE",
+  title: "Proyectos | Gestión SAGE",
 }
 
 type SP = Record<string, string | string[] | undefined>
 
 function pickString(sp: SP, key: string): string | undefined {
   const v = sp[key]
-  if (Array.isArray(v)) return v[0]
-  return v
+  return Array.isArray(v) ? v[0] : v
 }
 
-const TIPO_LABEL: Record<string, string> = {
-  INVESTIGACION: "Investigación",
-  PROYECCION_SOCIAL: "Proyección Social",
-}
-
-const ROL_LABEL: Record<string, string> = {
-  INVESTIGADOR_PRINCIPAL: "Investigador Principal",
-  COINVESTIGADOR: "Coinvestigador",
-  COORDINADOR: "Coordinador",
-  COGESTOR: "Cogestor",
-}
-
-export default async function RevisionProyectosPage({
+export default async function GestionProyectosPage({
   searchParams,
 }: {
   searchParams: Promise<SP>
@@ -50,16 +39,17 @@ export default async function RevisionProyectosPage({
   const q = pickString(sp, "q") ?? ""
   const page = Number(pickString(sp, "page") ?? 1)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data: any = await getProyectosParaAdmin({
-    estado,
-    q: q || undefined,
-    page,
-    perPage: 20,
-  })
+  const [data, estadisticas] = await Promise.all([
+    getProyectosParaGestion({ estado, q: q || undefined, page, perPage: 20 }),
+    getEstadisticasProyectosGestion(),
+  ])
+
+  const ambito = data.autoridad?.ambitoValor
 
   return (
-    <Card>
+    <div className="space-y-6">
+      {estadisticas && <PanelProyectosActivos data={estadisticas} />}
+      <Card>
       <CardHeader className="space-y-4">
         <div>
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -67,9 +57,18 @@ export default async function RevisionProyectosPage({
             Proyectos de docentes
           </CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">
-            Proyectos de investigación y proyección social pendientes de
-            aprobación. Por defecto se muestran los proyectos en estado{" "}
-            <span className="font-mono">ENVIADO</span>.
+            Proyectos de investigación y proyección social
+            {ambito ? (
+              <>
+                {" "}
+                de <span className="font-medium text-foreground">{ambito}</span>
+              </>
+            ) : (
+              " de toda la universidad"
+            )}
+            . Por defecto se muestran los que están en{" "}
+            <span className="font-mono">ENVIADO</span> (pendientes de tu
+            aprobación). Al aprobar, tú asignas las horas de cada participante.
           </p>
         </div>
 
@@ -94,11 +93,7 @@ export default async function RevisionProyectosPage({
             <label className="text-xs font-medium text-muted-foreground">
               Buscar docente
             </label>
-            <Input
-              name="q"
-              defaultValue={q}
-              placeholder="Nombre, cédula o email"
-            />
+            <Input name="q" defaultValue={q} placeholder="Nombre, cédula o email" />
           </div>
           <Button type="submit" size="sm">
             Filtrar
@@ -111,46 +106,17 @@ export default async function RevisionProyectosPage({
           <div className="flex flex-col items-center gap-3 py-12 text-center">
             <Inbox className="h-10 w-10 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
-              No hay proyectos con estos filtros.
+              No hay proyectos con estos filtros en tu ámbito.
             </p>
           </div>
         ) : (
           <ul className="divide-y rounded-md border">
-            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-            {(data.items as any[]).map((p: any) => (
-              <li
+            {data.items.map((p) => (
+              <ProyectoRevisionListItem
                 key={p.id}
-                className="flex flex-wrap items-center gap-3 p-3"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium">{p.docente.nombre}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {p.docente.programa} · {p.docente.facultad} ·{" "}
-                    {getSedeLabel(p.docente.sedeBase)}
-                  </p>
-                  <p className="mt-0.5 text-sm">{p.titulo}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {TIPO_LABEL[p.tipo] ?? p.tipo} ·{" "}
-                    {ROL_LABEL[p.rolDocente] ?? p.rolDocente}
-                    {p.periodoInicio ? ` · ${formatFechaInicio(p.periodoInicio)}` : ""}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(p.createdAt).toLocaleDateString("es-CO", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <ProyectoStatusBadge estado={p.estado} />
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={`/admin/revision/proyectos/${p.id}`}>
-                      Revisar
-                    </Link>
-                  </Button>
-                </div>
-              </li>
+                proyecto={p}
+                basePath="/gestion/proyectos"
+              />
             ))}
           </ul>
         )}
@@ -164,7 +130,7 @@ export default async function RevisionProyectosPage({
               {data.page > 1 && (
                 <Button asChild size="sm" variant="outline">
                   <Link
-                    href={`/admin/revision/proyectos?estado=${estado}&q=${encodeURIComponent(q)}&page=${data.page - 1}`}
+                    href={`/gestion/proyectos?estado=${estado}&q=${encodeURIComponent(q)}&page=${data.page - 1}`}
                   >
                     Anterior
                   </Link>
@@ -173,7 +139,7 @@ export default async function RevisionProyectosPage({
               {data.page < data.totalPages && (
                 <Button asChild size="sm" variant="outline">
                   <Link
-                    href={`/admin/revision/proyectos?estado=${estado}&q=${encodeURIComponent(q)}&page=${data.page + 1}`}
+                    href={`/gestion/proyectos?estado=${estado}&q=${encodeURIComponent(q)}&page=${data.page + 1}`}
                   >
                     Siguiente
                   </Link>
@@ -184,5 +150,6 @@ export default async function RevisionProyectosPage({
         )}
       </CardContent>
     </Card>
+    </div>
   )
 }

@@ -3,8 +3,8 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
-  LayoutDashboard,
   User,
+  UserCog,
   Calendar,
   ClipboardCheck,
   LogOut,
@@ -12,10 +12,8 @@ import {
   BookOpen,
   CalendarDays,
   Users,
-  Crown,
   Sliders,
   GitBranch,
-  Search,
   ShieldAlert,
   Microscope,
   ClipboardList,
@@ -101,9 +99,11 @@ export function AppSidebar({
                   Aparece solo si el usuario tiene autoridad delegada (cargo). */}
               {gestion && (
                 <SidebarMenuItem>
-                  <SidebarMenuButton>
-                    <ClipboardList />
-                    <span className="font-semibold">{gestion.label}</span>
+                  <SidebarMenuButton asChild isActive={pathname === "/gestion"}>
+                    <Link href="/gestion">
+                      <ClipboardList />
+                      <span className="font-semibold">{gestion.label}</span>
+                    </Link>
                   </SidebarMenuButton>
                   <SidebarMenuSub>
                     <SidebarMenuSubItem>
@@ -128,6 +128,28 @@ export function AppSidebar({
                         </Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={pathname.startsWith("/gestion/proyectos")}
+                      >
+                        <Link href="/gestion/proyectos">
+                          <Microscope />
+                          <span>Proyectos</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={pathname.startsWith("/gestion/perfiles")}
+                      >
+                        <Link href="/gestion/perfiles">
+                          <UserCog />
+                          <span>Solicitudes</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
                   </SidebarMenuSub>
                 </SidebarMenuItem>
               )}
@@ -143,23 +165,11 @@ export function AppSidebar({
                     <SidebarMenuSubItem>
                       <SidebarMenuSubButton
                         asChild
-                        isActive={pathname.startsWith("/admin/revision")}
-                      >
-                        <Link href="/admin/revision">
-                          <Search />
-                          <span>Revisión de solicitudes</span>
-                        </Link>
-                      </SidebarMenuSubButton>
-                    </SidebarMenuSubItem>
-
-                    <SidebarMenuSubItem>
-                      <SidebarMenuSubButton
-                        asChild
                         isActive={pathname.startsWith("/admin/docentes")}
                       >
                         <Link href="/admin/docentes">
                           <Users />
-                          <span>Gestión de Docentes</span>
+                          <span>Gestión de Usuarios</span>
                         </Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
@@ -183,81 +193,51 @@ export function AppSidebar({
                       >
                         <Link href="/admin/periodos">
                           <CalendarDays />
-                          <span>Periodos Académicos</span>
-                        </Link>
-                      </SidebarMenuSubButton>
-                    </SidebarMenuSubItem>
-                  </SidebarMenuSub>
-                </SidebarMenuItem>
-              )}
-
-              {/* SUPERADMIN ONLY — gestión de reglas paramétricas y rehabilitación */}
-              {user.rol === "SUPERADMIN" && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton>
-                    <Crown />
-                    <span className="font-semibold">SuperAdmin</span>
-                  </SidebarMenuButton>
-                  <SidebarMenuSub>
-                    <SidebarMenuSubItem>
-                      <SidebarMenuSubButton
-                        asChild
-                        isActive={pathname.startsWith("/superadmin/parametros")}
-                      >
-                        <Link href="/superadmin/parametros">
-                          <Sliders />
-                          <span>Parámetros Globales</span>
-                        </Link>
-                      </SidebarMenuSubButton>
-                    </SidebarMenuSubItem>
-
-                    <SidebarMenuSubItem>
-                      <SidebarMenuSubButton
-                        asChild
-                        isActive={pathname.startsWith("/superadmin/modalidades")}
-                      >
-                        <Link href="/superadmin/modalidades">
-                          <GitBranch />
-                          <span>Modalidades</span>
-                        </Link>
-                      </SidebarMenuSubButton>
-                    </SidebarMenuSubItem>
-
-                    <SidebarMenuSubItem>
-                      <SidebarMenuSubButton
-                        asChild
-                        isActive={pathname.startsWith("/superadmin/usuarios")}
-                      >
-                        <Link href="/superadmin/usuarios">
-                          <Users />
-                          <span>Usuarios y Roles</span>
-                        </Link>
-                      </SidebarMenuSubButton>
-                    </SidebarMenuSubItem>
-
-                    <SidebarMenuSubItem>
-                      <SidebarMenuSubButton
-                        asChild
-                        isActive={pathname.startsWith("/superadmin/auditoria")}
-                      >
-                        <Link href="/superadmin/auditoria">
-                          <ShieldAlert />
-                          <span>Auditoría</span>
-                        </Link>
-                      </SidebarMenuSubButton>
-                    </SidebarMenuSubItem>
-
-                    <SidebarMenuSubItem>
-                      <SidebarMenuSubButton
-                        asChild
-                        isActive={pathname.startsWith("/superadmin/periodos")}
-                      >
-                        <Link href="/superadmin/periodos">
-                          <CalendarDays />
                           <span>Períodos Académicos</span>
                         </Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
+
+                    {user.rol === "SUPERADMIN" && (
+                      <>
+                        <div className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">
+                          Configuración
+                        </div>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={pathname.startsWith("/superadmin/parametros")}
+                          >
+                            <Link href="/superadmin/parametros">
+                              <Sliders />
+                              <span>Parámetros Globales</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={pathname.startsWith("/superadmin/modalidades")}
+                          >
+                            <Link href="/superadmin/modalidades">
+                              <GitBranch />
+                              <span>Modalidades</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={pathname.startsWith("/superadmin/auditoria")}
+                          >
+                            <Link href="/superadmin/auditoria">
+                              <ShieldAlert />
+                              <span>Auditoría</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      </>
+                    )}
                   </SidebarMenuSub>
                 </SidebarMenuItem>
               )}

@@ -136,7 +136,14 @@ export function ParticipantesSelector({
         </ul>
       )}
 
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o)
+          // Al abrir, precargar la lista de docentes activos (sin filtro).
+          if (o) buscar("")
+        }}
+      >
         <PopoverTrigger asChild>
           <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={!tipo}>
             <UserPlus className="h-4 w-4" />
@@ -150,7 +157,7 @@ export function ParticipantesSelector({
               onValueChange={buscar}
             />
             <CommandList>
-              <CommandEmpty>Escribí al menos 2 caracteres.</CommandEmpty>
+              <CommandEmpty>No se encontraron docentes activos.</CommandEmpty>
               <CommandGroup heading="Docentes (activos, no cátedra)">
                 {resultados
                   .filter((d) => !value.some((p) => p.id === d.id) && !excluirIds.includes(d.id))

@@ -189,3 +189,43 @@ export function cohorteVigente(
   const transcurridos = semestresEntre(cohorte, periodoAgenda)
   return Number.isFinite(transcurridos) && transcurridos >= 0 && transcurridos <= ventana - 1
 }
+
+// ============================================================
+// Períodos (semestres) que abarca un proyecto según sus fechas
+// ============================================================
+
+export type PeriodoRango = {
+  nombre: string
+  fechaInicio: Date | string
+  fechaFin: Date | string
+}
+
+/**
+ * Nombres de los períodos académicos (semestres) que abarca el rango
+ * `[inicio, fin]` de un proyecto: un período cuenta si su rango de fechas
+ * se SOLAPA con el del proyecto. Devuelve los nombres ordenados
+ * cronológicamente. Función pura / client-safe (recibe los períodos ya cargados).
+ */
+export function periodosQueAbarca(
+  inicio: Date | string | null | undefined,
+  fin: Date | string | null | undefined,
+  periodos: PeriodoRango[],
+): string[] {
+  if (!inicio || !fin) return []
+  const ini = new Date(inicio).getTime()
+  const end = new Date(fin).getTime()
+  if (Number.isNaN(ini) || Number.isNaN(end) || end < ini) return []
+  return periodos
+    .filter((p) => {
+      const pIni = new Date(p.fechaInicio).getTime()
+      const pFin = new Date(p.fechaFin).getTime()
+      return pIni <= end && pFin >= ini // solapamiento de rangos
+    })
+    .map((p) => p.nombre)
+    .sort((a, b) => {
+      const oa = ordinalPeriodo(a)
+      const ob = ordinalPeriodo(b)
+      if (Number.isNaN(oa) || Number.isNaN(ob)) return a.localeCompare(b)
+      return oa - ob
+    })
+}

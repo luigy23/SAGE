@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ProyectoForm } from "@/components/proyectos/ProyectoForm"
+import { getPeriodos } from "@/lib/actions/periodo-actions"
 import { ArrowLeft, Microscope } from "lucide-react"
 
 export const metadata: Metadata = {
@@ -14,6 +15,12 @@ export const metadata: Metadata = {
 export default async function NuevoProyectoPage() {
   const session = await auth()
   if (!session?.user?.id) redirect("/auth/login")
+
+  const periodos = (await getPeriodos()).map((p) => ({
+    nombre: p.nombre,
+    fechaInicio: p.fechaInicio,
+    fechaFin: p.fechaFin,
+  }))
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -36,7 +43,7 @@ export default async function NuevoProyectoPage() {
           </p>
         </CardHeader>
         <CardContent>
-          <ProyectoForm creadorId={session.user.id} />
+          <ProyectoForm creadorId={session.user.id} periodos={periodos} />
         </CardContent>
       </Card>
     </div>

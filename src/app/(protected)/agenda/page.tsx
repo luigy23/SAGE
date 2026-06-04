@@ -13,7 +13,12 @@ import { esModalidadNoPlanta } from "@/lib/auth/autoridad"
 import { PeriodosCubiertos } from "@/components/agenda/PeriodosCubiertos"
 import { CorregirAgendaButton } from "@/components/agenda/CorregirAgendaButton"
 import { DEFAULT_FORM_VALUES } from "@/lib/schemas/agenda-schema"
-import { getConsejeriaArrastrada } from "@/lib/consejeria"
+import {
+  getConsejeriaInyectada,
+  getCohortesDisponibles,
+  inyectarConsejeriaEnActividades,
+} from "@/lib/consejeria"
+import { getProyectosAprobadosDocente } from "@/lib/actions/proyecto-actions"
 import {
   Card,
   CardContent,
@@ -313,6 +318,16 @@ export default async function AgendaPage() {
     },
   })
 
+  // Proyectos aprobados del docente que abarcan este período (para Investigación/PS).
+  const proyectosAprobados = await getProyectosAprobadosDocente(docente.id, periodo)
+
+  // Consejería: compromisos amarrados (inyección forzosa) + cohortes disponibles.
+  const consejeriaInyectada = await getConsejeriaInyectada(docente.id, periodo)
+  const consejeria = {
+    compromisos: consejeriaInyectada?.compromisos ?? [],
+    disponibles: await getCohortesDisponibles(docente.programa, periodo),
+  }
+
   // ==========================================
   // CASO A: No hay agenda → Vista de bienvenida
   // ==========================================
@@ -353,23 +368,12 @@ export default async function AgendaPage() {
       )
     }
 
-    // Continuidad automática: pre-siembra la consejería vigente del docente.
-    const arrastrada = await getConsejeriaArrastrada(docente.id, periodo)
-    const nuevaDefaults: AgendaWizardFormData | undefined = arrastrada
+    // Inyección forzosa: si el docente tiene cohortes amarradas, la tarjeta de
+    // Consejería aparece pre-sembrada (bloqueada, horas vacías).
+    const nuevaDefaults: AgendaWizardFormData | undefined = consejeriaInyectada
       ? {
           ...DEFAULT_FORM_VALUES,
-          otrasActividadesDocencia: [
-            {
-              nombre: arrastrada.nombre,
-              descripcion: "",
-              horasSemanales: 0,
-              semanas: 0,
-              dedicacionPeriodo: arrastrada.dedicacionPeriodo,
-              cantidadUnidades: arrastrada.cantidadUnidades,
-              sede: null,
-              cohortes: arrastrada.cohortes,
-            },
-          ],
+          otrasActividadesDocencia: inyectarConsejeriaEnActividades([], consejeriaInyectada),
         }
       : undefined
 
@@ -397,6 +401,8 @@ export default async function AgendaPage() {
           defaultValues={nuevaDefaults}
           formulas={formulas}
           agendaLimits={agendaLimits}
+          proyectosAprobados={proyectosAprobados}
+          consejeria={consejeria}
         />
 
         {/* Lista de agendas de periodos anteriores */}
@@ -478,6 +484,7 @@ export default async function AgendaPage() {
           cantidadUnidades: a.cantidadUnidades ?? 0,
           sede: a.sede ?? null,
           cohortes: [],
+          proyectoId: a.proyectoId ?? null,
         })
       ),
       actividadesProyeccionSocial: agenda.actividadesProyeccionSocial.map(
@@ -490,6 +497,7 @@ export default async function AgendaPage() {
           cantidadUnidades: 0,
           sede: a.sede ?? null,
           cohortes: [],
+          proyectoId: a.proyectoId ?? null,
         })
       ),
       actividadesGestion: agenda.actividadesGestion.map((a) => ({
@@ -503,6 +511,12 @@ export default async function AgendaPage() {
         cohortes: [],
       })),
     }
+
+    // Inyección forzosa de la consejería amarrada también en el borrador.
+    defaultValues.otrasActividadesDocencia = inyectarConsejeriaEnActividades(
+      defaultValues.otrasActividadesDocencia,
+      consejeriaInyectada,
+    )
 
     // Calcular total de horas del borrador para el resumen
     const totalHorasBorrador =
@@ -600,7 +614,7 @@ export default async function AgendaPage() {
         {agenda.observacionesAdmin && (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950">
             <p className="text-xs font-medium text-amber-900 dark:text-amber-200">
-              Recomendaciones de la última revisión (corregí esto antes de reenviar)
+              Recomendaciones de la última revisión
             </p>
             <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
               {agenda.observacionesAdmin}
@@ -620,6 +634,8 @@ export default async function AgendaPage() {
           defaultSemanasAgenda={agenda.semanasAgenda}
           formulas={formulas}
           agendaLimits={agendaLimits}
+          proyectosAprobados={proyectosAprobados}
+          consejeria={consejeria}
         />
 
         {/* Botón Descartar — client component para manejar el server action */}

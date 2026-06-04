@@ -36,6 +36,8 @@ import {
 import { HorasStickyHeader } from "./HorasStickyHeader"
 import type { CursoMaestroOption } from "@/components/agenda/CursoMaestroSelector"
 import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatalogoSelector"
+import type { ProyectoAprobadoOpcion } from "@/lib/actions/proyecto-actions"
+import type { ConsejeriaCardData } from "@/components/agenda/ActividadCardRow"
 import { StepIdentificacion } from "./steps/StepIdentificacion"
 import { StepDocencia } from "./steps/StepDocencia"
 import { StepInvestigacionProyeccion } from "./steps/StepInvestigacionProyeccion"
@@ -179,6 +181,8 @@ export function AgendaWizardForm({
   defaultSemanasAgenda,
   formulas = DEFAULT_FORMULAS,
   agendaLimits,
+  proyectosAprobados,
+  consejeria,
   targetDocenteId,
   redirectOnSuccess,
 }: {
@@ -187,6 +191,8 @@ export function AgendaWizardForm({
   catalogoActividades: ActividadCatalogoOption[]
   periodo: string
   defaultValues?: AgendaWizardFormData
+  proyectosAprobados?: ProyectoAprobadoOpcion[]
+  consejeria?: ConsejeriaCardData
   semanasPeriodo: number
   /** Techo máximo de semanas elegibles (semanasVinculacion o semanasPeriodo global). */
   semanasMaximas?: number
@@ -522,6 +528,7 @@ export function AgendaWizardForm({
             semanasPeriodo={semanasAgenda}
             esJefeDePrograma={esJefeProg}
             periodo={periodo}
+            consejeria={consejeria}
           />
         )
       case "investigacion":
@@ -532,6 +539,7 @@ export function AgendaWizardForm({
             doctorado={docente.doctorado}
             sedeBase={docente.sedeBase}
             proyectosActivos={docente.proyectosActivos}
+            proyectosAprobados={proyectosAprobados}
           />
         )
       case "gestion":

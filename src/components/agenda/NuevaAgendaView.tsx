@@ -8,6 +8,8 @@ import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatal
 import type { FormulasCursos } from "@/lib/actions/formulas"
 import type { AgendaLimits } from "@/lib/validations/agenda-rules"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
+import type { ProyectoAprobadoOpcion } from "@/lib/actions/proyecto-actions"
+import type { ConsejeriaCardData } from "@/components/agenda/ActividadCardRow"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -38,6 +40,8 @@ export function NuevaAgendaView({
   formulas,
   agendaLimits,
   defaultValues,
+  proyectosAprobados,
+  consejeria,
 }: {
   docente: Docente
   cursosMaestros: CursoMaestroOption[]
@@ -48,6 +52,8 @@ export function NuevaAgendaView({
   formulas?: FormulasCursos
   agendaLimits?: AgendaLimits
   defaultValues?: AgendaWizardFormData
+  proyectosAprobados?: ProyectoAprobadoOpcion[]
+  consejeria?: ConsejeriaCardData
 }) {
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
 
@@ -66,6 +72,8 @@ export function NuevaAgendaView({
         formulas={formulas}
         agendaLimits={agendaLimits}
         defaultValues={defaultValues}
+        proyectosAprobados={proyectosAprobados}
+        consejeria={consejeria}
       />
     )
   }

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { registrarAuditoriaStrict } from "@/lib/audit"
 import type { Prisma, Rol, Modalidad, Sede, AmbitoCargo } from "@/generated/prisma/client"
 import { CARGO_AMBITO, FACULTADES, PROGRAMAS } from "@/lib/constants"
+import { getAutoridadAcademica, puedeGestionarFormulario } from "@/lib/auth/autoridad"
 import {
   solicitudCambioPerfilInputSchema,
   type SolicitudCambioPerfilInput,
@@ -37,6 +38,62 @@ async function ensureDocente() {
 // =====================================================================
 // Helpers
 // =====================================================================
+
+/** Campos que otorgan/cambian autoridad: solo el SUPERADMIN puede aprobarlos. */
+const CAMPOS_CARGO = ["cargoAdministrativo", "tipoCargo", "cargoAmbitoValor"] as const
+
+/** Resuelve la autoridad académica del actor leyendo su cargo de BD. */
+async function resolverAutoridadActor(userId: string) {
+  const actor = await prisma.docente.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      rol: true,
+      estadoCuenta: true,
+      cargoAdministrativo: true,
+      tipoCargo: true,
+      cargoAmbitoValor: true,
+    },
+  })
+  if (!actor) return null
+  return { actor, autoridad: getAutoridadAcademica(actor) }
+}
+
+/**
+ * Candado para revisar una solicitud de perfil: la autoridad debe gobernar al
+ * docente dueño (Jefe→programa, Decano→facultad, SUPERADMIN→global), no puede
+ * revisar la propia (SoD) y —al aprobar— los cambios de cargo exigen SUPERADMIN
+ * (anti-escalada de privilegios).
+ */
+async function verificarRevisorSolicitud(
+  userId: string,
+  docente: { id: string; programa: string; facultad: string },
+  camposDespues: unknown,
+  opts?: { chequearCargo?: boolean },
+): Promise<{ error: string } | null> {
+  const resuelto = await resolverAutoridadActor(userId)
+  if (!resuelto || resuelto.autoridad.tipo === null) {
+    return { error: "No tienes autoridad académica para revisar solicitudes de perfil." }
+  }
+  const { autoridad } = resuelto
+  if (!puedeGestionarFormulario(autoridad, { id: docente.id, programa: docente.programa, facultad: docente.facultad })) {
+    return { error: "Esta solicitud es de un docente fuera de tu programa/facultad." }
+  }
+  if (docente.id === userId && autoridad.tipo !== "SUPERADMIN") {
+    return { error: "No puedes revisar tu propia solicitud; la resuelve la autoridad del siguiente ámbito." }
+  }
+  if (opts?.chequearCargo) {
+    const campos = (camposDespues ?? {}) as Record<string, unknown>
+    const tocaCargo = CAMPOS_CARGO.some((k) => k in campos)
+    if (tocaCargo && autoridad.tipo !== "SUPERADMIN") {
+      return {
+        error:
+          "Este cambio modifica el cargo administrativo; solo el SuperAdmin puede aprobarlo.",
+      }
+    }
+  }
+  return null
+}
 
 type DocenteSnapshot = Record<CampoEditable, unknown>
 
@@ -261,7 +318,7 @@ export async function crearSolicitudCambioPerfilAction(
   revalidatePath("/perfil")
   revalidatePath("/perfil/editar")
   revalidatePath("/perfil/solicitudes")
-  revalidatePath("/admin/revision/perfiles")
+  revalidatePath("/gestion/perfiles")
 
   return { success: true, id: creada.id }
 }
@@ -298,7 +355,7 @@ export async function cancelarSolicitudCambioPerfilAction(
 
   revalidatePath("/perfil/editar")
   revalidatePath("/perfil/solicitudes")
-  revalidatePath("/admin/revision/perfiles")
+  revalidatePath("/gestion/perfiles")
 
   return { success: true }
 }
@@ -310,7 +367,9 @@ export async function cancelarSolicitudCambioPerfilAction(
 export async function aprobarSolicitudCambioPerfilAction(
   id: string,
 ): Promise<{ error: string } | { success: true }> {
-  const user = await ensureAdmin()
+  const session = await auth()
+  if (!session?.user?.id) return { error: "No autenticado." }
+  const user = session.user
 
   const solicitud = await prisma.solicitudCambioPerfil.findUnique({
     where: { id },
@@ -339,6 +398,15 @@ export async function aprobarSolicitudCambioPerfilAction(
   if (solicitud.estado !== "ENVIADO") {
     return { error: "Solo se pueden aprobar solicitudes en estado ENVIADO." }
   }
+
+  // Autoridad sobre el docente dueño + SoD + anti-escalada (cargo → solo SUPERADMIN).
+  const guard = await verificarRevisorSolicitud(
+    user.id,
+    solicitud.docente,
+    solicitud.camposDespues,
+    { chequearCargo: true },
+  )
+  if (guard) return guard
 
   const cambios = solicitud.camposDespues as Partial<DocenteSnapshot>
   const snapshotActual = snapshotDocente(solicitud.docente)
@@ -432,8 +500,8 @@ export async function aprobarSolicitudCambioPerfilAction(
     )
   })
 
-  revalidatePath("/admin/revision/perfiles")
-  revalidatePath(`/admin/revision/perfiles/${id}`)
+  revalidatePath("/gestion/perfiles")
+  revalidatePath(`/gestion/perfiles/${id}`)
   revalidatePath("/perfil")
   revalidatePath("/perfil/editar")
   revalidatePath("/perfil/solicitudes")
@@ -450,7 +518,9 @@ export async function rechazarSolicitudCambioPerfilAction(
   id: string,
   motivo: string,
 ): Promise<{ error: string } | { success: true }> {
-  const user = await ensureAdmin()
+  const session = await auth()
+  if (!session?.user?.id) return { error: "No autenticado." }
+  const user = session.user
 
   if (!motivo || motivo.trim().length < 10) {
     return { error: "El motivo es obligatorio y debe tener al menos 10 caracteres." }
@@ -459,13 +529,16 @@ export async function rechazarSolicitudCambioPerfilAction(
   const solicitud = await prisma.solicitudCambioPerfil.findUnique({
     where: { id },
     include: {
-      docente: { select: { nombre: true } },
+      docente: { select: { id: true, nombre: true, programa: true, facultad: true } },
     },
   })
   if (!solicitud) return { error: "Solicitud no encontrada." }
   if (solicitud.estado !== "ENVIADO") {
     return { error: "Solo se pueden rechazar solicitudes en estado ENVIADO." }
   }
+
+  const guard = await verificarRevisorSolicitud(user.id, solicitud.docente, solicitud.camposDespues)
+  if (guard) return guard
 
   await prisma.$transaction(async (tx) => {
     await tx.solicitudCambioPerfil.update({
@@ -494,8 +567,8 @@ export async function rechazarSolicitudCambioPerfilAction(
     )
   })
 
-  revalidatePath("/admin/revision/perfiles")
-  revalidatePath(`/admin/revision/perfiles/${id}`)
+  revalidatePath("/gestion/perfiles")
+  revalidatePath(`/gestion/perfiles/${id}`)
   revalidatePath("/perfil/editar")
   revalidatePath("/perfil/solicitudes")
 
@@ -582,4 +655,119 @@ export async function getSolicitudParaAdmin(id: string) {
       },
     },
   })
+}
+
+// =====================================================================
+// LISTAR / OBTENER — autoridad académica (jefe/decano/superadmin), scoped
+// =====================================================================
+
+const SOLICITUD_DOCENTE_SELECT = {
+  id: true,
+  nombre: true,
+  email: true,
+  cedula: true,
+  modalidad: true,
+  sedeBase: true,
+  facultad: true,
+  programa: true,
+} satisfies Prisma.DocenteSelect
+
+export async function listSolicitudesParaGestion(opts?: {
+  estado?: "ENVIADO" | "APROBADO" | "RECHAZADO" | "TODAS"
+  q?: string
+  page?: number
+  perPage?: number
+}) {
+  const vacio = { items: [], total: 0, page: 1, perPage: 20, totalPages: 1 as number, autoridad: null }
+  const session = await auth()
+  if (!session?.user?.id) return vacio
+
+  const resuelto = await resolverAutoridadActor(session.user.id)
+  if (!resuelto || resuelto.autoridad.tipo === null) return vacio
+  const { autoridad } = resuelto
+
+  const page = opts?.page ?? 1
+  const perPage = opts?.perPage ?? 20
+  const estado = !opts?.estado || opts.estado === "TODAS" ? undefined : opts.estado
+
+  const scopeWhere: Prisma.SolicitudCambioPerfilWhereInput =
+    autoridad.tipo === "JEFE"
+      ? { docente: { programa: autoridad.ambitoValor ?? "" } }
+      : autoridad.tipo === "DECANO"
+        ? { docente: { facultad: autoridad.ambitoValor ?? "" } }
+        : {}
+
+  const qWhere: Prisma.SolicitudCambioPerfilWhereInput = opts?.q
+    ? {
+        docente: {
+          OR: [
+            { nombre: { contains: opts.q, mode: "insensitive" } },
+            { cedula: { contains: opts.q } },
+            { email: { contains: opts.q, mode: "insensitive" } },
+          ],
+        },
+      }
+    : {}
+
+  const where: Prisma.SolicitudCambioPerfilWhereInput = { AND: [{ estado }, scopeWhere, qWhere] }
+
+  const [total, items] = await Promise.all([
+    prisma.solicitudCambioPerfil.count({ where }),
+    prisma.solicitudCambioPerfil.findMany({
+      where,
+      orderBy: [{ estado: "asc" }, { createdAt: "desc" }],
+      skip: (page - 1) * perPage,
+      take: perPage,
+      include: { docente: { select: SOLICITUD_DOCENTE_SELECT } },
+    }),
+  ])
+
+  return {
+    items,
+    total,
+    page,
+    perPage,
+    totalPages: Math.max(1, Math.ceil(total / perPage)),
+    autoridad,
+  }
+}
+
+export async function getSolicitudParaGestion(id: string) {
+  const session = await auth()
+  if (!session?.user?.id) return null
+
+  const solicitud = await prisma.solicitudCambioPerfil.findUnique({
+    where: { id },
+    include: { docente: { select: SOLICITUD_DOCENTE_SELECT } },
+  })
+  if (!solicitud) return null
+
+  const resuelto = await resolverAutoridadActor(session.user.id)
+  if (!resuelto || resuelto.autoridad.tipo === null) return null
+  if (
+    !puedeGestionarFormulario(resuelto.autoridad, {
+      id: solicitud.docente.id,
+      programa: solicitud.docente.programa,
+      facultad: solicitud.docente.facultad,
+    })
+  ) {
+    return null
+  }
+  return solicitud
+}
+
+/**
+ * ¿La autoridad en sesión puede APROBAR esta solicitud? `false` si toca cargo y
+ * no es SUPERADMIN (anti-escalada). Para gatear el botón en la UI.
+ */
+export async function puedeAprobarSolicitudGestion(
+  camposDespues: unknown,
+): Promise<boolean> {
+  const session = await auth()
+  if (!session?.user?.id) return false
+  const resuelto = await resolverAutoridadActor(session.user.id)
+  if (!resuelto || resuelto.autoridad.tipo === null) return false
+  const campos = (camposDespues ?? {}) as Record<string, unknown>
+  const tocaCargo = CAMPOS_CARGO.some((k) => k in campos)
+  return !tocaCargo || resuelto.autoridad.tipo === "SUPERADMIN"
 }
