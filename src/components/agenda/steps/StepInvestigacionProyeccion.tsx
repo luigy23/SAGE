@@ -14,6 +14,7 @@ import {
 import { Plus, GraduationCap } from "lucide-react"
 import { ActividadCardRow } from "@/components/agenda/ActividadCardRow"
 import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatalogoSelector"
+import type { ProyectoAprobadoOpcion } from "@/lib/actions/proyecto-actions"
 
 /**
  * Paso 3 — Secciones 2 y 3: Investigación y Proyección Social
@@ -31,12 +32,14 @@ export function StepInvestigacionProyeccion({
   doctorado,
   sedeBase,
   proyectosActivos,
+  proyectosAprobados,
 }: {
   catalogoActividades: ActividadCatalogoOption[]
   semanasPeriodo: number
   doctorado: boolean
   sedeBase?: string | null
   proyectosActivos?: boolean
+  proyectosAprobados?: ProyectoAprobadoOpcion[]
 }) {
   const { control } = useFormContext<AgendaWizardFormData>()
 
@@ -97,6 +100,7 @@ export function StepInvestigacionProyeccion({
               semanasPeriodo={semanasPeriodo}
               sedeBase={sedeBase}
               proyectosActivos={proyectosActivos}
+              proyectosAprobados={proyectosAprobados}
               onRemove={() => removeInv(index)}
             />
           ))}
@@ -141,6 +145,7 @@ export function StepInvestigacionProyeccion({
               semanasPeriodo={semanasPeriodo}
               sedeBase={sedeBase}
               proyectosActivos={proyectosActivos}
+              proyectosAprobados={proyectosAprobados}
               onRemove={() => removePro(index)}
             />
           ))}

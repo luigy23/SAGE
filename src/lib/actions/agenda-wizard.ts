@@ -13,6 +13,7 @@ import {
   type ActividadTopeDetalle,
 } from "@/lib/schemas/agenda-schema"
 import { resolveAgendaLimits, resolveGlobales } from "@/lib/rules/resolver"
+import { reservarCompromisos } from "@/lib/consejeria"
 import { esCargoExentoGestion20, esJefeDePrograma } from "@/lib/utils/cargo"
 import { verificarCupoCargo } from "@/lib/validations/cupo-cargo"
 import {
@@ -294,23 +295,31 @@ export async function upsertAgendaCompletaAction(
           }
         }
 
-        if (tope.topePorUnidad === "COHORTE") {
-          // Consejería (Art. 11): un solo consejero por cohorte y programa. Por cada
-          // cohorte declarada, verificar que ningún otro docente del mismo programa
-          // ya la tenga en una agenda ENVIADA/APROBADA de este período.
-          const cohortes = ((act as ActividadInput).cohortes as string[] | undefined ?? [])
-            .filter((c) => typeof c === "string" && c.trim() !== "")
-          for (const cohorte of cohortes) {
-            const count = await _contarConsejeriaCohorteCruzada(
-              nombre, periodo, docente.id, docente.programa, cohorte
-            )
-            if (count > 0) {
-              return {
-                error: `La cohorte ${cohorte} ya tiene consejero asignado en el programa ${docente.programa} en este período. Solo puede haber un consejero por cohorte y programa.`,
-              }
-            }
+        if (tope.requiereProyectoAprobado) {
+          const actInput = act as ActividadInput
+          const proyectoId = actInput.proyectoId as string | undefined | null
+          if (!proyectoId) {
+            return { error: `"${nombre}" requiere un proyecto vinculado, pero no se seleccionó ninguno.` }
+          }
+          const participacion = await prisma.participanteProyecto.findUnique({
+            where: { proyectoId_docenteId: { proyectoId, docenteId: docente.id } },
+            include: { proyecto: { select: { estado: true, titulo: true } } },
+          })
+          if (!participacion) {
+            return { error: `"${nombre}": No está registrado como participante en el proyecto vinculado.` }
+          }
+          if (participacion.proyecto.estado !== "APROBADO") {
+            return { error: `"${nombre}": El proyecto vinculado ("${participacion.proyecto.titulo}") no está en estado APROBADO.` }
+          }
+          const horasDedicadas = Number(actInput.dedicacionPeriodo) || 0
+          const asignadas = participacion.horasAsignadas ?? 0
+          if (horasDedicadas > asignadas) {
+            return { error: `"${nombre}": La dedicación de ${horasDedicadas}h excede las horas asignadas para su rol en el proyecto (${asignadas}h).` }
           }
         }
+
+        // La exclusividad de consejería (un consejero por cohorte/programa) se
+        // resuelve al ENVIAR vía `reservarCompromisos` (modelo ConsejeriaCompromiso).
       }
     }
   }
@@ -377,6 +386,7 @@ export async function upsertAgendaCompletaAction(
             data: {
               docenteId: docente.id,
               periodo,
+              periodoId: periodoRow.id,
               estado: enviar ? "ENVIADO" : "BORRADOR",
               semanasAgenda,
             },
@@ -423,6 +433,7 @@ export async function upsertAgendaCompletaAction(
             dedicacionPeriodo: act.dedicacionPeriodo,
             cantidadUnidades: act.cantidadUnidades || null,
             sede: (act.sede as Sede | null) ?? null,
+            proyectoId: act.proyectoId ?? null,
           })),
         })
       }
@@ -435,6 +446,7 @@ export async function upsertAgendaCompletaAction(
             descripcion: act.descripcion || null,
             dedicacionPeriodo: act.dedicacionPeriodo,
             sede: (act.sede as Sede | null) ?? null,
+            proyectoId: act.proyectoId ?? null,
           })),
         })
       }
@@ -449,6 +461,17 @@ export async function upsertAgendaCompletaAction(
             sede: (act.sede as Sede | null) ?? null,
           })),
         })
+      }
+
+      // Consejería: al ENVIAR, reservar las cohortes NUEVAS (boleto de cine).
+      // Lanza si una cohorte ya fue tomada → el catch revierte y avisa.
+      if (enviar) {
+        const nuevasCohortes = validData.otrasActividadesDocencia.flatMap(
+          (a) => a.cohortesCompromiso ?? [],
+        )
+        if (nuevasCohortes.length > 0) {
+          await reservarCompromisos(tx, docente.id, docente.programa, periodo, nuevasCohortes)
+        }
       }
 
       return agenda
@@ -541,34 +564,6 @@ async function _contarActividadCruzada(
         docenteId: { not: docenteIdExcluido },
         ...(dimension === "facultad" ? { docente: { facultad: valor } } : {}),
         ...(dimension === "programa" ? { docente: { programa: valor } } : {}),
-      },
-    },
-  })
-}
-
-/**
- * Cuenta otros docentes del mismo programa cuya Consejería (mismo nombre, mismo
- * período, estado ENVIADO/APROBADO) ya cubre la cohorte dada. Soporta la regla
- * "un consejero por cohorte y programa" (Art. 11). Cada cohorte (período de ingreso)
- * de un programa tiene un único consejero. Solo aplica a ActividadDocencia, único
- * modelo con la columna `cohortes`.
- */
-async function _contarConsejeriaCohorteCruzada(
-  nombre: string,
-  periodo: string,
-  docenteIdExcluido: string,
-  programa: string,
-  cohorte: string,
-): Promise<number> {
-  return prisma.actividadDocencia.count({
-    where: {
-      nombre,
-      cohortes: { has: cohorte },
-      agenda: {
-        periodo,
-        estado: { in: ["ENVIADO", "APROBADO"] },
-        docenteId: { not: docenteIdExcluido },
-        docente: { programa },
       },
     },
   })

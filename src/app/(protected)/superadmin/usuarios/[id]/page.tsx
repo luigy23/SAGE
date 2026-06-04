@@ -19,9 +19,9 @@ export default async function SuperadminUsuarioDetailPage({ params }: Props) {
     <div className="container mx-auto py-10 max-w-4xl">
       <div className="mb-6 flex items-center gap-3">
         <Button variant="ghost" size="sm" asChild>
-          <Link href="/superadmin/usuarios">
+          <Link href="/admin/docentes">
             <ArrowLeft className="mr-1.5 h-4 w-4" />
-            Usuarios y Roles
+            Gestión de Usuarios
           </Link>
         </Button>
         <span className="text-muted-foreground">/</span>

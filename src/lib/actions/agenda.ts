@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache"
 import type { TipoActividad } from "@/lib/types/agenda"
 import { validarVentanaAgenda } from "@/lib/actions/_utils/ventana-periodo"
 import { registrarAuditoria } from "@/lib/audit"
-import { esModalidadNoPlanta } from "@/lib/auth/autoridad"
+import { esModalidadNoPlanta, assertPuedeGestionarDe } from "@/lib/auth/autoridad"
 import type { Rol } from "@/generated/prisma/client"
 
 // ========================================
@@ -73,10 +73,17 @@ export async function createAgendaAction(_prevState: unknown, formData: FormData
     return { error: "Ya existe una agenda para este periodo." }
   }
 
+  // Integridad referencial: guardamos también el id del período (FK), no solo el texto.
+  const periodoRow = await prisma.periodoAcademico.findUnique({
+    where: { nombre: periodo },
+    select: { id: true },
+  })
+
   const agenda = await prisma.agendaSemestral.create({
     data: {
       docenteId: user.id,
       periodo,
+      periodoId: periodoRow?.id ?? null,
     },
   })
 
@@ -115,7 +122,8 @@ export async function enviarAgendaAction(agendaId: string) {
 
   await prisma.agendaSemestral.update({
     where: { id: agendaId },
-    data: { estado: "ENVIADO" },
+    // Al (re)enviar se limpia la nota de la revisión anterior: es un envío fresco.
+    data: { estado: "ENVIADO", observacionesAdmin: null },
   })
 
   await registrarAuditoria({
@@ -132,6 +140,80 @@ export async function enviarAgendaAction(agendaId: string) {
 
   revalidatePath(`/agenda/${agendaId}`)
   revalidatePath("/agenda")
+  return { success: true }
+}
+
+// ========================================
+// CORREGIR — el docente (planta) reabre su agenda RECHAZADA (→ BORRADOR) para
+// corregirla y reenviarla. Conserva el motivo del rechazo como referencia.
+// La ventana de entrega se vuelve a exigir al reenviar.
+// ========================================
+
+export async function corregirAgendaAction(agendaId: string) {
+  const user = await getAuthenticatedUser()
+  if (!user) return { error: "No autenticado." }
+
+  const agenda = await prisma.agendaSemestral.findUnique({
+    where: { id: agendaId },
+    select: {
+      id: true,
+      estado: true,
+      periodo: true,
+      docenteId: true,
+      docente: { select: { modalidad: true, programa: true, facultad: true } },
+    },
+  })
+  if (!agenda) return { error: "Agenda no encontrada." }
+  if (agenda.estado !== "RECHAZADO") {
+    return { error: "Solo se pueden corregir agendas en estado RECHAZADO." }
+  }
+
+  // Quién corrige: PLANTA → el propio docente. NO-PLANTA → el jefe/decano con
+  // autoridad sobre su programa/facultad (es quien le arma la agenda).
+  if (esModalidadNoPlanta(agenda.docente.modalidad)) {
+    const actorRow = await prisma.docente.findUnique({
+      where: { id: user.id },
+      select: {
+        id: true,
+        rol: true,
+        estadoCuenta: true,
+        cargoAdministrativo: true,
+        tipoCargo: true,
+        cargoAmbitoValor: true,
+      },
+    })
+    if (!actorRow) return { error: "Usuario no encontrado." }
+    const denied = assertPuedeGestionarDe(actorRow, {
+      id: agenda.docenteId,
+      programa: agenda.docente.programa,
+      facultad: agenda.docente.facultad,
+    })
+    if (denied) return denied
+  } else if (agenda.docenteId !== user.id) {
+    return { error: "No podés corregir una agenda que no es tuya." }
+  }
+
+  await prisma.agendaSemestral.update({
+    where: { id: agendaId },
+    data: { estado: "BORRADOR" },
+  })
+
+  await registrarAuditoria({
+    actorId:     user.id,
+    actorRol:    user.rol as Rol,
+    actorNombre: user.name ?? user.email ?? user.id,
+    entidad:     "AGENDA",
+    accion:      "CAMBIAR_ESTADO",
+    recursoId:   agendaId,
+    recursoDesc: `Agenda ${agenda.periodo}`,
+    antes:       { estado: "RECHAZADO" },
+    despues:     { estado: "BORRADOR" },
+  })
+
+  revalidatePath(`/agenda/${agendaId}`)
+  revalidatePath("/agenda")
+  revalidatePath(`/gestion/agendas/nueva/${agenda.docenteId}`)
+  revalidatePath("/gestion/agendas")
   return { success: true }
 }
 

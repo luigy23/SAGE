@@ -1,23 +1,14 @@
 "use client"
 
-import { useTransition } from "react"
+import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { useForm } from "react-hook-form"
+import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
-import { format, parse } from "date-fns"
-import { es } from "date-fns/locale"
-import { formatFechaInicio } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Calendar } from "@/components/ui/calendar"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -25,10 +16,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { cn } from "@/lib/utils"
 import { crearProyectoSchema, type CrearProyectoInput } from "@/lib/schemas/proyecto-schema"
-import { crearProyectoAction, enviarProyectoAction } from "@/lib/actions/proyecto-actions"
-import { Send, Save, CalendarIcon } from "lucide-react"
+import { periodosQueAbarca, type PeriodoRango } from "@/lib/utils/periodo"
+import {
+  crearProyectoAction,
+  enviarProyectoAction,
+  actualizarProyectoAction,
+} from "@/lib/actions/proyecto-actions"
+import {
+  ParticipantesSelector,
+  type DocenteParticipante,
+} from "@/components/proyectos/ParticipantesSelector"
+import { FechaPicker } from "@/components/proyectos/FechaPicker"
+import { Send, Save } from "lucide-react"
 
 const TIPO_OPTIONS = [
   { value: "INVESTIGACION", label: "Investigación" },
@@ -46,27 +46,75 @@ const ROL_POR_TIPO: Record<string, { value: string; label: string }[]> = {
   ],
 }
 
-export function ProyectoForm() {
+export function ProyectoForm({
+  creadorId,
+  periodos,
+  proyectoId,
+  initial,
+}: {
+  creadorId: string
+  periodos: PeriodoRango[]
+  /** Si se pasa, el form edita ese proyecto (BORRADOR o RECHAZADO) en vez de crear. */
+  proyectoId?: string
+  initial?: {
+    values: Partial<CrearProyectoInput>
+    participantes: DocenteParticipante[]
+  }
+}) {
   const router = useRouter()
+  const esEdicion = Boolean(proyectoId)
   const [pending, startTransition] = useTransition()
+  const [participantes, setParticipantes] = useState<DocenteParticipante[]>(
+    initial?.participantes ?? [],
+  )
+
+  function actualizarParticipantes(lista: DocenteParticipante[]) {
+    setParticipantes(lista)
+    form.setValue(
+      "participantes",
+      lista.map((p) => ({
+        docenteId: p.id,
+        rol: p.rol as "INVESTIGADOR_PRINCIPAL" | "COINVESTIGADOR" | "COORDINADOR" | "COGESTOR",
+      })),
+    )
+  }
 
   const form = useForm<CrearProyectoInput>({
     resolver: zodResolver(crearProyectoSchema),
     defaultValues: {
-      titulo: "",
-      descripcion: "",
-      tipo: undefined,
-      rolDocente: undefined,
-      entidadConvocatoria: "",
-      periodoInicio: undefined,
+      titulo: initial?.values.titulo ?? "",
+      descripcion: initial?.values.descripcion ?? "",
+      tipo: initial?.values.tipo,
+      rolDocente: initial?.values.rolDocente,
+      entidadConvocatoria: initial?.values.entidadConvocatoria ?? "",
+      fechaInicio: initial?.values.fechaInicio,
+      fechaFin: initial?.values.fechaFin,
+      participantes: initial?.participantes.map((p) => ({
+        docenteId: p.id,
+        rol: p.rol as "INVESTIGADOR_PRINCIPAL" | "COINVESTIGADOR" | "COORDINADOR" | "COGESTOR",
+      })),
     },
   })
 
-  const tipoSeleccionado = form.watch("tipo")
+  const tipoSeleccionado = useWatch({ control: form.control, name: "tipo" })
+  const rolDocenteSel = useWatch({ control: form.control, name: "rolDocente" })
+  const fechaInicioSel = useWatch({ control: form.control, name: "fechaInicio" })
+  const fechaFinSel = useWatch({ control: form.control, name: "fechaFin" })
   const rolesDisponibles = tipoSeleccionado ? ROL_POR_TIPO[tipoSeleccionado] ?? [] : []
+  const semestresAbarca = periodosQueAbarca(fechaInicioSel, fechaFinSel, periodos)
 
   function handleGuardar(data: CrearProyectoInput) {
     startTransition(async () => {
+      if (proyectoId) {
+        const res = await actualizarProyectoAction(proyectoId, data)
+        if ("error" in res) {
+          toast.error(res.error)
+          return
+        }
+        toast.success("Cambios guardados")
+        router.refresh()
+        return
+      }
       const res = await crearProyectoAction(data)
       if ("error" in res) {
         toast.error(res.error)
@@ -79,19 +127,31 @@ export function ProyectoForm() {
 
   function handleEnviar(data: CrearProyectoInput) {
     startTransition(async () => {
-      const crearRes = await crearProyectoAction(data)
-      if ("error" in crearRes) {
-        toast.error(crearRes.error)
-        return
+      let pid = proyectoId
+      if (pid) {
+        const upd = await actualizarProyectoAction(pid, data)
+        if ("error" in upd) {
+          toast.error(upd.error)
+          return
+        }
+      } else {
+        const crearRes = await crearProyectoAction(data)
+        if ("error" in crearRes) {
+          toast.error(crearRes.error)
+          return
+        }
+        pid = crearRes.id
       }
-      const enviarRes = await enviarProyectoAction(crearRes.id)
+      const enviarRes = await enviarProyectoAction(pid)
       if ("error" in enviarRes) {
         toast.error(enviarRes.error)
-        router.push(`/proyectos/${crearRes.id}`)
+        if (!proyectoId) router.push(`/proyectos/${pid}`)
+        else router.refresh()
         return
       }
       toast.success("Proyecto enviado a revisión")
-      router.push(`/proyectos/${crearRes.id}`)
+      if (proyectoId) router.refresh()
+      else router.push(`/proyectos/${pid}`)
     })
   }
 
@@ -121,10 +181,12 @@ export function ProyectoForm() {
         </Label>
         <Select
           onValueChange={(val) => {
-            form.setValue("tipo", val as CrearProyectoInput["tipo"])
+            form.setValue("tipo", val as CrearProyectoInput["tipo"], { shouldValidate: true })
             form.setValue("rolDocente", undefined as unknown as CrearProyectoInput["rolDocente"])
+            // Los roles dependen del tipo: al cambiarlo, limpiar participantes.
+            actualizarParticipantes([])
           }}
-          value={form.watch("tipo") ?? ""}
+          value={tipoSeleccionado ?? ""}
         >
           <SelectTrigger id="tipo">
             <SelectValue placeholder="Seleccionar tipo" />
@@ -152,9 +214,11 @@ export function ProyectoForm() {
         <Select
           disabled={!tipoSeleccionado}
           onValueChange={(val) =>
-            form.setValue("rolDocente", val as CrearProyectoInput["rolDocente"])
+            form.setValue("rolDocente", val as CrearProyectoInput["rolDocente"], {
+              shouldValidate: true,
+            })
           }
-          value={form.watch("rolDocente") ?? ""}
+          value={rolDocenteSel ?? ""}
         >
           <SelectTrigger id="rolDocente">
             <SelectValue
@@ -180,6 +244,28 @@ export function ProyectoForm() {
         )}
       </div>
 
+      {/* Nota informativa tenue: aquí no se asignan horas; las asigna el revisor. */}
+      <div className="rounded-md bg-muted/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+       Cuando tu jefe de programa o el decano apruebe el proyecto, <span className="font-medium text-foreground/80">asignará las horas de cada
+        participante</span>.
+      </div>
+
+      {/* Participantes adicionales */}
+      <div className="space-y-2">
+        <Label>Otros participantes</Label>
+        <p className="text-xs text-muted-foreground">
+          Agregá a los demás docentes del proyecto y asigná su rol. Debe haber exactamente un{" "}
+          {tipoSeleccionado === "PROYECCION_SOCIAL" ? "Coordinador" : "Investigador Principal"} en
+          total (contándote a vos).
+        </p>
+        <ParticipantesSelector
+          value={participantes}
+          onChange={actualizarParticipantes}
+          tipo={tipoSeleccionado}
+          excluirIds={[creadorId]}
+        />
+      </div>
+
       {/* Descripción */}
       <div className="space-y-2">
         <Label htmlFor="descripcion">Descripción</Label>
@@ -201,7 +287,7 @@ export function ProyectoForm() {
         <Label htmlFor="entidadConvocatoria">Entidad / Convocatoria</Label>
         <Input
           id="entidadConvocatoria"
-          placeholder="Ej: Colciencias, USCO Interna, etc. (opcional)"
+          placeholder="Ej: Colciencias, USCO Interna, Sistema general de regalías, etc. (opcional)"
           {...form.register("entidadConvocatoria")}
         />
         {form.formState.errors.entidadConvocatoria && (
@@ -211,48 +297,38 @@ export function ProyectoForm() {
         )}
       </div>
 
-      {/* Periodo de inicio */}
+      {/* Tiempo del proyecto: fecha de inicio y fin → semestres que abarca */}
       <div className="space-y-2">
-        <Label htmlFor="periodoInicio">Fecha de inicio</Label>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              id="periodoInicio"
-              variant="outline"
-              className={cn(
-                "w-full justify-start text-left font-normal",
-                !form.watch("periodoInicio") && "text-muted-foreground"
-              )}
-            >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {form.watch("periodoInicio")
-                ? formatFechaInicio(form.watch("periodoInicio")!)
-                : "Seleccionar fecha (opcional)"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="single"
-              selected={
-                form.watch("periodoInicio")
-                  ? parse(form.watch("periodoInicio")!, "yyyy-MM-dd", new Date())
-                  : undefined
-              }
-              onSelect={(date) =>
-                form.setValue(
-                  "periodoInicio",
-                  date ? format(date, "yyyy-MM-dd") : undefined
-                )
-              }
-              locale={es}
-              initialFocus
-            />
-          </PopoverContent>
-        </Popover>
-        {form.formState.errors.periodoInicio && (
+        <Label>Tiempo del proyecto</Label>
+        <p className="text-xs text-muted-foreground">
+          Indica desde cuándo y hasta cuándo se realizará. El sistema calcula los
+          semestres que abarca; tu jefe/decano podrá ajustarlas al aprobar.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <FechaPicker
+            label="Inicio"
+            value={fechaInicioSel}
+            onChange={(v) => form.setValue("fechaInicio", v, { shouldValidate: true })}
+          />
+          <FechaPicker
+            label="Fin"
+            value={fechaFinSel}
+            onChange={(v) => form.setValue("fechaFin", v, { shouldValidate: true })}
+          />
+        </div>
+        {form.formState.errors.fechaFin && (
           <p className="text-xs text-destructive">
-            {form.formState.errors.periodoInicio.message}
+            {form.formState.errors.fechaFin.message}
           </p>
+        )}
+        {semestresAbarca.length > 0 && (
+          <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            Este proyecto abarca{" "}
+            <span className="font-medium text-foreground/80">
+              {semestresAbarca.length} semestre{semestresAbarca.length !== 1 ? "s" : ""}
+            </span>
+            : {semestresAbarca.join(", ")}.
+          </div>
         )}
       </div>
 
@@ -266,7 +342,7 @@ export function ProyectoForm() {
           className="gap-2"
         >
           <Save className="h-4 w-4" />
-          Guardar borrador
+          {esEdicion ? "Guardar cambios" : "Guardar borrador"}
         </Button>
         <Button
           type="button"
@@ -275,7 +351,11 @@ export function ProyectoForm() {
           className="gap-2"
         >
           <Send className="h-4 w-4" />
-          {pending ? "Enviando..." : "Enviar a revisión"}
+          {pending
+            ? "Enviando..."
+            : esEdicion
+              ? "Reenviar a revisión"
+              : "Enviar a revisión"}
         </Button>
       </div>
     </form>

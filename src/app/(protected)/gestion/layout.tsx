@@ -58,6 +58,18 @@ export default async function GestionLayout({
           >
             Monitoreos (FO-20)
           </Link>
+          <Link
+            href="/gestion/proyectos"
+            className="border-b-2 border-transparent pb-2 font-medium hover:border-[#8F141B]"
+          >
+            Proyectos
+          </Link>
+          <Link
+            href="/gestion/perfiles"
+            className="border-b-2 border-transparent pb-2 font-medium hover:border-[#8F141B]"
+          >
+            Solicitudes
+          </Link>
         </nav>
       </header>
       {children}

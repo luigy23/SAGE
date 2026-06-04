@@ -1,8 +1,12 @@
+import { auth } from "@/lib/auth"
 import { getPeriodos } from "@/lib/actions/periodo-actions"
+import { resolveGlobales } from "@/lib/rules/resolver"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { PeriodoVentanaCell, type VentanaEstado } from "@/components/admin/periodo-ventana-cell"
+import { CreatePeriodoSuperadminDialog } from "@/components/superadmin/create-periodo-superadmin-dialog"
+import { PeriodoFilaAcciones } from "@/components/superadmin/periodo-fila-acciones"
 import { CalendarDays, AlertTriangle } from "lucide-react"
 
 function calcularSemanas(fechaInicio: Date, fechaFin: Date): number {
@@ -17,8 +21,19 @@ function getVentanaEstado(now: Date, desde: Date | null, hasta: Date | null): Ve
   return "ABIERTA"
 }
 
+/**
+ * Períodos Académicos (unificado). El ADMIN configura las ventanas de
+ * diligenciamiento (FO-19/FO-20). El SUPERADMIN además crea/edita/borra períodos.
+ */
 export default async function AdminPeriodosPage() {
-  const periodos = await getPeriodos()
+  const session = await auth()
+  const esSuperadmin = session?.user?.rol === "SUPERADMIN"
+
+  const [periodos, globales] = await Promise.all([
+    getPeriodos(),
+    esSuperadmin ? resolveGlobales(null) : Promise.resolve(null),
+  ])
+  const semanasPeriodo = globales?.semanasPeriodo ?? 22
   const periodoActivo = periodos.find((p) => p.estado === "ABIERTO") ?? null
   const now = new Date()
 
@@ -29,21 +44,23 @@ export default async function AdminPeriodosPage() {
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <span>
             No hay ningún semestre vigente. Los docentes no pueden crear ni modificar agendas.
-            Contacta al SuperAdmin para que active el semestre correspondiente.
+            {esSuperadmin ? " Abre un período para reactivar el sistema." : " Contacta al SuperAdmin para que active el semestre."}
           </span>
         </div>
       )}
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-start justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2 text-2xl font-bold">
               <CalendarDays className="h-6 w-6" />
-              Ventanas de Diligenciamiento
+              Períodos Académicos
             </CardTitle>
             <CardDescription className="mt-1">
-              Configura cuándo los docentes pueden diligenciar la Agenda Semestral (FO-19) y el
-              Monitoreo (FO-20). Los períodos son gestionados por el SuperAdmin.
+              Configura las ventanas de diligenciamiento (FO-19/FO-20)
+              {esSuperadmin
+                ? ". Como SuperAdmin, también puedes crear y editar períodos."
+                : ". Los períodos los gestiona el SuperAdmin."}
               {periodoActivo && (
                 <span className="ml-2 font-medium text-green-700 dark:text-green-400">
                   Semestre vigente: <span className="font-mono">{periodoActivo.nombre}</span>
@@ -51,6 +68,7 @@ export default async function AdminPeriodosPage() {
               )}
             </CardDescription>
           </div>
+          {esSuperadmin && <CreatePeriodoSuperadminDialog semanasPeriodo={semanasPeriodo} />}
         </CardHeader>
         <CardContent>
           <Table>
@@ -63,13 +81,14 @@ export default async function AdminPeriodosPage() {
                 <TableHead>Estado</TableHead>
                 <TableHead>Ventana FO-19</TableHead>
                 <TableHead>Ventana FO-20</TableHead>
+                {esSuperadmin && <TableHead className="text-right">Acciones</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {periodos.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
-                    No hay períodos académicos. El SuperAdmin debe crear el primer semestre.
+                  <TableCell colSpan={esSuperadmin ? 8 : 7} className="text-center h-24 text-muted-foreground">
+                    No hay períodos académicos.{esSuperadmin ? " Crea el primer semestre." : " El SuperAdmin debe crear el primero."}
                   </TableCell>
                 </TableRow>
               )}
@@ -84,18 +103,10 @@ export default async function AdminPeriodosPage() {
                     key={periodo.id}
                     className={esActivo ? "bg-green-50/50 dark:bg-green-950/20" : undefined}
                   >
-                    <TableCell className="font-bold font-mono">
-                      {periodo.nombre}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(periodo.fechaInicio).toLocaleDateString("es-CO")}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(periodo.fechaFin).toLocaleDateString("es-CO")}
-                    </TableCell>
-                    <TableCell className="text-center tabular-nums text-muted-foreground">
-                      {semanas}
-                    </TableCell>
+                    <TableCell className="font-bold font-mono">{periodo.nombre}</TableCell>
+                    <TableCell>{new Date(periodo.fechaInicio).toLocaleDateString("es-CO")}</TableCell>
+                    <TableCell>{new Date(periodo.fechaFin).toLocaleDateString("es-CO")}</TableCell>
+                    <TableCell className="text-center tabular-nums text-muted-foreground">{semanas}</TableCell>
                     <TableCell>
                       <Badge
                         variant={esActivo ? "default" : "secondary"}
@@ -126,6 +137,20 @@ export default async function AdminPeriodosPage() {
                         label="FO-20"
                       />
                     </TableCell>
+                    {esSuperadmin && (
+                      <TableCell className="text-right">
+                        <PeriodoFilaAcciones
+                          periodo={{
+                            id: periodo.id,
+                            nombre: periodo.nombre,
+                            fechaInicio: periodo.fechaInicio,
+                            estado: periodo.estado,
+                          }}
+                          canEdit={true}
+                          semanasPeriodo={semanasPeriodo}
+                        />
+                      </TableCell>
+                    )}
                   </TableRow>
                 )
               })}

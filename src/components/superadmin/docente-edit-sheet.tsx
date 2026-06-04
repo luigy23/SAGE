@@ -41,7 +41,7 @@ import {
   type EditarDocenteSuperadminInput,
 } from "@/lib/schemas/superadmin-docente-schema"
 import { TIPOS_CARGO } from "@/lib/schemas/profile-schema"
-import { CARGO_AMBITO } from "@/lib/constants"
+import { CARGO_AMBITO, FACULTADES, FACULTAD_PROGRAMAS } from "@/lib/constants"
 import { editarDocenteSuperadminAction } from "@/lib/actions/superadmin-docente-edit"
 
 const MODALIDADES = [
@@ -177,9 +177,6 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
   // decano/coordinador → su facultad. Una sola opción posible, no se puede elegir otra.
   const programaActual = programaW || usuario.programa
   const facultadActual = facultadW || usuario.facultad
-  const ambitoOpciones = ambitoCfg
-    ? [ambitoCfg.tipo === "PROGRAMA" ? programaActual : facultadActual]
-    : []
 
   const isCatedra = modalidad === "CATEDRA"
   const isInvitado = modalidad === "INVITADO"
@@ -313,10 +310,40 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Facultad" error={errors.facultad?.message} required>
-                  <Input {...form.register("facultad")} />
+                  <Select
+                    value={facultadW ?? ""}
+                    onValueChange={(v) => {
+                      form.setValue("facultad", v, { shouldValidate: true })
+                      if (!FACULTAD_PROGRAMAS[v]?.includes(programaW ?? "")) {
+                        form.setValue("programa", "", { shouldValidate: true })
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar facultad" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FACULTADES.map((f) => (
+                        <SelectItem key={f} value={f}>{f}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
                 <Field label="Programa" error={errors.programa?.message} required>
-                  <Input {...form.register("programa")} />
+                  <Select
+                    value={programaW ?? ""}
+                    onValueChange={(v) => form.setValue("programa", v, { shouldValidate: true })}
+                    disabled={!facultadW}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={facultadW ? "Seleccionar programa" : "Elige una facultad primero"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(FACULTAD_PROGRAMAS[facultadW ?? ""] ?? []).map((p) => (
+                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
                 <Field label="Sede" error={errors.sedeBase?.message} required>
                   <Select
@@ -538,23 +565,13 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
                     <Field
                       label="Programa / Facultad"
                       error={errors.cargoAmbitoValor?.message}
-                      required
                     >
-                      <Select
-                        value={form.watch("cargoAmbitoValor") ?? ""}
-                        onValueChange={(v) =>
-                          form.setValue("cargoAmbitoValor", v, { shouldValidate: true })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={ambitoCfg.tipo === "FACULTAD" ? "Seleccionar facultad" : "Seleccionar programa"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ambitoOpciones.map((op) => (
-                            <SelectItem key={op} value={op}>{op}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                        {(ambitoCfg.tipo === "PROGRAMA" ? programaActual : facultadActual) || "—"}
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          ({ambitoCfg.tipo === "FACULTAD" ? "su propia facultad" : "su propio programa"}, )
+                        </span>
+                      </div>
                     </Field>
                   )}
                 </div>

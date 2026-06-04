@@ -14,21 +14,22 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { Send } from "lucide-react"
+import { Undo2 } from "lucide-react"
 import { toast } from "sonner"
-import { enviarProyectoAction } from "@/lib/actions/proyecto-actions"
+import { rehabilitarProyectoAction } from "@/lib/actions/proyecto-actions"
 
-export function EnviarProyectoButton({ proyectoId }: { proyectoId: string }) {
+/** Revisor: deshace una aprobación (APROBADO → BORRADOR) para que se ajuste de nuevo. */
+export function RehabilitarProyectoButton({ proyectoId }: { proyectoId: string }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
 
-  function handleEnviar() {
+  function handle() {
     startTransition(async () => {
-      const res = await enviarProyectoAction(proyectoId)
+      const res = await rehabilitarProyectoAction(proyectoId)
       if ("error" in res) {
         toast.error(res.error)
       } else {
-        toast.success("Proyecto enviado a revisión")
+        toast.success("Aprobación deshecha. El proyecto volvió a borrador.")
         router.refresh()
       }
     })
@@ -37,24 +38,23 @@ export function EnviarProyectoButton({ proyectoId }: { proyectoId: string }) {
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button size="sm" className="gap-1.5" disabled={pending}>
-          <Send className="h-3.5 w-3.5" />
-          Enviar a revisión
+        <Button variant="outline" size="sm" className="gap-1.5" disabled={pending}>
+          <Undo2 className="h-3.5 w-3.5" />
+          Rehabilitar
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>¿Enviar proyecto a revisión?</AlertDialogTitle>
+          <AlertDialogTitle>¿Deshacer la aprobación?</AlertDialogTitle>
           <AlertDialogDescription>
-            El proyecto pasará al estado{" "}
-            <span className="font-mono">ENVIADO</span> y un administrador lo
-            revisará. No podrás editarlo hasta que sea procesado.
+            El proyecto volverá a BORRADOR y se desactivarán los proyectos activos de
+            sus participantes hasta que se apruebe de nuevo.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction onClick={handleEnviar} disabled={pending}>
-            {pending ? "Enviando..." : "Sí, enviar"}
+          <AlertDialogCancel>Volver</AlertDialogCancel>
+          <AlertDialogAction onClick={handle} disabled={pending}>
+            {pending ? "Procesando..." : "Sí, rehabilitar"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

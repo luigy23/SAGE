@@ -11,7 +11,7 @@ import {
 } from "@/components/agenda/CursoMaestroSelector"
 import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatalogoSelector"
 import type { FormulasCursos } from "@/lib/actions/formulas"
-import { ActividadCardRow } from "@/components/agenda/ActividadCardRow"
+import { ActividadCardRow, type ConsejeriaCardData } from "@/components/agenda/ActividadCardRow"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -272,6 +272,7 @@ export function StepDocencia({
   semanasClases,
   esJefeDePrograma = false,
   periodo,
+  consejeria,
 }: {
   cursosMaestros: CursoMaestroOption[]
   catalogoActividades: ActividadCatalogoOption[]
@@ -283,6 +284,7 @@ export function StepDocencia({
   semanasClases: number
   esJefeDePrograma?: boolean
   periodo?: string
+  consejeria?: ConsejeriaCardData
 }) {
   // Default de semanas para un curso nuevo: las semanas de clase (16),
   // nunca por encima del tope del contrato.
@@ -420,6 +422,7 @@ export function StepDocencia({
               semanasPeriodo={semanasPeriodo}
               sedeBase={sedeBase}
               periodo={periodo}
+              consejeria={consejeria}
               onRemove={() => removeActDocencia(index)}
             />
           ))}

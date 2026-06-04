@@ -13,7 +13,13 @@ import { puedeGestionarFormulario, esModalidadNoPlanta } from "@/lib/auth/autori
 import { TerminosInvitadoForm } from "@/components/gestion/TerminosInvitadoForm"
 import { PeriodosCubiertos } from "@/components/agenda/PeriodosCubiertos"
 import { CohortesConsejeros } from "@/components/agenda/CohortesConsejeros"
-import { getConsejeriaArrastrada } from "@/lib/consejeria"
+import { CorregirAgendaButton } from "@/components/agenda/CorregirAgendaButton"
+import {
+  getConsejeriaInyectada,
+  getCohortesDisponibles,
+  inyectarConsejeriaEnActividades,
+} from "@/lib/consejeria"
+import { getProyectosAprobadosDocente } from "@/lib/actions/proyecto-actions"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -127,6 +133,22 @@ export default async function GestionNuevaAgendaPage({
     return (
       <div className="space-y-4">
         <Encabezado docente={docente} periodo={periodo} estado={agenda.estado} />
+        {agenda.estado === "RECHAZADO" && (
+          <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950">
+            <p className="text-xs font-medium text-red-900 dark:text-red-200">
+              Agenda rechazada{agenda.observacionesAdmin ? " — motivo" : ""}
+            </p>
+            {agenda.observacionesAdmin && (
+              <p className="mt-1 text-sm text-red-800 dark:text-red-300">
+                {agenda.observacionesAdmin}
+              </p>
+            )}
+            <p className="mt-2 text-xs text-red-700 dark:text-red-400">
+              Como tú diligencias la agenda de este docente, podés corregirla y reenviarla.
+            </p>
+            <CorregirAgendaButton agendaId={agenda.id} />
+          </div>
+        )}
         <AgendaReadOnly
           agenda={agenda as AgendaConRelaciones}
           semanasPeriodo={semanasPeriodo}
@@ -176,9 +198,15 @@ export default async function GestionNuevaAgendaPage({
     },
   })
 
-  // Continuidad automática: si no hay agenda aún, arrastra la consejería vigente
-  // de la agenda previa del docente para no reescribir las cohortes cada semestre.
-  const arrastrada = agenda ? null : await getConsejeriaArrastrada(docente.id, periodo)
+  // Consejería: compromisos amarrados (inyección forzosa) + cohortes disponibles.
+  const consejeriaInyectada = await getConsejeriaInyectada(docente.id, periodo)
+  const consejeria = {
+    compromisos: consejeriaInyectada?.compromisos ?? [],
+    disponibles: await getCohortesDisponibles(docente.programa, periodo),
+  }
+
+  // Proyectos aprobados del docente objetivo que abarcan este período.
+  const proyectosAprobados = await getProyectosAprobadosDocente(docente.id, periodo)
 
   // Si hay un BORRADOR delegado previo, pre-cargar sus datos al wizard.
   const defaultValues: AgendaWizardFormData | undefined = agenda
@@ -213,6 +241,7 @@ export default async function GestionNuevaAgendaPage({
           cantidadUnidades: a.cantidadUnidades ?? 0,
           sede: a.sede ?? null,
           cohortes: [],
+          proyectoId: a.proyectoId ?? null,
         })),
         actividadesProyeccionSocial: agenda.actividadesProyeccionSocial.map((a) => ({
           nombre: a.nombre,
@@ -223,6 +252,7 @@ export default async function GestionNuevaAgendaPage({
           cantidadUnidades: 0,
           sede: a.sede ?? null,
           cohortes: [],
+          proyectoId: a.proyectoId ?? null,
         })),
         actividadesGestion: agenda.actividadesGestion.map((a) => ({
           nombre: a.nombre,
@@ -235,23 +265,20 @@ export default async function GestionNuevaAgendaPage({
           cohortes: [],
         })),
       }
-    : arrastrada
+    : consejeriaInyectada
       ? {
           ...DEFAULT_FORM_VALUES,
-          otrasActividadesDocencia: [
-            {
-              nombre: arrastrada.nombre,
-              descripcion: "",
-              horasSemanales: 0,
-              semanas: 0,
-              dedicacionPeriodo: arrastrada.dedicacionPeriodo,
-              cantidadUnidades: arrastrada.cantidadUnidades,
-              sede: null,
-              cohortes: arrastrada.cohortes,
-            },
-          ],
+          otrasActividadesDocencia: inyectarConsejeriaEnActividades([], consejeriaInyectada),
         }
       : undefined
+
+  // Inyección forzosa de la consejería amarrada también en el borrador delegado.
+  if (agenda && defaultValues) {
+    defaultValues.otrasActividadesDocencia = inyectarConsejeriaEnActividades(
+      defaultValues.otrasActividadesDocencia,
+      consejeriaInyectada,
+    )
+  }
 
   const toDateInput = (d: Date | null): string =>
     d ? d.toISOString().slice(0, 10) : ""
@@ -263,7 +290,7 @@ export default async function GestionNuevaAgendaPage({
         vinculacionDesde={docente.vinculacionDesde}
         vinculacionHasta={docente.vinculacionHasta}
       />
-      <CohortesConsejeros programa={docente.programa} periodo={periodo} />
+      <CohortesConsejeros programa={docente.programa} periodo={periodo} canLiberar />
       {docente.modalidad === "INVITADO" && (
         <TerminosInvitadoForm
           docenteId={docente.id}
@@ -286,6 +313,8 @@ export default async function GestionNuevaAgendaPage({
         defaultSemanasAgenda={agenda?.semanasAgenda}
         formulas={formulas}
         agendaLimits={agendaLimits}
+        proyectosAprobados={proyectosAprobados}
+        consejeria={consejeria}
         targetDocenteId={docente.id}
         redirectOnSuccess="/gestion/agendas"
       />

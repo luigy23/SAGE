@@ -96,6 +96,8 @@ export async function crearMonitoreoAction(agendaId: string) {
     data: {
       docenteId: agenda.docenteId,
       periodo: agenda.periodo,
+      // Integridad: el monitoreo hereda el id de período de su agenda.
+      periodoId: agenda.periodoId,
       agendaId: agenda.id,
       estado: "BORRADOR",
       reportesDocencia: {
