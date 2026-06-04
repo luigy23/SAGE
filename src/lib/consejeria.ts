@@ -161,6 +161,13 @@ export async function reservarCompromisos(
   nuevas: { cohorte: string; semestres: number }[],
 ): Promise<void> {
   for (const n of nuevas) {
+    // Adquirir un lock a nivel de transacción en Postgres para evitar race conditions concurrentes.
+    // Usamos hashtext para generar un ID entero de 32-bit basado en "programa-cohorte".
+    await tx.$executeRawUnsafe(
+      `SELECT pg_advisory_xact_lock(hashtext($1))`,
+      `${programa}-${n.cohorte}`
+    )
+
     const existentes = await tx.consejeriaCompromiso.findMany({
       where: { programa, cohorte: n.cohorte, estado: "ACTIVO" },
       select: { periodoInicio: true, semestresCompromiso: true, estado: true },

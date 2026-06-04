@@ -14,7 +14,7 @@ import {
   TOPE_POR_ROL,
   ROL_A_ACTIVIDAD_CATALOGO,
 } from "@/lib/schemas/proyecto-schema"
-import { getAutoridadAcademica, puedeGestionarFormulario } from "@/lib/auth/autoridad"
+import { getAutoridadAcademica, assertPuedeAprobar } from "@/lib/auth/autoridad"
 import { periodosQueAbarca } from "@/lib/utils/periodo"
 
 // =====================================================================
@@ -133,17 +133,12 @@ async function construirParticipantes(
  */
 async function verificarRevisor(
   userId: string,
-  userRol: string,
   tipo: TipoProyecto,
   participantes: {
     rol: RolEnProyecto
     docente: { id: string; programa: string; facultad: string }
   }[],
 ): Promise<{ error: string } | null> {
-  // Solo la autoridad académica aprueba proyectos (asignar horas afecta la agenda).
-  // El SUPERADMIN tiene alcance global; el ADMIN operativo NO aprueba proyectos.
-  if (userRol === "SUPERADMIN") return null
-
   const principal = participantes.find((p) => p.rol === ROL_LIDER[tipo])
   if (!principal) {
     return { error: "El proyecto no tiene un responsable principal definido." }
@@ -160,19 +155,15 @@ async function verificarRevisor(
     },
   })
   if (!actorRow) return { error: "Usuario no encontrado." }
-  const autoridad = getAutoridadAcademica(actorRow)
-  const puede = puedeGestionarFormulario(autoridad, {
+  // assertPuedeAprobar = alcance + Separación de Deberes (nadie aprueba su propio
+  // proyecto → sube de ámbito) + ADMIN operativo sin autoridad bloqueado. Mismo
+  // candado que se usa para agendas y monitoreos. El "owner" es el Investigador
+  // Principal, que ancla el proyecto a su programa/facultad.
+  return assertPuedeAprobar(actorRow, {
     id: principal.docente.id,
     programa: principal.docente.programa,
     facultad: principal.docente.facultad,
   })
-  if (!puede) {
-    return {
-      error:
-        "No tenés autoridad sobre este proyecto: pertenece al programa/facultad del investigador principal.",
-    }
-  }
-  return null
 }
 
 /** Busca docentes elegibles como participantes (activos, no cátedra) por cédula o nombre. */
@@ -279,8 +270,11 @@ export async function actualizarProyectoAction(
   if (proyecto.creadorId !== session.id) {
     return { error: "No podés editar un proyecto que no creaste." }
   }
-  if (proyecto.estado !== "BORRADOR") {
-    return { error: "Solo se pueden editar proyectos en estado BORRADOR." }
+  // Edición atómica: se puede editar en BORRADOR o RECHAZADO. Al guardar, un
+  // proyecto RECHAZADO pasa a BORRADOR (sin botón "Corregir" intermedio) y se
+  // limpia la nota de rechazo.
+  if (proyecto.estado !== "BORRADOR" && proyecto.estado !== "RECHAZADO") {
+    return { error: "Solo se pueden editar proyectos en BORRADOR o RECHAZADO." }
   }
 
   const { rolDocente, participantes: adicionales, fechaInicio, fechaFin, ...datos } = parsed.data
@@ -294,6 +288,8 @@ export async function actualizarProyectoAction(
         ...datos,
         fechaInicio: fechaInicio ? new Date(fechaInicio) : null,
         fechaFin: fechaFin ? new Date(fechaFin) : null,
+        estado: "BORRADOR",
+        observacionesAdmin: null,
       },
     }),
     prisma.participanteProyecto.deleteMany({ where: { proyectoId: id } }),
@@ -482,7 +478,7 @@ export async function aprobarProyectoAction(
     return { error: "Solo se pueden aprobar proyectos en estado ENVIADO." }
   }
 
-  const authError = await verificarRevisor(user.id, user.rol, proyecto.tipo, proyecto.participantes)
+  const authError = await verificarRevisor(user.id, proyecto.tipo, proyecto.participantes)
   if (authError) return authError
 
   // Validar las horas asignadas a cada participante (≥ 0 y ≤ tope del rol).
@@ -577,7 +573,7 @@ export async function rechazarProyectoAction(
   if (proyecto.estado !== "ENVIADO") {
     return { error: "Solo se pueden rechazar proyectos en estado ENVIADO." }
   }
-  const authError = await verificarRevisor(user.id, user.rol, proyecto.tipo, proyecto.participantes)
+  const authError = await verificarRevisor(user.id, proyecto.tipo, proyecto.participantes)
   if (authError) return authError
 
   await prisma.$transaction(async (tx) => {
@@ -641,7 +637,7 @@ export async function rehabilitarProyectoAction(
   if (proyecto.estado !== "APROBADO") {
     return { error: "Solo se pueden rehabilitar proyectos APROBADOS." }
   }
-  const authError = await verificarRevisor(user.id, user.rol, proyecto.tipo, proyecto.participantes)
+  const authError = await verificarRevisor(user.id, proyecto.tipo, proyecto.participantes)
   if (authError) return authError
 
   await prisma.$transaction(async (tx) => {
@@ -651,6 +647,59 @@ export async function rehabilitarProyectoAction(
       data: { estado: "BORRADOR", observacionesAdmin: null, revisadoPor: null, revisadoEn: null },
     })
     await recomputeProyectosActivos(tx, ids)
+
+    // Cascada de integridad: las agendas (ENVIADO/APROBADO) que usan este proyecto
+    // también vuelven a BORRADOR, para que ninguna quede con horas "fantasma".
+    const [actsInv, actsProy] = await Promise.all([
+      tx.actividadInvestigacion.findMany({ where: { proyectoId: id }, select: { agendaId: true } }),
+      tx.actividadProyeccionSocial.findMany({ where: { proyectoId: id }, select: { agendaId: true } }),
+    ])
+    const agendaIds = [...new Set([...actsInv, ...actsProy].map((a) => a.agendaId))]
+    if (agendaIds.length > 0) {
+      const agendasAfectadas = await tx.agendaSemestral.findMany({
+        where: { id: { in: agendaIds }, estado: { in: ["ENVIADO", "APROBADO"] } },
+        select: { id: true, estado: true, periodo: true },
+      })
+      const motivoCascada = `El proyecto "${proyecto.titulo}" asociado a esta agenda fue devuelto a borrador para correcciones.`
+      for (const ag of agendasAfectadas) {
+        await tx.rehabilitacionAgenda.create({
+          data: {
+            agendaId: ag.id,
+            rehabilitadoPor: user.id,
+            motivo: motivoCascada,
+            estadoOriginal: ag.estado,
+          },
+        })
+        await tx.agendaSemestral.update({
+          where: { id: ag.id },
+          data: {
+            estado: "BORRADOR",
+            observacionesAdmin: motivoCascada,
+            rehabilitada: true,
+            rehabilitadaCount: { increment: 1 },
+            ultimaRehabilitacion: new Date(),
+            aprobadoPorId: null,
+            aprobadoEn: null,
+          },
+        })
+        await registrarAuditoriaStrict(
+          {
+            actorId: user.id,
+            actorRol: user.rol as Rol,
+            actorNombre: user.name ?? user.email ?? user.id,
+            entidad: "AGENDA",
+            accion: "REHABILITAR",
+            recursoId: ag.id,
+            recursoDesc: `Agenda ${ag.periodo} (cascada por proyecto)`,
+            antes: { estado: ag.estado },
+            despues: { estado: "BORRADOR" },
+            observaciones: motivoCascada,
+          },
+          tx,
+        )
+      }
+    }
+
     await registrarAuditoriaStrict(
       {
         actorId: user.id,
@@ -666,6 +715,9 @@ export async function rehabilitarProyectoAction(
       tx,
     )
   })
+
+  revalidatePath("/agenda")
+  revalidatePath("/gestion/agendas")
 
   revalidateProyectoPaths()
   return { success: true }

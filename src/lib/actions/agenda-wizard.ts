@@ -292,6 +292,29 @@ export async function upsertAgendaCompletaAction(
           }
         }
 
+        if (tope.requiereProyectoAprobado) {
+          const actInput = act as ActividadInput
+          const proyectoId = actInput.proyectoId as string | undefined | null
+          if (!proyectoId) {
+            return { error: `"${nombre}" requiere un proyecto vinculado, pero no se seleccionó ninguno.` }
+          }
+          const participacion = await prisma.participanteProyecto.findUnique({
+            where: { proyectoId_docenteId: { proyectoId, docenteId: docente.id } },
+            include: { proyecto: { select: { estado: true, titulo: true } } },
+          })
+          if (!participacion) {
+            return { error: `"${nombre}": No está registrado como participante en el proyecto vinculado.` }
+          }
+          if (participacion.proyecto.estado !== "APROBADO") {
+            return { error: `"${nombre}": El proyecto vinculado ("${participacion.proyecto.titulo}") no está en estado APROBADO.` }
+          }
+          const horasDedicadas = Number(actInput.dedicacionPeriodo) || 0
+          const asignadas = participacion.horasAsignadas ?? 0
+          if (horasDedicadas > asignadas) {
+            return { error: `"${nombre}": La dedicación de ${horasDedicadas}h excede las horas asignadas para su rol en el proyecto (${asignadas}h).` }
+          }
+        }
+
         // La exclusividad de consejería (un consejero por cohorte/programa) se
         // resuelve al ENVIAR vía `reservarCompromisos` (modelo ConsejeriaCompromiso).
       }
@@ -360,6 +383,7 @@ export async function upsertAgendaCompletaAction(
             data: {
               docenteId: docente.id,
               periodo,
+              periodoId: periodoRow.id,
               estado: enviar ? "ENVIADO" : "BORRADOR",
               semanasAgenda,
             },

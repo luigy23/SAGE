@@ -22,6 +22,8 @@ model PeriodoAcademico {
   formulasCurso       FormulaCurso[]
   parametrosGlobales  ParametroGlobal[]
   parametrosModalidad ParametrosModalidad[]
+  agendas             AgendaSemestral[]
+  monitoreos          Monitoreo[]
 
   @@map("periodos_academicos")
 }
@@ -150,6 +152,10 @@ model AgendaSemestral {
   id                          String                      @id @default(cuid())
   docenteId                   String
   periodo                     String
+  // Integridad referencial del período (FK). El string `periodo` se mantiene
+  // denormalizado para las consultas y la matemática de cohortes; `periodoId` da
+  // integridad en BD. Nullable: queda NULL si el nombre no existe como registro.
+  periodoId                   String?
   estado                      EstadoFormulario            @default(BORRADOR)
   observacionesAdmin          String?
   rehabilitada                Boolean                     @default(false)
@@ -166,11 +172,13 @@ model AgendaSemestral {
   actividadesProyeccionSocial ActividadProyeccionSocial[]
   docente                     Docente                     @relation(fields: [docenteId], references: [id], onDelete: Cascade)
   aprobadoPor                 Docente?                    @relation("AgendaAprobadaPor", fields: [aprobadoPorId], references: [id], onDelete: SetNull)
+  periodoRef                  PeriodoAcademico?           @relation(fields: [periodoId], references: [id], onDelete: SetNull)
   cursos                      CursoAgenda[]
   monitoreo                   Monitoreo?
   rehabilitaciones            RehabilitacionAgenda[]
 
   @@unique([docenteId, periodo])
+  @@index([periodoId])
   @@map("agendas_semestrales")
 }
 
@@ -507,6 +515,8 @@ model Monitoreo {
   id                        String                     @id @default(cuid())
   docenteId                 String
   periodo                   String
+  // Integridad referencial del período (FK); el string se mantiene denormalizado.
+  periodoId                 String?
   estado                    EstadoFormulario           @default(BORRADOR)
   createdAt                 DateTime                   @default(now())
   updatedAt                 DateTime                   @updatedAt
@@ -520,6 +530,7 @@ model Monitoreo {
   agenda                    AgendaSemestral            @relation(fields: [agendaId], references: [id], onDelete: Cascade)
   docente                   Docente                    @relation(fields: [docenteId], references: [id], onDelete: Cascade)
   aprobadoPor               Docente?                   @relation("MonitoreoAprobadoPor", fields: [aprobadoPorId], references: [id], onDelete: SetNull)
+  periodoRef                PeriodoAcademico?          @relation(fields: [periodoId], references: [id], onDelete: SetNull)
   rehabilitaciones          RehabilitacionMonitoreo[]
   reportesActividadDocencia ReporteActividadDocencia[]
   reportesDocencia          ReporteDocencia[]
@@ -528,6 +539,7 @@ model Monitoreo {
   reportesProyeccion        ReporteProyeccion[]
 
   @@unique([docenteId, periodo])
+  @@index([periodoId])
   @@map("monitoreos")
 }
 

@@ -466,12 +466,17 @@ export function ActividadCardRow({
                       type="number"
                       min={0}
                       max={actividadCatalogo.cantidadMaxSimultaneos ?? actividadCatalogo.unidadMax ?? undefined}
-                      step={1}
+                      step="1"
                       name={f.name}
                       ref={f.ref}
                       onBlur={f.onBlur}
                       value={Number(f.value) === 0 ? "" : Number(f.value)}
                       placeholder="0"
+                      onKeyDown={(e) => {
+                        if (e.key === '.' || e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-') {
+                          e.preventDefault();
+                        }
+                      }}
                       onChange={(e) => {
                         const raw = e.target.value
                         if (raw === "") { f.onChange(0); return }
@@ -558,20 +563,26 @@ export function ActividadCardRow({
                       <Input
                         type="number"
                         min={0}
-                        max={880}
-                        step="0.5"
+                        max={topeMaxUI !== null ? topeMaxUI : 880}
+                        step="1"
                         name={f.name}
                         ref={f.ref}
                         onBlur={f.onBlur}
                         disabled={requiereProyecto && Boolean(proyectoIdSel)}
                         value={f.value === 0 ? "" : f.value}
                         placeholder="0"
+                        onKeyDown={(e) => {
+                          if (e.key === '.' || e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-') {
+                            e.preventDefault();
+                          }
+                        }}
                         onChange={(e) => {
                           const raw = e.target.value
                           if (raw === "") { f.onChange(0); return }
-                          let val = parseFloat(raw)
+                          let val = parseInt(raw, 10)
                           if (isNaN(val)) val = 0
-                          if (val > 880) val = 880
+                          const currentMax = topeMaxUI !== null ? topeMaxUI : 880
+                          if (val > currentMax) val = currentMax
                           f.onChange(val)
                         }}
                       />

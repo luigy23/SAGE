@@ -21,37 +21,43 @@ export async function CohortesConsejeros({
   if (filas.length === 0) return null
 
   return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/30">
-      <div className="mb-1 flex items-center gap-2 font-medium text-amber-900 dark:text-amber-200">
+    <details className="group rounded-lg border border-amber-200 bg-amber-50/50 text-sm dark:border-amber-900 dark:bg-amber-950/30">
+      <summary className="flex cursor-pointer items-center gap-2 p-3 font-medium text-amber-900 hover:bg-amber-100/50 dark:text-amber-200 dark:hover:bg-amber-900/50">
         <Users className="h-4 w-4" />
-        Consejería del programa — {programa}
+        <span>Consejería del programa — {programa}</span>
+        <span className="ml-auto text-xs font-normal opacity-75 group-open:hidden">
+          Ver estado y liberar
+        </span>
+      </summary>
+      
+      <div className="border-t border-amber-200/50 p-3 pt-2 dark:border-amber-900/50">
+        <p className="mb-2 text-xs text-muted-foreground">
+          Cohortes activas (últimos 6 semestres) y su consejero en {periodo}. Cada cohorte
+          admite un único consejero.
+        </p>
+        <ul className="divide-y border-t border-amber-200/30 pt-1 dark:border-amber-900/30">
+          {filas.map((f) => (
+            <li key={f.cohorte} className="flex items-center justify-between gap-2 py-1.5">
+              <span className="font-mono text-xs">{f.cohorte}</span>
+              {f.consejero ? (
+                <span className="flex items-center gap-2 text-xs">
+                  <span className="font-medium">{f.consejero}</span>
+                  {f.semestreActual != null && f.semestresCompromiso != null && (
+                    <span className="text-muted-foreground">
+                      Sem {f.semestreActual}/{f.semestresCompromiso}
+                    </span>
+                  )}
+                  {canLiberar && f.compromisoId && (
+                    <LiberarCohorteButton compromisoId={f.compromisoId} />
+                  )}
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">— sin consejero</span>
+              )}
+            </li>
+          ))}
+        </ul>
       </div>
-      <p className="mb-2 text-xs text-muted-foreground">
-        Cohortes activas (últimos 6 semestres) y su consejero en {periodo}. Cada cohorte
-        admite un único consejero.
-      </p>
-      <ul className="divide-y">
-        {filas.map((f) => (
-          <li key={f.cohorte} className="flex items-center justify-between gap-2 py-1">
-            <span className="font-mono text-xs">{f.cohorte}</span>
-            {f.consejero ? (
-              <span className="flex items-center gap-2 text-xs">
-                <span className="font-medium">{f.consejero}</span>
-                {f.semestreActual != null && f.semestresCompromiso != null && (
-                  <span className="text-muted-foreground">
-                    Sem {f.semestreActual}/{f.semestresCompromiso}
-                  </span>
-                )}
-                {canLiberar && f.compromisoId && (
-                  <LiberarCohorteButton compromisoId={f.compromisoId} />
-                )}
-              </span>
-            ) : (
-              <span className="text-xs text-muted-foreground">— sin consejero</span>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
+    </details>
   )
 }

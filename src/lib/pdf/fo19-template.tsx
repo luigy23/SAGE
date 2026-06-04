@@ -1,5 +1,6 @@
 import React from "react"
-import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer"
+import { Document, Page, View, Text, StyleSheet, Image } from "@react-pdf/renderer"
+import path from "path"
 import type { AgendaConRelaciones } from "@/lib/types/agenda"
 import type { Docente } from "@/generated/prisma/client"
 import { Watermark } from "./shared/watermark"
@@ -31,20 +32,45 @@ const ACT_COLS: Col[] = [
 // ---- Header institucional ----
 
 function FO19Header() {
+  const logoUsco = path.join(process.cwd(), "public/img/Escudo_de_la_Universidad_Surcolombiana.svg.png")
+  const logoCerts = path.join(process.cwd(), "public/img/Certificaiones-ISO-IQnet.png")
+
   return (
-    <View style={s.header}>
-      <View style={s.headerLogo}>
-        <Text style={s.headerLogoText}>USCO</Text>
+    <View style={s.headerContainer}>
+      {/* Primera fila: Logos y Títulos */}
+      <View style={s.headerTopRow}>
+        <View style={s.headerLogoLeft}>
+          <Image src={logoUsco} style={{ width: 45, height: 50, objectFit: "contain" }} />
+        </View>
+        
+        <View style={s.headerCenterBlock}>
+          <View style={s.headerTitleRed}>
+            <Text style={s.headerUnivText}>UNIVERSIDAD SURCOLOMBIANA</Text>
+            <Text style={s.headerFormacionText}>FORMACIÓN</Text>
+          </View>
+          <View style={s.headerTitleWhite}>
+            <Text style={s.headerDocText}>INFORMACION DE ACTIVIDADES AGENDA</Text>
+            <Text style={s.headerDocText}>SEMESTRAL DOCENTES</Text>
+          </View>
+        </View>
+
+        <View style={s.headerLogoRight}>
+          <Image src={logoCerts} style={{ width: 110, height: 35, objectFit: "contain" }} />
+        </View>
       </View>
-      <View style={s.headerCenter}>
-        <Text style={s.headerUniv}>UNIVERSIDAD SURCOLOMBIANA</Text>
-        <Text style={s.headerArea}>GESTIÓN FORMACIÓN</Text>
-        <Text style={s.headerTitle}>AGENDA ACADÉMICA SEMESTRAL</Text>
-      </View>
-      <View style={s.headerMeta}>
-        <Text style={s.headerMetaLine}>CÓDIGO: MI-FOR-FO-19</Text>
-        <Text style={s.headerMetaLine}>VERSIÓN: 5</Text>
-        <Text style={s.headerMetaLine}>VIGENCIA: 2015</Text>
+
+      {/* Segunda fila: Metadatos */}
+      <View style={s.headerMetaRow}>
+        <View style={[s.metaCellRed, { width: 60 }]}><Text style={s.metaTextWhite}>CÓDIGO</Text></View>
+        <View style={[s.metaCellWhite, { width: 100 }]}><Text style={s.metaTextBlack}>MI-FOR-FO-19</Text></View>
+        <View style={[s.metaCellRed, { width: 60 }]}><Text style={s.metaTextWhite}>VERSIÓN</Text></View>
+        <View style={[s.metaCellWhite, { width: 60 }]}><Text style={s.metaTextBlack}>8</Text></View>
+        <View style={[s.metaCellRed, { width: 70 }]}><Text style={s.metaTextWhite}>VIGENCIA</Text></View>
+        <View style={[s.metaCellWhite, { width: 60 }]}><Text style={s.metaTextBlack}>2019</Text></View>
+        <View style={[s.metaCellRed, { width: 60 }]}><Text style={s.metaTextWhite}>PÁGINA</Text></View>
+        <View style={[s.metaCellWhite, { flex: 1 }]}>
+          <Text style={s.metaTextBlack} render={({ pageNumber, totalPages }) => `${pageNumber} de ${totalPages}`} />
+        </View>
       </View>
     </View>
   )
@@ -347,61 +373,96 @@ const s = StyleSheet.create({
     backgroundColor: "white",
   },
   // Header
-  header: {
-    flexDirection: "row",
+  headerContainer: {
     borderWidth: 1,
-    borderColor: BORDER,
+    borderColor: RED,
     marginBottom: 0,
-    height: 55,
   },
-  headerLogo: {
-    width: 60,
+  headerTopRow: {
+    flexDirection: "row",
+    height: 60,
+  },
+  headerLogoLeft: {
+    width: 70,
     justifyContent: "center",
     alignItems: "center",
     borderRightWidth: 1,
-    borderRightColor: BORDER,
+    borderRightColor: RED,
     backgroundColor: "white",
+    padding: 2,
   },
-  headerLogoText: {
-    fontSize: 14,
-    fontFamily: "Helvetica-Bold",
-    color: RED,
+  headerCenterBlock: {
+    flex: 1,
+    flexDirection: "column",
   },
-  headerCenter: {
+  headerTitleRed: {
     flex: 1,
     backgroundColor: RED,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: RED,
   },
-  headerUniv: {
+  headerUnivText: {
+    fontSize: 12,
+    fontFamily: "Helvetica-Bold",
+    color: "white",
+  },
+  headerFormacionText: {
     fontSize: 11,
     fontFamily: "Helvetica-Bold",
     color: "white",
-  },
-  headerArea: {
-    fontSize: 7.5,
-    color: "white",
     marginTop: 2,
   },
-  headerTitle: {
-    fontSize: 9,
+  headerTitleWhite: {
+    flex: 1,
+    backgroundColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerDocText: {
+    fontSize: 10,
     fontFamily: "Helvetica-Bold",
-    color: "white",
-    marginTop: 2,
+    color: "black",
   },
-  headerMeta: {
+  headerLogoRight: {
     width: 140,
     justifyContent: "center",
-    paddingHorizontal: 6,
+    alignItems: "center",
     borderLeftWidth: 1,
-    borderLeftColor: BORDER,
+    borderLeftColor: RED,
     backgroundColor: "white",
+    padding: 2,
   },
-  headerMetaLine: {
-    fontSize: 7.5,
-    color: "#333",
-    marginBottom: 2,
+  headerMetaRow: {
+    flexDirection: "row",
+    borderTopWidth: 1,
+    borderTopColor: RED,
+    height: 16,
+  },
+  metaCellRed: {
+    backgroundColor: RED,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRightWidth: 1,
+    borderRightColor: RED,
+  },
+  metaTextWhite: {
+    fontSize: 8,
+    fontFamily: "Helvetica-Bold",
+    color: "white",
+  },
+  metaCellWhite: {
+    backgroundColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
+    borderRightWidth: 1,
+    borderRightColor: RED,
+  },
+  metaTextBlack: {
+    fontSize: 8,
+    fontFamily: "Helvetica-Bold",
+    color: "black",
   },
   // Info fields
   fieldRow: {

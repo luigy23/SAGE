@@ -73,10 +73,17 @@ export async function createAgendaAction(_prevState: unknown, formData: FormData
     return { error: "Ya existe una agenda para este periodo." }
   }
 
+  // Integridad referencial: guardamos también el id del período (FK), no solo el texto.
+  const periodoRow = await prisma.periodoAcademico.findUnique({
+    where: { nombre: periodo },
+    select: { id: true },
+  })
+
   const agenda = await prisma.agendaSemestral.create({
     data: {
       docenteId: user.id,
       periodo,
+      periodoId: periodoRow?.id ?? null,
     },
   })
 

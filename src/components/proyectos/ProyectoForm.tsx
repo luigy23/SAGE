@@ -18,7 +18,11 @@ import {
 } from "@/components/ui/select"
 import { crearProyectoSchema, type CrearProyectoInput } from "@/lib/schemas/proyecto-schema"
 import { periodosQueAbarca, type PeriodoRango } from "@/lib/utils/periodo"
-import { crearProyectoAction, enviarProyectoAction } from "@/lib/actions/proyecto-actions"
+import {
+  crearProyectoAction,
+  enviarProyectoAction,
+  actualizarProyectoAction,
+} from "@/lib/actions/proyecto-actions"
 import {
   ParticipantesSelector,
   type DocenteParticipante,
@@ -45,13 +49,24 @@ const ROL_POR_TIPO: Record<string, { value: string; label: string }[]> = {
 export function ProyectoForm({
   creadorId,
   periodos,
+  proyectoId,
+  initial,
 }: {
   creadorId: string
   periodos: PeriodoRango[]
+  /** Si se pasa, el form edita ese proyecto (BORRADOR o RECHAZADO) en vez de crear. */
+  proyectoId?: string
+  initial?: {
+    values: Partial<CrearProyectoInput>
+    participantes: DocenteParticipante[]
+  }
 }) {
   const router = useRouter()
+  const esEdicion = Boolean(proyectoId)
   const [pending, startTransition] = useTransition()
-  const [participantes, setParticipantes] = useState<DocenteParticipante[]>([])
+  const [participantes, setParticipantes] = useState<DocenteParticipante[]>(
+    initial?.participantes ?? [],
+  )
 
   function actualizarParticipantes(lista: DocenteParticipante[]) {
     setParticipantes(lista)
@@ -67,13 +82,17 @@ export function ProyectoForm({
   const form = useForm<CrearProyectoInput>({
     resolver: zodResolver(crearProyectoSchema),
     defaultValues: {
-      titulo: "",
-      descripcion: "",
-      tipo: undefined,
-      rolDocente: undefined,
-      entidadConvocatoria: "",
-      fechaInicio: undefined,
-      fechaFin: undefined,
+      titulo: initial?.values.titulo ?? "",
+      descripcion: initial?.values.descripcion ?? "",
+      tipo: initial?.values.tipo,
+      rolDocente: initial?.values.rolDocente,
+      entidadConvocatoria: initial?.values.entidadConvocatoria ?? "",
+      fechaInicio: initial?.values.fechaInicio,
+      fechaFin: initial?.values.fechaFin,
+      participantes: initial?.participantes.map((p) => ({
+        docenteId: p.id,
+        rol: p.rol as "INVESTIGADOR_PRINCIPAL" | "COINVESTIGADOR" | "COORDINADOR" | "COGESTOR",
+      })),
     },
   })
 
@@ -86,6 +105,16 @@ export function ProyectoForm({
 
   function handleGuardar(data: CrearProyectoInput) {
     startTransition(async () => {
+      if (proyectoId) {
+        const res = await actualizarProyectoAction(proyectoId, data)
+        if ("error" in res) {
+          toast.error(res.error)
+          return
+        }
+        toast.success("Cambios guardados")
+        router.refresh()
+        return
+      }
       const res = await crearProyectoAction(data)
       if ("error" in res) {
         toast.error(res.error)
@@ -98,19 +127,31 @@ export function ProyectoForm({
 
   function handleEnviar(data: CrearProyectoInput) {
     startTransition(async () => {
-      const crearRes = await crearProyectoAction(data)
-      if ("error" in crearRes) {
-        toast.error(crearRes.error)
-        return
+      let pid = proyectoId
+      if (pid) {
+        const upd = await actualizarProyectoAction(pid, data)
+        if ("error" in upd) {
+          toast.error(upd.error)
+          return
+        }
+      } else {
+        const crearRes = await crearProyectoAction(data)
+        if ("error" in crearRes) {
+          toast.error(crearRes.error)
+          return
+        }
+        pid = crearRes.id
       }
-      const enviarRes = await enviarProyectoAction(crearRes.id)
+      const enviarRes = await enviarProyectoAction(pid)
       if ("error" in enviarRes) {
         toast.error(enviarRes.error)
-        router.push(`/proyectos/${crearRes.id}`)
+        if (!proyectoId) router.push(`/proyectos/${pid}`)
+        else router.refresh()
         return
       }
       toast.success("Proyecto enviado a revisión")
-      router.push(`/proyectos/${crearRes.id}`)
+      if (proyectoId) router.refresh()
+      else router.push(`/proyectos/${pid}`)
     })
   }
 
@@ -301,7 +342,7 @@ export function ProyectoForm({
           className="gap-2"
         >
           <Save className="h-4 w-4" />
-          Guardar borrador
+          {esEdicion ? "Guardar cambios" : "Guardar borrador"}
         </Button>
         <Button
           type="button"
@@ -310,7 +351,11 @@ export function ProyectoForm({
           className="gap-2"
         >
           <Send className="h-4 w-4" />
-          {pending ? "Enviando..." : "Enviar a revisión"}
+          {pending
+            ? "Enviando..."
+            : esEdicion
+              ? "Reenviar a revisión"
+              : "Enviar a revisión"}
         </Button>
       </div>
     </form>

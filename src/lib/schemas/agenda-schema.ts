@@ -79,7 +79,7 @@ export function createActividadSchema(semanasPeriodo: number = DEFAULT_SEMANAS_P
       .default(0),
     dedicacionPeriodo: z.coerce
       .number()
-      .min(0, "No puede ser negativo")
+      .min(1, "La dedicación debe ser mayor a 0")
       .max(880, "No puede exceder 880 horas en el semestre.")
       .default(0),
     // Cantidad de unidades para actividades con tope por unidad (Art. 11):
@@ -311,7 +311,7 @@ export function createAgendaSchema(
     // Si la actividad no está en el mapa (texto libre legacy o genérico sin tope), se omite.
     if (topesActividades) {
       const validarTopesArray = (
-        arr: { nombre?: string; dedicacionPeriodo?: number; cantidadUnidades?: number; sede?: string | null; cohortes?: string[] }[],
+        arr: { nombre?: string; dedicacionPeriodo?: number; cantidadUnidades?: number; sede?: string | null; cohortes?: string[]; proyectoId?: string | null; cohortesCompromiso?: { cohorte: string; semestres: number }[] }[],
         arrayName: "otrasActividadesDocencia" | "actividadesInvestigacion" | "actividadesProyeccionSocial" | "actividadesGestion",
         categoria: "DOCENCIA" | "INVESTIGACION" | "PROYECCION_SOCIAL" | "GESTION",
       ) => {
@@ -326,12 +326,15 @@ export function createAgendaSchema(
           const cantidadUnidades = Number(act.cantidadUnidades) || 0
 
           // requiereProyectoAprobado — independiente de la rama de topes
-          if (tope.requiereProyectoAprobado && !flags.proyectosActivos) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: `"${nombre}" requiere que tenga un proyecto aprobado activo (Art. 3 Par. 1). Active el flag en su perfil si corresponde.`,
-              path: [arrayName, idx, "nombre"],
-            })
+          if (tope.requiereProyectoAprobado) {
+            // El módulo de proyectos es la fuente de verdad. Se exige vincular el ID.
+            if (!act.proyectoId) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `"${nombre}" requiere que seleccione un proyecto APROBADO del cual usted sea participante (Art. 3 Par. 1).`,
+                path: [arrayName, idx, "proyectoId"],
+              })
+            }
           }
 
           // Sede OBLIGATORIA cuando la actividad es "Uno por Sede" o su tope se
@@ -347,16 +350,19 @@ export function createAgendaSchema(
           // Consejería (Art. 11): cohortes — entre 1 y unidadMax, y cada una vigente
           // (≤ 6 semestres inclusive) respecto del período de la agenda.
           if (tope.topePorUnidad === "COHORTE") {
-            const cohortes = (act.cohortes ?? []).filter((c) => c && c.trim() !== "")
+            const cohortesExistentes = (act.cohortes ?? []).filter((c) => c && c.trim() !== "")
+            const cohortesNuevas = (act.cohortesCompromiso ?? []).map((c) => c.cohorte).filter((c) => c && c.trim() !== "")
+            const totalCohortes = cohortesExistentes.length + cohortesNuevas.length
+            
             const maxCohortes = tope.unidadMax ?? 1
-            if (cohortes.length === 0) {
+            if (totalCohortes === 0) {
               ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 message: `"${nombre}" requiere indicar al menos una cohorte (período de ingreso).`,
                 path: [arrayName, idx, "cohortes"],
               })
             }
-            if (cohortes.length > maxCohortes) {
+            if (totalCohortes > maxCohortes) {
               ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 message: `"${nombre}" admite máximo ${maxCohortes} cohorte(s) simultánea(s) (Art. 11).`,
@@ -364,7 +370,7 @@ export function createAgendaSchema(
               })
             }
             if (periodoActual) {
-              for (const c of cohortes) {
+              for (const c of [...cohortesExistentes, ...cohortesNuevas]) {
                 if (!cohorteVigente(c, periodoActual)) {
                   ctx.addIssue({
                     code: z.ZodIssueCode.custom,
@@ -378,6 +384,13 @@ export function createAgendaSchema(
 
           if (tope.topePorUnidad !== "NINGUNA" && tope.topeSemestralH !== null) {
             // RAMA A: tope semestral por unidad (Consejería Académica)
+            if (tope.topePorUnidad !== "COHORTE" && cantidadUnidades <= 0) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `Debe indicar la cantidad de ${_unidadLabel(tope.topePorUnidad)}s (mínimo 1).`,
+                path: [arrayName, idx, "cantidadUnidades"],
+              })
+            }
             const unidadesEfectivas = tope.unidadMax !== null
               ? Math.min(cantidadUnidades || 1, tope.unidadMax)
               : (cantidadUnidades || 1)
@@ -392,6 +405,13 @@ export function createAgendaSchema(
             }
           } else if (tope.topePorUnidad !== "NINGUNA" && tope.topeSemanalHPorUnidad !== null) {
             // RAMA B: tope semanal por unidad (Asesorías, Dirección tesis)
+            if (cantidadUnidades <= 0) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `Debe indicar la cantidad de ${_unidadLabel(tope.topePorUnidad)}s (mínimo 1).`,
+                path: [arrayName, idx, "cantidadUnidades"],
+              })
+            }
             if (tope.cantidadMaxSimultaneos !== null && cantidadUnidades > tope.cantidadMaxSimultaneos) {
               ctx.addIssue({
                 code: z.ZodIssueCode.custom,

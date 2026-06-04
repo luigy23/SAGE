@@ -8,9 +8,8 @@ import { periodosQueAbarca } from "@/lib/utils/periodo"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ProyectoStatusBadge } from "@/components/proyectos/ProyectoStatusBadge"
-import { EnviarProyectoButton } from "@/components/proyectos/EnviarProyectoButton"
 import { CancelarProyectoButton } from "@/components/proyectos/CancelarProyectoButton"
-import { CorregirProyectoButton } from "@/components/proyectos/CorregirProyectoButton"
+import { ProyectoForm } from "@/components/proyectos/ProyectoForm"
 import { ArrowLeft, Microscope, Clock } from "lucide-react"
 import { formatFechaInicio } from "@/lib/utils"
 
@@ -56,9 +55,34 @@ export default async function DetalleProyectoPage({
 
   const esCreador = proyecto.creador.id === miId
   const miRol = proyecto.participantes.find((p) => p.docente.id === miId)?.rol ?? null
-  const puedeEnviar = esCreador && proyecto.estado === "BORRADOR"
   const puedeCancelar =
     esCreador && (proyecto.estado === "BORRADOR" || proyecto.estado === "ENVIADO")
+
+  // Edición directa (sin botón "Corregir"): el creador edita en BORRADOR o RECHAZADO.
+  const puedeEditar =
+    esCreador && (proyecto.estado === "BORRADOR" || proyecto.estado === "RECHAZADO")
+  const fechaToInput = (d: Date | null) =>
+    d ? new Date(d).toISOString().slice(0, 10) : undefined
+  const initialProyecto = {
+    values: {
+      titulo: proyecto.titulo,
+      descripcion: proyecto.descripcion ?? "",
+      tipo: proyecto.tipo,
+      rolDocente: miRol ?? undefined,
+      entidadConvocatoria: proyecto.entidadConvocatoria ?? "",
+      fechaInicio: fechaToInput(proyecto.fechaInicio),
+      fechaFin: fechaToInput(proyecto.fechaFin),
+    },
+    participantes: proyecto.participantes
+      .filter((p) => p.docente.id !== proyecto.creador.id)
+      .map((p) => ({
+        id: p.docente.id,
+        nombre: p.docente.nombre,
+        cedula: p.docente.cedula,
+        programa: p.docente.programa,
+        rol: p.rol,
+      })),
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -69,153 +93,135 @@ export default async function DetalleProyectoPage({
             Volver a mis proyectos
           </Link>
         </Button>
-
-        {(puedeEnviar || puedeCancelar) && (
-          <div className="flex flex-wrap gap-2">
-            {puedeEnviar && <EnviarProyectoButton proyectoId={id} />}
-            {puedeCancelar && (
-              <CancelarProyectoButton proyectoId={id} estado={proyecto.estado} />
-            )}
-          </div>
+        {puedeCancelar && (
+          <CancelarProyectoButton proyectoId={id} estado={proyecto.estado} />
         )}
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Microscope className="h-5 w-5" />
-              {proyecto.titulo}
-            </CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Creado el{" "}
-              {new Date(proyecto.createdAt).toLocaleString("es-CO")}
-            </p>
-            {proyecto.updatedAt.getTime() !== proyecto.createdAt.getTime() && (
-              <p className="text-xs text-muted-foreground">
-                Actualizado el{" "}
-                {new Date(proyecto.updatedAt).toLocaleString("es-CO")}
-              </p>
-            )}
-          </div>
-          <ProyectoStatusBadge estado={proyecto.estado} />
-        </CardHeader>
-
-        <CardContent>
-          <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-xs font-medium text-muted-foreground">
-                Tipo
-              </dt>
-              <dd>{TIPO_LABEL[proyecto.tipo] ?? proyecto.tipo}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-muted-foreground">
-                Mi rol en el proyecto
-              </dt>
-              <dd>{miRol ? (ROL_LABEL[miRol] ?? miRol) : "—"}</dd>
-            </div>
-            {proyecto.entidadConvocatoria && (
-              <div>
-                <dt className="text-xs font-medium text-muted-foreground">
-                  Entidad / Convocatoria
-                </dt>
-                <dd>{proyecto.entidadConvocatoria}</dd>
-              </div>
-            )}
-            {(proyecto.fechaInicio || proyecto.fechaFin) && (
-              <div>
-                <dt className="text-xs font-medium text-muted-foreground">
-                  Tiempo del proyecto
-                </dt>
-                <dd>
-                  {proyecto.fechaInicio
-                    ? formatFechaInicio(new Date(proyecto.fechaInicio).toISOString().slice(0, 10))
-                    : "—"}{" "}
-                  →{" "}
-                  {proyecto.fechaFin
-                    ? formatFechaInicio(new Date(proyecto.fechaFin).toISOString().slice(0, 10))
-                    : "—"}
-                  {semestres.length > 0 && (
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
-                      Semestres: {semestres.join(", ")}
-                    </span>
-                  )}
-                </dd>
-              </div>
-            )}
-            {proyecto.descripcion && (
-              <div className="sm:col-span-2">
-                <dt className="text-xs font-medium text-muted-foreground">
-                  Descripción
-                </dt>
-                <dd className="whitespace-pre-wrap">{proyecto.descripcion}</dd>
-              </div>
-            )}
-            <div className="sm:col-span-2">
-              <dt className="text-xs font-medium text-muted-foreground">
-                Participantes
-              </dt>
-              <dd>
-                <ul className="mt-1 space-y-1">
-                  {proyecto.participantes.map((p) => (
-                    <li key={p.id} className="flex items-center justify-between gap-2">
-                      <span>
-                        {p.docente.nombre}
-                        {p.docente.id === miId && " (tu)"} · {ROL_LABEL[p.rol] ?? p.rol}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {p.horasAsignadas != null ? `${p.horasAsignadas} h` : ""}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </dd>
-            </div>
-          </dl>
-        </CardContent>
-      </Card>
-
-      {proyecto.estado === "ENVIADO" && (
-        <div className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300">
-          <Clock className="h-4 w-4 shrink-0" />
-          <span>
-            Tu proyecto está en revisión. Un administrador lo procesará a la
-            brevedad.
-          </span>
-        </div>
-      )}
-
-      {proyecto.estado === "BORRADOR" && proyecto.observacionesAdmin && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950">
-          <p className="text-xs font-medium text-amber-900 dark:text-amber-200">
-            Recomendaciones de la última revisión (corregí esto antes de reenviar)
-          </p>
-          <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
-            {proyecto.observacionesAdmin}
-          </p>
-        </div>
-      )}
-
-      {proyecto.estado === "RECHAZADO" && (
+      {/* Nota de la última revisión (motivo de rechazo) — visible al editar directo. */}
+      {proyecto.estado === "RECHAZADO" && proyecto.observacionesAdmin && (
         <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950">
           <p className="text-xs font-medium text-red-900 dark:text-red-200">
-            Proyecto rechazado{proyecto.observacionesAdmin ? " — motivo" : ""}
+            Motivo del rechazo
           </p>
-          {proyecto.observacionesAdmin && (
-            <p className="mt-1 text-sm text-red-800 dark:text-red-300">
-              {proyecto.observacionesAdmin}
-            </p>
-          )}
-          {esCreador && (
-            <>
-              <p className="mt-2 text-xs text-red-700 dark:text-red-400">
-                Podés corregirlo y reenviarlo sin esperar al revisor.
-              </p>
-              <CorregirProyectoButton proyectoId={id} />
-            </>
-          )}
+          <p className="mt-1 text-sm text-red-800 dark:text-red-300">
+            {proyecto.observacionesAdmin}
+          </p>
+          <p className="mt-2 text-xs text-red-700 dark:text-red-400">
+            Corrige lo necesario abajo y presiona “Reenviar a revisión”.
+          </p>
         </div>
+      )}
+
+      {puedeEditar ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Microscope className="h-5 w-5" />
+              {proyecto.estado === "RECHAZADO" ? "Corregir proyecto" : "Editar proyecto"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ProyectoForm
+              creadorId={proyecto.creador.id}
+              periodos={periodos}
+              proyectoId={id}
+              initial={initialProyecto}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Microscope className="h-5 w-5" />
+                  {proyecto.titulo}
+                </CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Creado el {new Date(proyecto.createdAt).toLocaleString("es-CO")}
+                </p>
+                {proyecto.updatedAt.getTime() !== proyecto.createdAt.getTime() && (
+                  <p className="text-xs text-muted-foreground">
+                    Actualizado el {new Date(proyecto.updatedAt).toLocaleString("es-CO")}
+                  </p>
+                )}
+              </div>
+              <ProyectoStatusBadge estado={proyecto.estado} />
+            </CardHeader>
+
+            <CardContent>
+              <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground">Tipo</dt>
+                  <dd>{TIPO_LABEL[proyecto.tipo] ?? proyecto.tipo}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground">
+                    Mi rol en el proyecto
+                  </dt>
+                  <dd>{miRol ? (ROL_LABEL[miRol] ?? miRol) : "—"}</dd>
+                </div>
+                {proyecto.entidadConvocatoria && (
+                  <div>
+                    <dt className="text-xs font-medium text-muted-foreground">
+                      Entidad / Convocatoria
+                    </dt>
+                    <dd>{proyecto.entidadConvocatoria}</dd>
+                  </div>
+                )}
+                {(proyecto.fechaInicio || proyecto.fechaFin) && (
+                  <div>
+                    <dt className="text-xs font-medium text-muted-foreground">
+                      Tiempo del proyecto
+                    </dt>
+                    <dd>
+                      {proyecto.fechaInicio ? formatFechaInicio(fechaToInput(proyecto.fechaInicio)!) : "—"}{" "}
+                      → {proyecto.fechaFin ? formatFechaInicio(fechaToInput(proyecto.fechaFin)!) : "—"}
+                      {semestres.length > 0 && (
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          Semestres: {semestres.join(", ")}
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                )}
+                {proyecto.descripcion && (
+                  <div className="sm:col-span-2">
+                    <dt className="text-xs font-medium text-muted-foreground">Descripción</dt>
+                    <dd className="whitespace-pre-wrap">{proyecto.descripcion}</dd>
+                  </div>
+                )}
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium text-muted-foreground">Participantes</dt>
+                  <dd>
+                    <ul className="mt-1 space-y-1">
+                      {proyecto.participantes.map((p) => (
+                        <li key={p.id} className="flex items-center justify-between gap-2">
+                          <span>
+                            {p.docente.nombre}
+                            {p.docente.id === miId && " (tú)"} · {ROL_LABEL[p.rol] ?? p.rol}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {p.horasAsignadas != null ? `${p.horasAsignadas} h` : ""}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
+
+          {proyecto.estado === "ENVIADO" && (
+            <div className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300">
+              <Clock className="h-4 w-4 shrink-0" />
+              <span>Tu proyecto está en revisión. La autoridad académica lo procesará pronto.</span>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
