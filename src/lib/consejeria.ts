@@ -243,3 +243,87 @@ export async function getCohortesConsejeros(
     }
   })
 }
+
+// ============================================================================
+// Listado de consejeros para la autoridad académica (Decano / Jefe).
+// El Decano ve los consejeros de TODA su facultad; el Jefe, los de su programa.
+// ============================================================================
+
+type ScopeAutoridad = {
+  tipo: "SUPERADMIN" | "DECANO" | "JEFE" | null
+  ambitoValor: string | null
+}
+
+/** Una cohorte que un docente lleva como consejero, con "semestre X de Y". */
+export type CohorteDeConsejero = {
+  cohorte: string
+  semestreActual: number
+  semestresCompromiso: number
+}
+
+/** Un docente consejero con sus cohortes activas, agrupadas. */
+export type ConsejeroDeAmbito = {
+  docenteId: string
+  nombre: string
+  programa: string
+  facultad: string
+  cohortes: CohorteDeConsejero[]
+}
+
+/**
+ * Filtro de ámbito sobre los compromisos de consejería:
+ *  - SUPERADMIN: todos.
+ *  - DECANO: por facultad del docente (la cohorte vive en algún programa de la facultad).
+ *  - JEFE: por programa del compromiso (= programa del docente).
+ * Igualdad exacta (no `contains`) por seguridad. Fail-closed si falta el ámbito.
+ */
+function scopeConsejeria(autoridad: ScopeAutoridad): Prisma.ConsejeriaCompromisoWhereInput {
+  if (autoridad.tipo === "SUPERADMIN") return {}
+  if (autoridad.tipo === "DECANO") {
+    return { docente: { facultad: autoridad.ambitoValor ?? " " } }
+  }
+  // JEFE (o cualquier otro) — acotar al programa.
+  return { programa: autoridad.ambitoValor ?? " " }
+}
+
+/**
+ * Lista los docentes consejeros del ámbito de la autoridad, con sus cohortes
+ * ACTIVAS en `periodo` (agrupadas por docente). Solo lectura.
+ */
+export async function listConsejerosDeAmbito(
+  autoridad: ScopeAutoridad,
+  periodo: string,
+): Promise<ConsejeroDeAmbito[]> {
+  if (autoridad.tipo === null) return []
+
+  const compromisos = await prisma.consejeriaCompromiso.findMany({
+    where: { estado: "ACTIVO", ...scopeConsejeria(autoridad) },
+    include: { docente: { select: { id: true, nombre: true, programa: true, facultad: true } } },
+    orderBy: [{ programa: "asc" }, { cohorte: "asc" }],
+  })
+
+  const porDocente = new Map<string, ConsejeroDeAmbito>()
+  for (const c of compromisos) {
+    if (!activoEnPeriodo(c, periodo)) continue
+    let row = porDocente.get(c.docenteId)
+    if (!row) {
+      row = {
+        docenteId: c.docenteId,
+        nombre: c.docente.nombre,
+        programa: c.docente.programa,
+        facultad: c.docente.facultad,
+        cohortes: [],
+      }
+      porDocente.set(c.docenteId, row)
+    }
+    row.cohortes.push({
+      cohorte: c.cohorte,
+      semestreActual: semestresEntre(c.periodoInicio, periodo) + 1,
+      semestresCompromiso: c.semestresCompromiso,
+    })
+  }
+
+  return [...porDocente.values()].sort(
+    (a, b) => a.programa.localeCompare(b.programa) || a.nombre.localeCompare(b.nombre),
+  )
+}

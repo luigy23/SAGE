@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Calendar, ClipboardCheck, Microscope, UserCog } from "lucide-react"
+import { Calendar, ClipboardCheck, Microscope, UserCog, Users } from "lucide-react"
 import { getProyectosParaGestion } from "@/lib/actions/proyecto-actions"
 import { listSolicitudesParaGestion } from "@/lib/actions/solicitud-perfil"
 
@@ -43,6 +43,12 @@ export default async function GestionHubPage() {
         descripcion="Cambios de datos de tus docentes."
         href="/gestion/perfiles"
         pendientes={solicitudes.total}
+      />
+      <HubCard
+        icon={<Users className="h-4 w-4" />}
+        titulo="Consejeros"
+        descripcion="Consejería académica por cohorte (Art. 11)."
+        href="/gestion/consejeria"
       />
     </div>
   )

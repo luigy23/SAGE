@@ -150,6 +150,17 @@ export function AppSidebar({
                         </Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={pathname.startsWith("/gestion/consejeria")}
+                      >
+                        <Link href="/gestion/consejeria">
+                          <Users />
+                          <span>Consejeros</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
                   </SidebarMenuSub>
                 </SidebarMenuItem>
               )}
