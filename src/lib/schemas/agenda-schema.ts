@@ -40,33 +40,32 @@ export function createCursoAgendaSchema(
       .int("Debe ser un número entero")
       .min(0, "No puede ser negativo")
       .max(15, "Revise el valor. Un curso no suele exceder 15 créditos."),
-    // Semanas de CLASE del curso. Default y TOPE = semanas_clases (16). Las clases
-    // no pueden exceder las semanas de clase configuradas (semanas_clases), aunque
-    // el contrato del docente abarque más semanas.
+    // Semanas de CLASE del curso. Fijas desde el parámetro semanas_clases (16):
+    // el docente NO las edita. Se acepta cualquier entrada pero el transform la
+    // sobreescribe con semanasClases, así el valor guardado siempre es el del parámetro.
     semanas: z.coerce
       .number()
       .int("Debe ser un número entero")
       .min(0, "No puede ser negativo")
-      .max(semanasClases, `Máximo ${semanasClases} semanas de clase por curso.`)
       .default(semanasClases),
 
     dedicacionPeriodo: z.coerce.number().optional().default(0),
   }).transform((data) => {
     // Art. 3 Par. 4 Acuerdo 048: factor varía según tipo de curso.
-    // El curso se calcula sobre sus SEMANAS DE CLASE (data.semanas, default 16),
-    // no sobre las semanas del contrato. Coincide con SilentDedicacionCalc, que
-    // también multiplica por el campo `semanas` del curso.
+    // El curso se calcula sobre las SEMANAS DE CLASE del parámetro (semanasClases),
+    // no sobre las semanas del contrato ni un valor elegido por el docente. Coincide
+    // con SilentDedicacionCalc, que también fuerza `semanas` = semanasClases.
     // Guard horas > 0 igual al de SilentDedicacionCalc (constanteSuma no aplica si no hay horas).
     const f = FACTOR_POR_TIPO[data.tipoCurso ?? "TEORICO_PRACTICO"] ?? { factorHoras: 1.5, constanteSuma: 1 }
     const horasSemanalesCalculadas = data.horasPresenciales > 0
       ? (data.horasPresenciales * f.factorHoras) + f.constanteSuma
       : 0
-    const semanasClasesEf = Number(data.semanas) > 0 ? Number(data.semanas) : semanasClases
-    const calculoLegalTotal = horasSemanalesCalculadas * semanasClasesEf
+    const calculoLegalTotal = horasSemanalesCalculadas * semanasClases
 
     return {
       ...data,
-      dedicacionPeriodo: calculoLegalTotal
+      semanas: semanasClases,
+      dedicacionPeriodo: calculoLegalTotal,
     }
   })
 }

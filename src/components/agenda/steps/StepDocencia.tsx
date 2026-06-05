@@ -13,7 +13,6 @@ import type { ActividadCatalogoOption } from "@/components/agenda/ActividadCatal
 import type { FormulasCursos } from "@/lib/actions/formulas"
 import { ActividadCardRow, type ConsejeriaCardData } from "@/components/agenda/ActividadCardRow"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   Card,
   CardContent,
@@ -66,8 +65,6 @@ export function SilentDedicacionCalc({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const horasPresenciales = useWatch({ name: `cursos.${cursoIndex}.horasPresenciales` as any }) as number
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const semanas = useWatch({ name: `cursos.${cursoIndex}.semanas` as any }) as number
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tipoCurso = useWatch({ name: `cursos.${cursoIndex}.tipoCurso` as any }) as string | null | undefined
 
   useEffect(() => {
@@ -75,11 +72,12 @@ export function SilentDedicacionCalc({
     // Usa formula de DB (o fallback Acuerdo 048 Art. 3 Par. 4) según tipo de curso
     const f = formulas[tipoCurso as keyof FormulasCursos] ?? FACTOR_FALLBACK[tipoCurso ?? ""] ?? { factorHoras: 1.5, constanteSuma: 1 }
     const semanales = horas > 0 ? (horas * f.factorHoras) + f.constanteSuma : 0
-    // El curso se calcula sobre sus SEMANAS DE CLASE (campo `semanas`, default 16),
-    // no sobre las semanas del contrato. Si el campo aún no tiene valor, usa el default.
-    const semanasEf = Number(semanas) > 0 ? Number(semanas) : semanasClases
-    setValue(`cursos.${cursoIndex}.dedicacionPeriodo`, semanales * semanasEf, { shouldValidate: true })
-  }, [horasPresenciales, semanas, semanasClases, cursoIndex, setValue, tipoCurso, formulas])
+    // Las SEMANAS DE CLASE del curso son fijas: salen del parámetro semanas_clases
+    // y NO las edita el docente. Las forzamos en el form para que el cálculo y el
+    // guardado siempre usen el valor del parámetro (incluso en borradores viejos).
+    setValue(`cursos.${cursoIndex}.semanas`, semanasClases)
+    setValue(`cursos.${cursoIndex}.dedicacionPeriodo`, semanales * semanasClases, { shouldValidate: true })
+  }, [horasPresenciales, semanasClases, cursoIndex, setValue, tipoCurso, formulas])
 
   // Renders nothing — purely a side-effect hook
   return null
@@ -162,35 +160,22 @@ function CursoCardRow({
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Hrs. presenciales/sem</p>
-              <p className="font-semibold tabular-nums">{horasPresenciales}</p>
+              <p className="font-semibold tabular-nums" data-testid={`curso-${index}-horas`}>{horasPresenciales}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Semanas de clase</p>
-              <FormField
-                control={control}
-                name={`cursos.${index}.semanas`}
-                render={({ field: f }) => (
-                  <FormItem className="space-y-0">
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={semanasClases}
-                        value={f.value ?? ""}
-                        onChange={(e) =>
-                          f.onChange(e.target.value === "" ? "" : Number(e.target.value))
-                        }
-                        className="h-7 w-16 px-2 py-0 font-semibold tabular-nums"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* Fijas desde el parámetro semanas_clases — no editable por el docente. */}
+              <p
+                className="font-semibold tabular-nums"
+                title="Semanas de clase parametrizadas (semanas_clases)"
+                data-testid={`curso-${index}-semanas`}
+              >
+                {semanasClases}
+              </p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Total semestre (Art. 048)</p>
-              <p className="font-semibold tabular-nums text-primary">
+              <p className="font-semibold tabular-nums text-primary" data-testid={`curso-${index}-total`}>
                 {Math.round((dedicacionPeriodo || 0) * 10) / 10}h
               </p>
             </div>
