@@ -34,6 +34,15 @@ import {
   HORAS_POR_COHORTE,
   MAX_COHORTES,
 } from "./consejeria"
+import {
+  PERIODO_VISTA,
+  CONSEJEROS,
+  PROGRAMA_A,
+  PROGRAMA_B,
+  COHORTE_VISTA,
+  DECANO_VISTA,
+  JEFE_VISTA,
+} from "./consejeria-vista"
 
 function makePrisma() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL })
@@ -559,12 +568,111 @@ export async function prepararEscenarioConsejeria() {
   }
 }
 
+/**
+ * Deja la base lista para el test de la VISTA de consejeros (/gestion/consejeria):
+ *  1. Período activo "2025-2".
+ *  2. Crea 2 consejeros (cátedra) en programas distintos de una misma facultad.
+ *  3. Crea un Decano (facultad) y un Jefe (programa A) con autoridad académica.
+ *  4. Siembra los compromisos ACTIVOS directo en DB (probamos la VISTA, no la reserva).
+ */
+export async function prepararEscenarioConsejeriaVista() {
+  const prisma = makePrisma()
+  try {
+    // 1) Período activo "2025-2" --------------------------------------------
+    await prisma.periodoAcademico.updateMany({
+      where: { nombre: PERIODO_VISTA },
+      data: {
+        estado: "ABIERTO",
+        agendaDesde: new Date("2020-01-01T00:00:00Z"),
+        agendaHasta: new Date("2031-01-01T00:00:00Z"),
+      },
+    })
+
+    // 2) Consejeros (cátedra) -----------------------------------------------
+    const docenteIds: Record<string, string> = {}
+    for (const c of CONSEJEROS) {
+      const passwordHash = await bcrypt.hash(c.password, 10)
+      const comun = {
+        password: passwordHash,
+        nombre: c.nombre,
+        cedula: c.cedula,
+        rol: "DOCENTE" as const,
+        estadoCuenta: "ACTIVO" as const,
+        sedeBase: c.sedeBase,
+        modalidad: c.modalidad,
+        facultad: c.facultad,
+        programa: c.programa,
+        doctorado: false,
+        cargoAdministrativo: false,
+        tipoCargo: null,
+        proyectosActivos: false,
+        semanasVinculacion: 16,
+      }
+      const d = await prisma.docente.upsert({
+        where: { email: c.email },
+        update: comun,
+        create: { email: c.email, ...comun },
+      })
+      docenteIds[c.email] = d.id
+    }
+
+    // 3) Decano (facultad) y Jefe (programa A) con autoridad académica -------
+    for (const a of [DECANO_VISTA, JEFE_VISTA]) {
+      const passwordHash = await bcrypt.hash(a.password, 10)
+      const comun = {
+        password: passwordHash,
+        nombre: a.nombre,
+        cedula: a.cedula,
+        rol: "DOCENTE" as const,
+        estadoCuenta: "ACTIVO" as const,
+        sedeBase: "NEIVA" as const,
+        modalidad: "PLANTA_TC" as const,
+        facultad: a.facultad,
+        programa: a.programa,
+        doctorado: false,
+        cargoAdministrativo: true,
+        tipoCargo: a.tipoCargo,
+        cargoAmbitoValor: a.cargoAmbitoValor,
+        proyectosActivos: false,
+      }
+      await prisma.docente.upsert({
+        where: { email: a.email },
+        update: comun,
+        create: { email: a.email, ...comun },
+      })
+    }
+
+    // 4) Compromisos ACTIVOS sembrados directo (uno por programa) -----------
+    await prisma.consejeriaCompromiso.deleteMany({
+      where: { programa: { in: [PROGRAMA_A, PROGRAMA_B] } },
+    })
+    for (const c of CONSEJEROS) {
+      await prisma.consejeriaCompromiso.create({
+        data: {
+          docenteId: docenteIds[c.email],
+          programa: c.programa,
+          cohorte: COHORTE_VISTA,
+          periodoInicio: PERIODO_VISTA,
+          semestresCompromiso: c.semestresCompromiso,
+          creadaEnPeriodo: PERIODO_VISTA,
+          estado: "ACTIVO",
+        },
+      })
+    }
+
+    return docenteIds
+  } finally {
+    await prisma.$disconnect()
+  }
+}
+
 if (require.main === module) {
   Promise.all([
     prepararEscenario(),
     prepararEscenarioCalculos(),
     prepararEscenarioModalidades(),
     prepararEscenarioConsejeria(),
+    prepararEscenarioConsejeriaVista(),
   ])
     .then((r) => {
       console.log("Escenario listo:", r)
