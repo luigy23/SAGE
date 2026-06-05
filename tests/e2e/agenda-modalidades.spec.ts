@@ -6,6 +6,7 @@ import {
   type Escenario,
   type Paso,
 } from "./fixtures/modalidades"
+import { anunciar } from "./fixtures/anunciar"
 
 /**
  * E2E — La agenda FO-19 calcula y valida DISTINTO según la modalidad (Acuerdo 048),
@@ -58,6 +59,7 @@ async function ejecutarPasos(page: Page, pasos: Paso[]) {
 
   // Verifica que el primer curso usa semanas_clases (16) y NO es editable.
   if (cursos.length > 0) {
+    await anunciar(page, "El curso usa semanas_clases (16)", "Igual en toda modalidad; el docente no puede editar las semanas del curso")
     await expect(page.getByTestId("curso-0-semanas")).toHaveText(String(SEMANAS_CLASES))
     await expect(page.locator(`input[name="cursos.0.semanas"]`)).toHaveCount(0)
   }
@@ -95,6 +97,7 @@ function correrEscenario(e: Escenario) {
     await page.getByRole("button", { name: "Crear Agenda" }).click()
 
     // ── 2. Tope semestral (denominador) según la modalidad ──────────────────
+    await anunciar(page, `Tope semestral de ${e.modKey}`, `El encabezado debe mostrar ${e.topeSemestral}h como límite del semestre`)
     await expect(
       page.getByText(new RegExp(`/\\s*${e.topeSemestral}\\s*hrs/semestre`))
     ).toBeVisible({ timeout: 15_000 })
@@ -108,6 +111,13 @@ function correrEscenario(e: Escenario) {
     await ejecutarPasos(page, e.pasos)
 
     // ── 5. Ir al último paso y comprobar el resultado del envío ─────────────
+    const explicaResultado =
+      e.resultado === "accept"
+        ? "La agenda cumple los límites → debe ENVIARSE exitosamente"
+        : e.resultado === "block-button"
+          ? "Viola el tope → el botón Enviar debe quedar DESHABILITADO"
+          : "Viola la regla → al confirmar, el envío debe BLOQUEARSE"
+    await anunciar(page, `Regla de envío (${e.variante}): ${e.nota}`, explicaResultado)
     await irAUltimoPaso(page)
     const enviar = page.getByRole("button", { name: /Enviar Agenda/ })
 

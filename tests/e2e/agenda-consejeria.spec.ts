@@ -10,6 +10,7 @@ import {
   COHORTE_FUERA_VENTANA,
   COHORTE_RESERVA,
 } from "./fixtures/consejeria"
+import { anunciar } from "./fixtures/anunciar"
 
 /**
  * E2E — Consejería Académica (Acuerdo 048 Art. 11).
@@ -78,6 +79,7 @@ test.describe("FO-19 — Consejería Académica (Acuerdo 048 Art. 11)", () => {
     await agregarConsejeria(page)
 
     // ── Ventana de 6 semestres: la cohorte vieja NO aparece, la vigente sí ──
+    await anunciar(page, "Ventana de 6 semestres (Art. 11)", `Debe ofrecer ${COHORTE_VIGENTE} (vigente) pero NO ${COHORTE_FUERA_VENTANA} (fuera de ventana)`)
     await page.getByTestId("consejeria-cohorte-select").click()
     await expect(page.getByRole("option", { name: COHORTE_VIGENTE, exact: true })).toBeVisible()
     await expect(page.getByRole("option", { name: COHORTE_FUERA_VENTANA, exact: true })).toHaveCount(0)
@@ -85,13 +87,16 @@ test.describe("FO-19 — Consejería Académica (Acuerdo 048 Art. 11)", () => {
 
     // ── 1 cohorte → tope 48h ────────────────────────────────────────────────
     await agregarCohorte(page, COHORTE_VIGENTE)
+    await anunciar(page, "48 horas por cohorte (Art. 11)", "Con 1 cohorte, el tope de horas debe ser 48")
     await expect(horasInput(page)).toHaveAttribute("max", String(HORAS_POR_COHORTE)) // 48
 
     // ── 2 cohortes → tope 96h (48 × 2) ──────────────────────────────────────
     await agregarCohorte(page, COHORTE_VIGENTE_2)
+    await anunciar(page, "48 h × nº cohortes", "Con 2 cohortes, el tope debe subir a 96")
     await expect(horasInput(page)).toHaveAttribute("max", String(HORAS_POR_COHORTE * 2)) // 96
 
     // ── Máximo 2: la UI ya no permite agregar una tercera ───────────────────
+    await anunciar(page, "Máximo 2 cohortes (Art. 11)", "Al llegar a 2, no debe poder agregarse una tercera")
     await expect(page.getByText(/Alcanzaste el máximo de 2 cohortes/)).toBeVisible()
     await expect(page.getByTestId("consejeria-cohorte-select")).toHaveCount(0)
 
@@ -105,6 +110,7 @@ test.describe("FO-19 — Consejería Académica (Acuerdo 048 Art. 11)", () => {
     await login(page, CONSEJ_RESERVA.email, CONSEJ_RESERVA.password)
     await arrancarDocencia(page)
     await agregarConsejeria(page)
+    await anunciar(page, "Exclusividad (Art. 11) — paso 1", `Docente A toma la cohorte ${COHORTE_RESERVA} y la reservará al enviar`)
     await agregarCohorte(page, COHORTE_RESERVA, 2)
     // El docente escribe las horas (≤ tope 48 por cohorte).
     await expect(horasInput(page)).toHaveAttribute("max", String(HORAS_POR_COHORTE))
@@ -126,6 +132,7 @@ test.describe("FO-19 — Consejería Académica (Acuerdo 048 Art. 11)", () => {
     await login(page, CONSEJ_VERIFICA.email, CONSEJ_VERIFICA.password)
     await arrancarDocencia(page)
     await agregarConsejeria(page)
+    await anunciar(page, "Exclusividad (Art. 11) — paso 2", `Docente B (mismo programa) ya NO debe ver la cohorte ${COHORTE_RESERVA}`)
     await page.getByTestId("consejeria-cohorte-select").click()
     // La cohorte reservada por A no está; otra vigente sí sigue disponible.
     await expect(page.getByRole("option", { name: COHORTE_RESERVA, exact: true })).toHaveCount(0)

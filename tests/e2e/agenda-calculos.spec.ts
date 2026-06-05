@@ -6,6 +6,7 @@ import {
   SEMANAS_CLASES,
   TOTAL_CURSOS,
 } from "./fixtures/calculos"
+import { anunciar } from "./fixtures/anunciar"
 
 /**
  * E2E — Cálculos de horas de la Agenda FO-19 (cursos).
@@ -68,6 +69,12 @@ test("FO-19 — Cálculo de horas por curso (factor × horas + 1) × semanas_cla
     const c = CURSOS[i]
     await agregarCurso(page, c.codigo)
 
+    await anunciar(
+      page,
+      `Cálculo del curso ${c.tipo}`,
+      `(${c.horasPresenciales}h × factor ${c.tipo === "TEORICO" ? 2 : c.tipo === "TEORICO_PRACTICO" ? 1.5 : 1} + 1) × ${SEMANAS_CLASES} semanas = ${c.total}h`,
+    )
+
     // Horas presenciales tomadas del catálogo (horasSemT + horasSemP).
     await expect(page.getByTestId(`curso-${i}-horas`)).toHaveText(String(c.horasPresenciales))
 
@@ -86,6 +93,7 @@ test("FO-19 — Cálculo de horas por curso (factor × horas + 1) × semanas_cla
 
   // ── 4. El total del semestre debe ser la suma de los cursos ────────────────
   // El encabezado fijo (HorasStickyHeader) suma reactivamente las dedicaciones.
+  await anunciar(page, "Total del semestre", `Debe ser la suma de los 3 cursos = ${TOTAL_CURSOS}h`)
   await expect(
     page.getByText(new RegExp(`${TOTAL_CURSOS}\\s*/\\s*\\d+\\s*hrs/semestre`))
   ).toBeVisible({ timeout: 15_000 })
