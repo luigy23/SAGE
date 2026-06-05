@@ -28,27 +28,6 @@ async function getOwnedBorradorAgenda(agendaId: string, userId: string) {
   return { agenda }
 }
 
-/**
- * Autogestión: solo los docentes de PLANTA diligencian su propia agenda. A los
- * No-Planta (cátedra, ocasional, visitante, cátedra visitante, invitado) se la
- * elabora su jefe de programa (Art. 4 Par.1 / Art. 6). Devuelve `{ error }` si el
- * docente en sesión no puede autogestionar; `null` si sí puede.
- */
-async function assertAutogestionPermitida(userId: string): Promise<{ error: string } | null> {
-  const docente = await prisma.docente.findUnique({
-    where: { id: userId },
-    select: { modalidad: true },
-  })
-  if (!docente) return { error: "Docente no encontrado." }
-  if (esModalidadNoPlanta(docente.modalidad)) {
-    return {
-      error:
-        "Tu agenda (FO-19) la diligencia tu jefe de programa. Podrás consultarla aquí cuando esté lista.",
-    }
-  }
-  return null
-}
-
 // ========================================
 // Agenda CRUD
 // ========================================
@@ -56,9 +35,6 @@ async function assertAutogestionPermitida(userId: string): Promise<{ error: stri
 export async function createAgendaAction(_prevState: unknown, formData: FormData) {
   const user = await getAuthenticatedUser()
   if (!user) return { error: "No autenticado." }
-
-  const bloqueo = await assertAutogestionPermitida(user.id)
-  if (bloqueo) return bloqueo
 
   const periodo = formData.get("periodo") as string
 
@@ -95,9 +71,6 @@ export async function deleteAgendaAction(agendaId: string) {
   const user = await getAuthenticatedUser()
   if (!user) return { error: "No autenticado." }
 
-  const bloqueo = await assertAutogestionPermitida(user.id)
-  if (bloqueo) return bloqueo
-
   const result = await getOwnedBorradorAgenda(agendaId, user.id)
   if ("error" in result) return result
 
@@ -110,9 +83,6 @@ export async function deleteAgendaAction(agendaId: string) {
 export async function enviarAgendaAction(agendaId: string) {
   const user = await getAuthenticatedUser()
   if (!user) return { error: "No autenticado." }
-
-  const bloqueo = await assertAutogestionPermitida(user.id)
-  if (bloqueo) return bloqueo
 
   const result = await getOwnedBorradorAgenda(agendaId, user.id)
   if ("error" in result) return result
@@ -168,9 +138,13 @@ export async function corregirAgendaAction(agendaId: string) {
     return { error: "Solo se pueden corregir agendas en estado RECHAZADO." }
   }
 
-  // Quién corrige: PLANTA → el propio docente. NO-PLANTA → el jefe/decano con
-  // autoridad sobre su programa/facultad (es quien le arma la agenda).
-  if (esModalidadNoPlanta(agenda.docente.modalidad)) {
+  // Quién corrige: el propio docente (planta o No-Planta) reabre su agenda. Y, de
+  // forma delegada, el jefe/decano con autoridad sobre el programa/facultad del
+  // docente No-Planta (es quien también puede armarle la agenda).
+  if (agenda.docenteId !== user.id) {
+    if (!esModalidadNoPlanta(agenda.docente.modalidad)) {
+      return { error: "No podés corregir una agenda que no es tuya." }
+    }
     const actorRow = await prisma.docente.findUnique({
       where: { id: user.id },
       select: {
@@ -189,8 +163,6 @@ export async function corregirAgendaAction(agendaId: string) {
       facultad: agenda.docente.facultad,
     })
     if (denied) return denied
-  } else if (agenda.docenteId !== user.id) {
-    return { error: "No podés corregir una agenda que no es tuya." }
   }
 
   await prisma.agendaSemestral.update({

@@ -93,7 +93,7 @@ function CursoCardRow({
   cursosMaestros,
   modalidad,
   sedeBase,
-  semanasPeriodo,
+  semanasClases,
   onSelect,
   onClear,
   onRemove,
@@ -102,8 +102,8 @@ function CursoCardRow({
   cursosMaestros: CursoMaestroOption[]
   modalidad: string
   sedeBase?: string | null
-  /** Tope máximo de semanas elegibles (= semanas del contrato de la agenda). */
-  semanasPeriodo: number
+  /** Tope máximo de semanas de clase por curso (= parámetro semanas_clases). */
+  semanasClases: number
   onSelect: (curso: CursoMaestroOption) => void
   onClear: () => void
   onRemove: () => void
@@ -175,7 +175,7 @@ function CursoCardRow({
                       <Input
                         type="number"
                         min={1}
-                        max={semanasPeriodo}
+                        max={semanasClases}
                         value={f.value ?? ""}
                         onChange={(e) =>
                           f.onChange(e.target.value === "" ? "" : Number(e.target.value))
@@ -278,17 +278,16 @@ export function StepDocencia({
   catalogoActividades: ActividadCatalogoOption[]
   modalidad: string
   sedeBase?: string | null
-  /** Semanas del contrato — tope máximo de semanas por curso. */
+  /** Semanas del contrato/semestre — tope de semanas para las actividades (no para cursos). */
   semanasPeriodo: number
-  /** Semanas de clase por defecto para nuevos cursos (independiente del contrato). */
+  /** Semanas de clase: default y TOPE de semanas por curso (parámetro semanas_clases). */
   semanasClases: number
   esJefeDePrograma?: boolean
   periodo?: string
   consejeria?: ConsejeriaCardData
 }) {
-  // Default de semanas para un curso nuevo: las semanas de clase (16),
-  // nunca por encima del tope del contrato.
-  const semanasCursoDefault = Math.min(semanasClases, semanasPeriodo)
+  // Default (y tope) de semanas para un curso nuevo: las semanas de clase (16).
+  const semanasCursoDefault = semanasClases
   const { control, setValue } = useFormContext<AgendaWizardFormData>()
 
   const {
@@ -375,7 +374,7 @@ export function StepDocencia({
               cursosMaestros={cursosMaestros}
               modalidad={modalidad}
               sedeBase={sedeBase}
-              semanasPeriodo={semanasPeriodo}
+              semanasClases={semanasClases}
               onSelect={(curso) => handleCursoMaestroSelect(index, curso)}
               onClear={() => handleCursoMaestroClear(index)}
               onRemove={() => removeCurso(index)}

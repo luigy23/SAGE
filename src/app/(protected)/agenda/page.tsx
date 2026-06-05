@@ -57,8 +57,10 @@ export default async function AgendaPage() {
 
   if (!docente) redirect("/auth/login")
 
-  // No-Planta: el docente NO diligencia su propia agenda — su jefe de programa la
-  // elabora (Art. 4 Par.1 / Art. 6). Aquí solo puede consultarla en solo lectura.
+  // No-Planta (ocasional, visitante, cátedra, invitado): ahora también diligencia
+  // su propia agenda (igual que planta). Su jefe de programa puede además crearla
+  // de forma delegada desde /gestion/agendas. Sirve para mostrar el contexto del
+  // contrato temporal (semestres cubiertos por el vínculo).
   const esNoPlanta = esModalidadNoPlanta(docente.modalidad)
 
   // ==========================================
@@ -125,9 +127,9 @@ export default async function AgendaPage() {
   })
 
   // Window check — only gates BORRADOR and new agendas, not already-processed ones.
-  // No-Planta nunca diligencia, así que la ventana de entrega no le aplica (solo lectura).
+  // Aplica por igual a planta y No-Planta: ambos diligencian su propia agenda.
   const estadoBypassesWindow = ["ENVIADO", "APROBADO", "RECHAZADO"].includes(agendaEstadoQuick?.estado ?? "")
-  if (!estadoBypassesWindow && !esNoPlanta) {
+  if (!estadoBypassesWindow) {
     const now = new Date()
     const { agendaDesde, agendaHasta } = periodoInfo
 
@@ -332,42 +334,6 @@ export default async function AgendaPage() {
   // CASO A: No hay agenda → Vista de bienvenida
   // ==========================================
   if (!agenda) {
-    // No-Planta: no hay vista de creación propia. La elabora el jefe de programa.
-    if (esNoPlanta) {
-      return (
-        <div className="space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold sm:text-3xl">Agenda Semestral (FO-19)</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Periodo actual:{" "}
-              <Badge variant="secondary" className="ml-1 text-xs">{periodo}</Badge>
-            </p>
-          </div>
-          <Card className="border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <FileText className="h-5 w-5 text-blue-600" />
-                Tu jefe de programa elaborará tu agenda
-              </CardTitle>
-              <CardDescription>
-                Por tu modalidad de vinculación, la Agenda Semestral (FO-19) del período{" "}
-                <span className="font-mono font-medium">{periodo}</span> la diligencia tu jefe de
-                programa. Podrás consultarla aquí en cuanto esté lista.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-
-          <PeriodosCubiertos
-            vinculacionDesde={docente.vinculacionDesde}
-            vinculacionHasta={docente.vinculacionHasta}
-          />
-
-          {/* Lista de agendas de periodos anteriores */}
-          <PreviousAgendasList docenteId={docente.id} currentPeriodo={periodo} />
-        </div>
-      )
-    }
-
     // Inyección forzosa: si el docente tiene cohortes amarradas, la tarjeta de
     // Consejería aparece pre-sembrada (bloqueada, horas vacías).
     const nuevaDefaults: AgendaWizardFormData | undefined = consejeriaInyectada
@@ -406,6 +372,14 @@ export default async function AgendaPage() {
           consejeria={consejeria}
         />
 
+        {/* Contratos temporales (ocasional/visitante): semestres que cubre el vínculo */}
+        {esNoPlanta && (
+          <PeriodosCubiertos
+            vinculacionDesde={docente.vinculacionDesde}
+            vinculacionHasta={docente.vinculacionHasta}
+          />
+        )}
+
         {/* Lista de agendas de periodos anteriores */}
         <PreviousAgendasList
           docenteId={docente.id}
@@ -419,36 +393,6 @@ export default async function AgendaPage() {
   // CASO B: BORRADOR → Resumen + Continuar Editando / Descartar
   // ==========================================
   if (agenda.estado === "BORRADOR") {
-    // No-Planta: el borrador lo está elaborando el jefe de programa. El docente
-    // solo lo consulta en solo lectura (no puede editar ni descartar).
-    if (esNoPlanta) {
-      return (
-        <div className="space-y-4">
-          <div className="flex items-start gap-3 rounded-md border border-blue-200 bg-blue-50 p-4 text-sm dark:border-blue-900 dark:bg-blue-950">
-            <FileText className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
-            <div>
-              <p className="font-semibold text-blue-900 dark:text-blue-200">
-                Agenda en preparación por tu jefe de programa
-              </p>
-              <p className="mt-0.5 text-blue-800 dark:text-blue-300">
-                Esta es una vista previa de solo lectura de tu Agenda Semestral (FO-19) para el
-                período <span className="font-mono font-medium">{agenda.periodo}</span>. Tu jefe de
-                programa la completará y enviará.
-              </p>
-            </div>
-          </div>
-          <PeriodosCubiertos
-            vinculacionDesde={docente.vinculacionDesde}
-            vinculacionHasta={docente.vinculacionHasta}
-          />
-          <AgendaReadOnly
-            agenda={agenda as AgendaConRelaciones}
-            semanasPeriodo={semanasPeriodo}
-          />
-        </div>
-      )
-    }
-
     // Transformar datos de Prisma → formato AgendaWizardFormData (RHF)
     const defaultValues: AgendaWizardFormData = {
       cursos: agenda.cursos.map((c) => ({
@@ -680,9 +624,7 @@ export default async function AgendaPage() {
                   <p className="text-sm leading-relaxed text-red-800/90 dark:text-red-300/90">
                     Tu Agenda Semestral (FO-19) para el período{" "}
                     <span className="font-mono font-semibold">{agenda.periodo}</span> fue rechazada por el administrador.
-                    {esNoPlanta
-                      ? " Tu jefe de programa la corregirá."
-                      : " Podés corregirla y reenviarla (respetando la ventana de entrega)."}
+                    {" Podés corregirla y reenviarla (respetando la ventana de entrega)."}
                   </p>
                   {agenda.observacionesAdmin && (
                     <div className="mt-3 rounded-lg border border-red-200/80 bg-white/70 px-4 py-3 dark:border-red-900/50 dark:bg-red-950/50">
@@ -694,7 +636,7 @@ export default async function AgendaPage() {
                       </p>
                     </div>
                   )}
-                  {!esNoPlanta && <CorregirAgendaButton agendaId={agenda.id} />}
+                  <CorregirAgendaButton agendaId={agenda.id} />
                 </div>
               </div>
             </div>

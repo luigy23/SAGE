@@ -65,18 +65,13 @@ async function resolverDocenteObjetivo(
     email: actorRow.email,
   }
 
-  // Flujo propio del docente. Solo los de PLANTA diligencian su propia agenda;
-  // a los No-Planta (cátedra, ocasional, visitante, cátedra visitante, invitado)
-  // se la elabora su jefe de programa por la vía delegada (Art. 4 Par.1 / Art. 6).
+  // Flujo propio del docente. Todos diligencian su propia agenda — planta y
+  // No-Planta (cátedra, ocasional, visitante, cátedra visitante, invitado). Los
+  // topes y semanas efectivas se resuelven por modalidad en resolveAgendaLimits.
+  // El jefe de programa puede además crearla por la vía delegada (más abajo).
   if (!targetDocenteId || targetDocenteId === actorId) {
     const docente = await prisma.docente.findUnique({ where: { id: actorId } })
     if (!docente) return { error: "Docente no encontrado." }
-    if (esModalidadNoPlanta(docente.modalidad)) {
-      return {
-        error:
-          "Tu agenda (FO-19) la diligencia tu jefe de programa. Podrás consultarla aquí cuando esté lista.",
-      }
-    }
     return { docente, actor, delegada: false }
   }
 

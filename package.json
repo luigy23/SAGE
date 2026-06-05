@@ -9,7 +9,10 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx prisma/seed.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test:e2e": "playwright test",
+    "test:e2e:report": "playwright show-report",
+    "test:e2e:setup": "tsx tests/e2e/fixtures/db.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -46,6 +49,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4.2.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",

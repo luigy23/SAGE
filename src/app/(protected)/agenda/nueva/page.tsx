@@ -1,24 +1,16 @@
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
-import { esModalidadNoPlanta } from "@/lib/auth/autoridad"
 import NuevaAgendaForm from "./NuevaAgendaForm"
 
 /**
- * Creación de agenda propia (self-service). Solo aplica a docentes de PLANTA.
- * A los No-Planta se la elabora su jefe de programa, así que se les redirige a
- * `/agenda` (donde verán la vista de solo lectura / aviso correspondiente).
+ * Creación de agenda propia (self-service). Aplica tanto a docentes de PLANTA
+ * como a No-Planta (ocasional, visitante, cátedra, invitado): todos diligencian
+ * su propia agenda. El jefe de programa puede además crearla de forma delegada
+ * desde /gestion/agendas. Los topes/semanas se resuelven server-side por modalidad.
  */
 export default async function NuevaAgendaPage() {
   const session = await auth()
   if (!session?.user?.id) redirect("/auth/login")
-
-  const docente = await prisma.docente.findUnique({
-    where: { id: session.user.id },
-    select: { modalidad: true },
-  })
-  if (!docente) redirect("/auth/login")
-  if (esModalidadNoPlanta(docente.modalidad)) redirect("/agenda")
 
   return <NuevaAgendaForm />
 }

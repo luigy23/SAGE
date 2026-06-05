@@ -17,7 +17,6 @@ const FACTOR_POR_TIPO: Record<string, { factorHoras: number; constanteSuma: numb
 }
 
 export function createCursoAgendaSchema(
-  semanasPeriodo: number = DEFAULT_SEMANAS_PERIODO,
   semanasClases: number = DEFAULT_SEMANAS_CLASES,
 ) {
   return z.object({
@@ -41,13 +40,14 @@ export function createCursoAgendaSchema(
       .int("Debe ser un número entero")
       .min(0, "No puede ser negativo")
       .max(15, "Revise el valor. Un curso no suele exceder 15 créditos."),
-    // Semanas de CLASE del curso. Default = semanas_clases (16), tope = semanas
-    // del contrato (semanasPeriodo). Independiente de las semanas del contrato.
+    // Semanas de CLASE del curso. Default y TOPE = semanas_clases (16). Las clases
+    // no pueden exceder las semanas de clase configuradas (semanas_clases), aunque
+    // el contrato del docente abarque más semanas.
     semanas: z.coerce
       .number()
       .int("Debe ser un número entero")
       .min(0, "No puede ser negativo")
-      .max(semanasPeriodo, `Máximo ${semanasPeriodo} semanas por semestre.`)
+      .max(semanasClases, `Máximo ${semanasClases} semanas de clase por curso.`)
       .default(semanasClases),
 
     dedicacionPeriodo: z.coerce.number().optional().default(0),
@@ -139,7 +139,7 @@ export function createAgendaWizardBaseSchema(
   semanasClases: number = DEFAULT_SEMANAS_CLASES,
 ) {
   return z.object({
-    cursos: z.array(createCursoAgendaSchema(semanasPeriodo, semanasClases)).default([]),
+    cursos: z.array(createCursoAgendaSchema(semanasClases)).default([]),
     otrasActividadesDocencia: z.array(createActividadSchema(semanasPeriodo)).default([]),
     actividadesInvestigacion: z.array(createActividadSchema(semanasPeriodo)).default([]),
     actividadesProyeccionSocial: z.array(createActividadSchema(semanasPeriodo)).default([]),
@@ -269,7 +269,13 @@ export function createAgendaSchema(
     }
 
     // 2. MÍNIMO DE DOCENCIA (Art. 3)
-    if (minDocencia > 0) {
+    // Excepción (Art. 10/11): los cargos directivos exentos del tope del 20% de
+    // gestión (Decano, Rector/Vicerrectores, Jefes de Programa/Departamento,
+    // Asesores de Rectoría/Vicerrectoría) tienen una dedicación administrativa
+    // (hasta 880h) que les impide físicamente cumplir el piso de docencia. Para
+    // ellos no aplica el mínimo. La regla "Jefe de Programa orienta mínimo un
+    // curso" (Art. 3 Par. 1) sigue vigente arriba e independiente de esto.
+    if (minDocencia > 0 && !flags.excluyeTopeGestion20) {
       const horasDocencia =
         data.cursos.reduce((acc, c) => acc + (Number(c.dedicacionPeriodo) || 0), 0) +
         data.otrasActividadesDocencia.reduce(
