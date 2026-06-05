@@ -19,10 +19,11 @@ import {
   CONSTANTE_SUMA,
 } from "./calculos"
 import {
-  CASOS,
+  ESCENARIOS,
   PERIODO_MOD,
   SEMANAS_PERIODO,
   SEMANAS_NO_PLANTA,
+  CURSO_MEDIANO,
   CURSO_GRANDE,
   ACTIVIDAD_INV_QA,
 } from "./modalidades"
@@ -351,31 +352,24 @@ export async function prepararEscenarioModalidades() {
       else await prisma.parametrosModalidad.create({ data: { ...p, periodoId: null, activo: true } })
     }
 
-    // 4) Curso grande QA + actividad de investigación QA --------------------
-    await prisma.cursoMaestro.upsert({
-      where: { codigo: CURSO_GRANDE.codigo },
-      update: {
-        nombre: CURSO_GRANDE.nombre,
-        creditos: CURSO_GRANDE.creditos,
-        tipo: CURSO_GRANDE.tipo,
+    // 4) Cursos QA (mediano + grande) + actividad de investigación QA -------
+    for (const c of [CURSO_MEDIANO, CURSO_GRANDE]) {
+      const datos = {
+        nombre: c.nombre,
+        creditos: c.creditos,
+        tipo: c.tipo,
         estado: true,
         facultad: "Facultad QA",
-        horasSemT: CURSO_GRANDE.horasSemT,
-        horasSemP: CURSO_GRANDE.horasSemP,
+        horasSemT: c.horasSemT,
+        horasSemP: c.horasSemP,
         horasSemI: 0,
-      },
-      create: {
-        codigo: CURSO_GRANDE.codigo,
-        nombre: CURSO_GRANDE.nombre,
-        creditos: CURSO_GRANDE.creditos,
-        tipo: CURSO_GRANDE.tipo,
-        estado: true,
-        facultad: "Facultad QA",
-        horasSemT: CURSO_GRANDE.horasSemT,
-        horasSemP: CURSO_GRANDE.horasSemP,
-        horasSemI: 0,
-      },
-    })
+      }
+      await prisma.cursoMaestro.upsert({
+        where: { codigo: c.codigo },
+        update: datos,
+        create: { codigo: c.codigo, ...datos },
+      })
+    }
 
     const actExistente = await prisma.catalogoActividad.findFirst({
       where: { categoria: ACTIVIDAD_INV_QA.categoria, nombre: ACTIVIDAD_INV_QA.nombre },
@@ -398,10 +392,10 @@ export async function prepararEscenarioModalidades() {
       })
     }
 
-    // 5) Un docente por modalidad -------------------------------------------
+    // 5) Un docente por ESCENARIO (rechazo/acepta) — aislados ----------------
     const docenteIds: Record<string, string> = {}
-    for (const caso of CASOS) {
-      const d = caso.docente
+    for (const esc of ESCENARIOS) {
+      const d = esc.docente
       const passwordHash = await bcrypt.hash(d.password, 10)
       const comun = {
         password: passwordHash,
@@ -424,9 +418,9 @@ export async function prepararEscenarioModalidades() {
         update: comun,
         create: { email: d.email, ...comun },
       })
-      docenteIds[caso.key] = docente.id
+      docenteIds[d.email] = docente.id
 
-      // 6) Limpiar agenda previa
+      // 6) Limpiar agenda previa (vista "Nueva Agenda" limpia en cada corrida)
       await prisma.agendaSemestral.deleteMany({
         where: { docenteId: docente.id, periodo: PERIODO_MOD },
       })

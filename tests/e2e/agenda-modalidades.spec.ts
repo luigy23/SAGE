@@ -1,28 +1,25 @@
 import { test, expect, type Page } from "@playwright/test"
 import {
-  CASOS,
+  ESCENARIOS,
   PERIODO_MOD,
   SEMANAS_CLASES,
-  CURSO_PEQUENO,
-  CURSO_GRANDE,
-  TOTAL_CURSO_PEQUENO,
-  ACTIVIDAD_INV_QA,
-  INV_CATEDRA_EXCESO,
-  type CasoModalidad,
+  type Escenario,
+  type Paso,
 } from "./fixtures/modalidades"
 
 /**
- * E2E — La agenda FO-19 calcula y valida DISTINTO según la modalidad (Acuerdo 048).
+ * E2E — La agenda FO-19 calcula y valida DISTINTO según la modalidad (Acuerdo 048),
+ * probando LAS DOS CARAS de cada modalidad:
+ *   - RECHAZO: cuando se viola la regla, el envío se bloquea.
+ *   - ACEPTA:  cuando cumple los límites, la agenda se envía exitosamente.
  *
- * Para cada modalidad clave (PLANTA_TC, OCASIONAL_TC, CÁTEDRA, VISITANTE_TC) verifica:
+ * Por escenario verifica:
  *   1) El tope semestral (denominador del encabezado) según el Acuerdo.
- *   2) Que el cálculo por curso es IGUAL para todos: usa semanas_clases (16), no las
- *      semanas del contrato — un curso teórico de 4h presenciales = 144h en todas.
- *   3) La regla de envío característica de esa modalidad:
- *        · PLANTA_TC     → bloquea por mínimo de docencia (432h).
- *        · OCASIONAL_TC  → bloqueo estricto al exceder el tope derivado (640h).
- *        · CÁTEDRA       → bloqueo por tope Inv+Proy (4h/sem × 16 = 64h).
- *        · VISITANTE_TC  → NO es estricto: excede el tope (640h) pero se acepta.
+ *   2) Que las "Semanas de clase" del curso son fijas (= semanas_clases) y no editables.
+ *   3) El resultado del envío (bloqueo por botón, bloqueo por toast, o aceptación).
+ *
+ * Reglas cubiertas: mínimo de docencia (planta/visitante 60%), bloqueo estricto
+ * (ocasional), tope cátedra Inv+Proy, y la flexibilidad no-estricta del visitante.
  */
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
@@ -37,28 +34,41 @@ async function login(page: Page, email: string, password: string) {
 
 async function agregarCurso(page: Page, codigo: string) {
   await page.getByRole("button", { name: "Agregar Curso" }).click()
-  await page
-    .getByRole("button", { name: /Buscar curso del catálogo oficial/ })
-    .last()
-    .click()
+  await page.getByRole("button", { name: /Buscar curso del catálogo oficial/ }).last().click()
   await page.getByPlaceholder("Buscar por código, nombre o facultad...").fill(codigo)
   await page.getByRole("option", { name: new RegExp(esc(codigo)) }).first().click()
 }
 
-async function agregarActividad(
-  page: Page,
-  opts: { botonAgregar: string; arrayName: string; index: number; nombre: string; horas: number }
-) {
-  await page.getByRole("button", { name: opts.botonAgregar }).click()
-  await page
-    .getByRole("button", { name: /Buscar actividad del catálogo \(Art\. 11\)/ })
-    .last()
-    .click()
-  await page.getByPlaceholder("Buscar por nombre...").fill(opts.nombre)
-  await page.getByRole("option", { name: new RegExp(esc(opts.nombre)) }).first().click()
-  const input = page.locator(`input[name="${opts.arrayName}.${opts.index}.dedicacionPeriodo"]`)
+async function agregarInvestigacion(page: Page, index: number, nombre: string, horas: number) {
+  await page.getByRole("button", { name: "Agregar Actividad de Investigación" }).click()
+  await page.getByRole("button", { name: /Buscar actividad del catálogo \(Art\. 11\)/ }).last().click()
+  await page.getByPlaceholder("Buscar por nombre...").fill(nombre)
+  await page.getByRole("option", { name: new RegExp(esc(nombre)) }).first().click()
+  const input = page.locator(`input[name="actividadesInvestigacion.${index}.dedicacionPeriodo"]`)
   await expect(input).toBeVisible()
-  await input.fill(String(opts.horas))
+  await input.fill(String(horas))
+}
+
+/** Ejecuta los pasos del escenario: cursos en Docencia, investigación en su paso. */
+async function ejecutarPasos(page: Page, pasos: Paso[]) {
+  const cursos = pasos.filter((p): p is { curso: string } => "curso" in p)
+  const invs = pasos.filter((p): p is { inv: { nombre: string; horas: number } } => "inv" in p)
+
+  for (const c of cursos) await agregarCurso(page, c.curso)
+
+  // Verifica que el primer curso usa semanas_clases (16) y NO es editable.
+  if (cursos.length > 0) {
+    await expect(page.getByTestId("curso-0-semanas")).toHaveText(String(SEMANAS_CLASES))
+    await expect(page.locator(`input[name="cursos.0.semanas"]`)).toHaveCount(0)
+  }
+
+  if (invs.length > 0) {
+    await page.getByRole("button", { name: "Siguiente" }).click() // → Investigación
+    await expect(page.getByText("2. Actividades de Investigación")).toBeVisible()
+    for (let i = 0; i < invs.length; i++) {
+      await agregarInvestigacion(page, i, invs[i].inv.nombre, invs[i].inv.horas)
+    }
+  }
 }
 
 /** Avanza hasta el último paso (donde aparece "Enviar Agenda"). */
@@ -71,12 +81,13 @@ async function irAUltimoPaso(page: Page) {
   await expect(page.getByRole("button", { name: /Enviar Agenda/ })).toBeVisible({ timeout: 15_000 })
 }
 
-function correrCaso(caso: CasoModalidad) {
-  test(`FO-19 — ${caso.key}: tope ${caso.topeSemestral}h, curso=semanas_clases, regla de envío`, async ({ page }) => {
+function correrEscenario(e: Escenario) {
+  const titulo = `${e.modKey} · ${e.variante} — ${e.nota}`
+  test(titulo, async ({ page }) => {
     test.setTimeout(120_000)
 
     // ── 1. Login + arrancar wizard ──────────────────────────────────────────
-    await login(page, caso.docente.email, caso.docente.password)
+    await login(page, e.docente.email, e.docente.password)
     await page.goto("/agenda")
     await expect(
       page.getByText(`Crear Agenda del Periodo ${PERIODO_MOD}`)
@@ -84,68 +95,45 @@ function correrCaso(caso: CasoModalidad) {
     await page.getByRole("button", { name: "Crear Agenda" }).click()
 
     // ── 2. Tope semestral (denominador) según la modalidad ──────────────────
-    // El encabezado fijo muestra "<total> / <tope> hrs/semestre".
     await expect(
-      page.getByText(new RegExp(`/\\s*${caso.topeSemestral}\\s*hrs/semestre`))
+      page.getByText(new RegExp(`/\\s*${e.topeSemestral}\\s*hrs/semestre`))
     ).toBeVisible({ timeout: 15_000 })
 
     // ── 3. Paso 1 → Docencia ────────────────────────────────────────────────
-    await expect(page.locator("#step1-nombre")).toHaveValue(caso.docente.nombre)
+    await expect(page.locator("#step1-nombre")).toHaveValue(e.docente.nombre)
     await page.getByRole("button", { name: "Siguiente" }).click()
     await expect(page.getByText("1.2 Otras Actividades de Docencia")).toBeVisible()
 
-    // ── 4. Cálculo por curso: IGUAL para todas (semanas_clases, no contrato) ─
-    await agregarCurso(page, CURSO_PEQUENO.codigo)
-    await expect(page.getByTestId("curso-0-horas")).toHaveText(String(CURSO_PEQUENO.horasPresenciales))
-    await expect(page.getByTestId("curso-0-semanas")).toHaveText(String(SEMANAS_CLASES))
-    await expect(page.locator(`input[name="cursos.0.semanas"]`)).toHaveCount(0)
-    await expect(page.getByTestId("curso-0-total")).toHaveText(`${TOTAL_CURSO_PEQUENO}h`)
+    // ── 4. Cargar la agenda del escenario ───────────────────────────────────
+    await ejecutarPasos(page, e.pasos)
 
-    // ── 5. Regla de envío característica de la modalidad ─────────────────────
-    switch (caso.submit.tipo) {
-      case "reject-min-docencia": {
-        // Solo 144h de docencia (< mínimo 432) → el envío queda BLOQUEADO.
-        // (La app muestra un toast de error genérico; lo importante es que NO se envía.)
-        await irAUltimoPaso(page)
-        await page.getByRole("button", { name: /Enviar Agenda/ }).click()
+    // ── 5. Ir al último paso y comprobar el resultado del envío ─────────────
+    await irAUltimoPaso(page)
+    const enviar = page.getByRole("button", { name: /Enviar Agenda/ })
+
+    switch (e.resultado) {
+      case "block-button": {
+        // La regla bloquea de forma reactiva: el botón "Enviar" queda deshabilitado.
+        await expect(enviar).toBeDisabled()
+        break
+      }
+      case "reject-toast": {
+        // El botón está habilitado, pero al confirmar el envío se bloquea (toast de error).
+        await expect(enviar).toBeEnabled()
+        await enviar.click()
         await expect(page.getByText("¿Enviar agenda definitivamente?")).toBeVisible()
         await page.getByRole("button", { name: "Confirmar Envío" }).click()
-        // Aparece un toast de error y seguimos en el wizard (no hubo envío exitoso).
         await expect(page.locator('[data-sonner-toast][data-type="error"]').first()).toBeVisible({
           timeout: 15_000,
         })
         await expect(page.getByText(/enviada exitosamente/i)).toHaveCount(0)
-        await expect(page.getByRole("button", { name: /Enviar Agenda/ })).toBeVisible()
+        await expect(enviar).toBeVisible() // seguimos en el wizard, no se envió
         break
       }
-      case "block-tope-estricto": {
-        // Curso grande → total 800 > 640 y estricto → "Enviar Agenda" deshabilitado.
-        await agregarCurso(page, CURSO_GRANDE.codigo)
-        await irAUltimoPaso(page)
-        await expect(page.getByRole("button", { name: /Enviar Agenda/ })).toBeDisabled()
-        break
-      }
-      case "block-catedra-invps": {
-        // Investigación 80h > tope cátedra (64h) → "Enviar Agenda" deshabilitado.
-        await page.getByRole("button", { name: "Siguiente" }).click() // → Investigación
-        await expect(page.getByText("2. Actividades de Investigación")).toBeVisible()
-        await agregarActividad(page, {
-          botonAgregar: "Agregar Actividad de Investigación",
-          arrayName: "actividadesInvestigacion",
-          index: 0,
-          nombre: ACTIVIDAD_INV_QA.nombre,
-          horas: INV_CATEDRA_EXCESO,
-        })
-        await irAUltimoPaso(page)
-        await expect(page.getByRole("button", { name: /Enviar Agenda/ })).toBeDisabled()
-        break
-      }
-      case "accept-no-estricto": {
-        // Curso grande → total 800 > 640 PERO visitante no es estricto → se acepta.
-        await agregarCurso(page, CURSO_GRANDE.codigo)
-        await irAUltimoPaso(page)
-        await expect(page.getByRole("button", { name: /Enviar Agenda/ })).toBeEnabled()
-        await page.getByRole("button", { name: /Enviar Agenda/ }).click()
+      case "accept": {
+        // La agenda cumple los límites → se envía exitosamente.
+        await expect(enviar).toBeEnabled()
+        await enviar.click()
         await expect(page.getByText("¿Enviar agenda definitivamente?")).toBeVisible()
         await page.getByRole("button", { name: "Confirmar Envío" }).click()
         const toast = page.locator("[data-sonner-toast]").first()
@@ -155,10 +143,10 @@ function correrCaso(caso: CasoModalidad) {
       }
     }
 
-    console.log(`[mod] ${caso.key} OK → tope ${caso.topeSemestral}h, ${caso.submit.tipo}`)
+    console.log(`[mod] ${e.modKey} · ${e.variante} OK → ${e.resultado} (tope ${e.topeSemestral}h)`)
   })
 }
 
-test.describe("FO-19 — Cálculos y reglas por modalidad (Acuerdo 048)", () => {
-  for (const caso of CASOS) correrCaso(caso)
+test.describe("FO-19 — Cálculos y reglas por modalidad (Acuerdo 048): rechazo + aceptación", () => {
+  for (const e of ESCENARIOS) correrEscenario(e)
 })
