@@ -143,4 +143,12 @@ test("FO-19 — Agenda 2025-2 de un Decano (MBC) reproducida 1:1", async ({ page
   expect(mensaje, "Se esperaba que SAGE aceptara la agenda del Decano").toMatch(
     /enviada exitosamente/i
   )
+
+  // Modo "déjalo abierto para verlo": corre con KEEP_OPEN=1 y el navegador se
+  // queda en la pantalla final hasta que lo cierres (botón Resume del Inspector).
+  if (process.env.KEEP_OPEN) {
+    // eslint-disable-next-line no-console
+    console.log("[MBC] 👀 Navegador abierto. Mirá con calma y cerralo cuando termines.")
+    await page.pause()
+  }
 })
