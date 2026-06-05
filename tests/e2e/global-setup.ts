@@ -5,6 +5,7 @@ import {
   prepararEscenarioConsejeria,
   prepararEscenarioConsejeriaVista,
   prepararEscenarioInvitado,
+  prepararEscenarioProyectoInyectado,
 } from "./fixtures/db"
 
 /**
@@ -22,5 +23,6 @@ export default async function globalSetup() {
   const consej = await prepararEscenarioConsejeria()
   const consejVista = await prepararEscenarioConsejeriaVista()
   const invitado = await prepararEscenarioInvitado()
-  console.log("[global-setup] escenarios listos:", { mbc, calc, mods, consej, consejVista, invitado })
+  const proyIny = await prepararEscenarioProyectoInyectado()
+  console.log("[global-setup] escenarios listos:", { mbc, calc, mods, consej, consejVista, invitado, proyIny })
 }

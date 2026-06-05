@@ -28,7 +28,7 @@ import {
   FormMessage,
   FormDescription,
 } from "@/components/ui/form"
-import { Trash2, AlertTriangle } from "lucide-react"
+import { Trash2, AlertTriangle, Lock } from "lucide-react"
 
 /** Datos de consejería para la tarjeta COHORTE: compromisos amarrados + cohortes disponibles. */
 export type ConsejeriaCardData = {
@@ -110,9 +110,21 @@ export function ActividadCardRow({
   // Coordinador / Cogestor). Las horas salen de las horas asignadas al docente en el
   // proyecto (las puso el revisor al aprobar) y quedan bloqueadas a ese valor.
   const requiereProyecto = actividadCatalogo?.requiereProyectoAprobado === true
-  const proyectosElegibles = (proyectosAprobados ?? []).filter(
-    (p) => p.tipo === categoria
+
+  // Proyectos ya vinculados en CUALQUIER tarjeta (para no ofrecer duplicados).
+  const invW = (useWatch({ name: "actividadesInvestigacion" }) as { proyectoId?: string | null }[] | undefined) ?? []
+  const psW = (useWatch({ name: "actividadesProyeccionSocial" }) as { proyectoId?: string | null }[] | undefined) ?? []
+  const proyectosUsados = new Set(
+    [...invW, ...psW].map((a) => a?.proyectoId).filter((id): id is string => !!id),
   )
+  const proyectosElegibles = (proyectosAprobados ?? []).filter(
+    (p) => p.tipo === categoria && (p.id === proyectoIdSel || !proyectosUsados.has(p.id)),
+  )
+
+  // Proyecto aprobado+activo precargado: la tarjeta queda BLOQUEADA (solo lectura;
+  // no se quita ni se editan las horas, que son las que asignó el revisor al aprobar).
+  const proyectoBloqueado = (proyectosAprobados ?? []).find((p) => p.id === proyectoIdSel) ?? null
+  const bloqueado = proyectoBloqueado !== null
 
   const requiereUnidades =
     actividadCatalogo !== undefined &&
@@ -187,6 +199,28 @@ export function ActividadCardRow({
     setValue(`${arrayName}.${index}.sede` as any, null)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setValue(`${arrayName}.${index}.proyectoId` as any, null)
+  }
+
+  // Tarjeta BLOQUEADA: proyecto aprobado precargado. Solo lectura, sin quitar.
+  if (bloqueado && proyectoBloqueado) {
+    return (
+      <div className="relative rounded-lg border bg-muted/30 p-4">
+        <div className="flex items-start gap-3 text-sm">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <p className="font-medium">📌 {nombre}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Proyecto aprobado:{" "}
+              <span className="font-medium text-foreground/80">{proyectoBloqueado.titulo}</span>{" "}
+              · <span className="font-semibold tabular-nums">{proyectoBloqueado.horasAsignadas}h</span> asignadas
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Precargado de tu proyecto activo. Las horas las fijó el revisor al aprobar; no se editan aquí.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

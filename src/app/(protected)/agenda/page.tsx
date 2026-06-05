@@ -18,6 +18,7 @@ import {
   getCohortesDisponibles,
   inyectarConsejeriaEnActividades,
 } from "@/lib/consejeria"
+import { inyectarProyectosEnActividades } from "@/lib/proyecto-agenda"
 import { getProyectosAprobadosDocente } from "@/lib/actions/proyecto-actions"
 import {
   Card,
@@ -334,12 +335,17 @@ export default async function AgendaPage() {
   // CASO A: No hay agenda → Vista de bienvenida
   // ==========================================
   if (!agenda) {
-    // Inyección forzosa: si el docente tiene cohortes amarradas, la tarjeta de
-    // Consejería aparece pre-sembrada (bloqueada, horas vacías).
-    const nuevaDefaults: AgendaWizardFormData | undefined = consejeriaInyectada
+    // Inyección forzosa: cohortes de consejería amarradas + proyectos aprobados
+    // (Art. 11) aparecen pre-sembrados y bloqueados en la agenda nueva.
+    const proyIny = inyectarProyectosEnActividades([], [], proyectosAprobados)
+    const hayInyeccion =
+      !!consejeriaInyectada || proyectosAprobados.length > 0
+    const nuevaDefaults: AgendaWizardFormData | undefined = hayInyeccion
       ? {
           ...DEFAULT_FORM_VALUES,
           otrasActividadesDocencia: inyectarConsejeriaEnActividades([], consejeriaInyectada),
+          actividadesInvestigacion: proyIny.actividadesInvestigacion,
+          actividadesProyeccionSocial: proyIny.actividadesProyeccionSocial,
         }
       : undefined
 
@@ -462,6 +468,15 @@ export default async function AgendaPage() {
       defaultValues.otrasActividadesDocencia,
       consejeriaInyectada,
     )
+
+    // Inyección forzosa de los proyectos aprobados+activos (Art. 11) en el borrador.
+    const proyInyBorrador = inyectarProyectosEnActividades(
+      defaultValues.actividadesInvestigacion,
+      defaultValues.actividadesProyeccionSocial,
+      proyectosAprobados,
+    )
+    defaultValues.actividadesInvestigacion = proyInyBorrador.actividadesInvestigacion
+    defaultValues.actividadesProyeccionSocial = proyInyBorrador.actividadesProyeccionSocial
 
     // Calcular total de horas del borrador para el resumen
     const totalHorasBorrador =

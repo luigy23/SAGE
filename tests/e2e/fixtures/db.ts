@@ -44,6 +44,7 @@ import {
   JEFE_VISTA,
 } from "./consejeria-vista"
 import { PERIODO_INV, INVITADOS } from "./invitado"
+import { PERIODO_PROY, PROYECTO_INYECTADO, PROF_PROY } from "./proyecto-inyectado"
 
 function makePrisma() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL })
@@ -738,6 +739,78 @@ export async function prepararEscenarioInvitado() {
   }
 }
 
+/**
+ * Deja la base lista para el test de PRECARGA de proyectos (Art. 11):
+ *  1. Período activo "2025-2".
+ *  2. Crea un docente (planta) con un proyecto APROBADO+activo donde participa.
+ *  3. El proyecto abarca el período (fechas amplias) y tiene horas asignadas.
+ */
+export async function prepararEscenarioProyectoInyectado() {
+  const prisma = makePrisma()
+  try {
+    await prisma.periodoAcademico.updateMany({
+      where: { nombre: PERIODO_PROY },
+      data: {
+        estado: "ABIERTO",
+        agendaDesde: new Date("2020-01-01T00:00:00Z"),
+        agendaHasta: new Date("2031-01-01T00:00:00Z"),
+      },
+    })
+
+    const passwordHash = await bcrypt.hash(PROF_PROY.password, 10)
+    const comun = {
+      password: passwordHash,
+      nombre: PROF_PROY.nombre,
+      cedula: PROF_PROY.cedula,
+      rol: "DOCENTE" as const,
+      estadoCuenta: "ACTIVO" as const,
+      sedeBase: PROF_PROY.sedeBase,
+      modalidad: PROF_PROY.modalidad,
+      facultad: PROF_PROY.facultad,
+      programa: PROF_PROY.programa,
+      doctorado: false,
+      cargoAdministrativo: false,
+      tipoCargo: null,
+      proyectosActivos: true,
+    }
+    const docente = await prisma.docente.upsert({
+      where: { email: PROF_PROY.email },
+      update: comun,
+      create: { email: PROF_PROY.email, ...comun },
+    })
+
+    // Limpiar agenda + proyectos QA previos del docente (cascade borra participantes).
+    await prisma.agendaSemestral.deleteMany({ where: { docenteId: docente.id, periodo: PERIODO_PROY } })
+    await prisma.proyecto.deleteMany({
+      where: { titulo: PROYECTO_INYECTADO.titulo, creadorId: docente.id },
+    })
+
+    // Proyecto APROBADO con fechas amplias (abarca cualquier período) + horas asignadas.
+    await prisma.proyecto.create({
+      data: {
+        titulo: PROYECTO_INYECTADO.titulo,
+        tipo: PROYECTO_INYECTADO.tipo,
+        estado: "APROBADO",
+        creadorId: docente.id,
+        fechaInicio: new Date("2020-01-01T00:00:00Z"),
+        fechaFin: new Date("2031-01-01T00:00:00Z"),
+        revisadoEn: new Date("2025-01-01T00:00:00Z"),
+        participantes: {
+          create: {
+            docenteId: docente.id,
+            rol: PROYECTO_INYECTADO.rol,
+            horasAsignadas: PROYECTO_INYECTADO.horasAsignadas,
+          },
+        },
+      },
+    })
+
+    return { docenteId: docente.id }
+  } finally {
+    await prisma.$disconnect()
+  }
+}
+
 if (require.main === module) {
   Promise.all([
     prepararEscenario(),
@@ -746,6 +819,7 @@ if (require.main === module) {
     prepararEscenarioConsejeria(),
     prepararEscenarioConsejeriaVista(),
     prepararEscenarioInvitado(),
+    prepararEscenarioProyectoInyectado(),
   ])
     .then((r) => {
       console.log("Escenario listo:", r)
