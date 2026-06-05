@@ -10,6 +10,22 @@ import { PrismaPg } from "@prisma/adapter-pg"
 import { Pool } from "pg"
 import bcrypt from "bcryptjs"
 import { MARLIO, PERIODO } from "./marlio"
+import {
+  PROF_CALC,
+  PERIODO_CALC,
+  CURSOS,
+  SEMANAS_CLASES,
+  FACTORES,
+  CONSTANTE_SUMA,
+} from "./calculos"
+import {
+  CASOS,
+  PERIODO_MOD,
+  SEMANAS_PERIODO,
+  SEMANAS_NO_PLANTA,
+  CURSO_GRANDE,
+  ACTIVIDAD_INV_QA,
+} from "./modalidades"
 
 function makePrisma() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL })
@@ -111,8 +127,319 @@ export async function prepararEscenario() {
   }
 }
 
+/**
+ * Deja la base lista para el test de CÁLCULOS de la agenda:
+ *  1. Garantiza el período activo "2025-2" con la ventana abierta (igual que MBC).
+ *  2. Fuerza el parámetro `semanas_clases` y las fórmulas estándar Art. 3 Par. 4
+ *     (TEÓRICO=2, TEÓRICO-PRÁCTICO=1.5, PRÁCTICO=1, +1) para que el cálculo sea
+ *     determinista, sin depender del contenido del seed ni de ediciones por UI.
+ *  3. Crea/actualiza los cursos QA del catálogo maestro.
+ *  4. Crea/actualiza al docente PROF_CALC (PLANTA_TC) con cuenta ACTIVA.
+ *  5. Borra cualquier agenda previa suya en el período (vista "Nueva Agenda" limpia).
+ */
+export async function prepararEscenarioCalculos() {
+  const prisma = makePrisma()
+  try {
+    // 1) Período activo "2025-2" con ventana abierta -------------------------
+    const abiertos = await prisma.periodoAcademico.findMany({
+      where: { estado: "ABIERTO", nombre: { not: PERIODO_CALC } },
+      select: { fechaInicio: true },
+      orderBy: { fechaInicio: "desc" },
+      take: 1,
+    })
+    const base = abiertos[0]?.fechaInicio?.getTime() ?? Date.now()
+    const fechaInicio = new Date(base + DAY)
+    const fechaFin = new Date(fechaInicio.getTime() + 22 * 7 * DAY)
+    const ventanaDesde = new Date("2020-01-01T00:00:00Z")
+    const ventanaHasta = new Date("2031-01-01T00:00:00Z")
+
+    await prisma.periodoAcademico.upsert({
+      where: { nombre: PERIODO_CALC },
+      update: { estado: "ABIERTO", agendaDesde: ventanaDesde, agendaHasta: ventanaHasta },
+      create: {
+        nombre: PERIODO_CALC,
+        estado: "ABIERTO",
+        fechaInicio,
+        fechaFin,
+        agendaDesde: ventanaDesde,
+        agendaHasta: ventanaHasta,
+      },
+    })
+
+    // 2) Parámetro semanas_clases (global, periodoId null) -------------------
+    const paramExistente = await prisma.parametroGlobal.findFirst({
+      where: { periodoId: null, clave: "semanas_clases" },
+    })
+    if (paramExistente) {
+      await prisma.parametroGlobal.update({
+        where: { id: paramExistente.id },
+        data: { valor: String(SEMANAS_CLASES), activo: true },
+      })
+    } else {
+      await prisma.parametroGlobal.create({
+        data: {
+          clave: "semanas_clases",
+          valor: String(SEMANAS_CLASES),
+          tipo: "int",
+          descripcion: "Semanas de clase (QA)",
+          articuloOrigen: "Calendario académico USCO",
+          periodoId: null,
+          activo: true,
+        },
+      })
+    }
+
+    // 2b) Fórmulas estándar por tipo (global, sin facultad) ------------------
+    for (const tipo of ["TEORICO", "TEORICO_PRACTICO", "PRACTICO"] as const) {
+      const f = await prisma.formulaCurso.findFirst({
+        where: { periodoId: null, tipoCurso: tipo, facultad: null },
+      })
+      const data = { factorHoras: FACTORES[tipo], constanteSuma: CONSTANTE_SUMA, activo: true }
+      if (f) {
+        await prisma.formulaCurso.update({ where: { id: f.id }, data })
+      } else {
+        await prisma.formulaCurso.create({
+          data: { ...data, tipoCurso: tipo, facultad: null, periodoId: null },
+        })
+      }
+    }
+
+    // 3) Cursos QA del catálogo maestro --------------------------------------
+    for (const c of CURSOS) {
+      await prisma.cursoMaestro.upsert({
+        where: { codigo: c.codigo },
+        update: {
+          nombre: c.nombre,
+          creditos: c.creditos,
+          tipo: c.tipo,
+          estado: true,
+          facultad: PROF_CALC.facultad,
+          horasSemT: c.horasSemT,
+          horasSemP: c.horasSemP,
+          horasSemI: 0,
+        },
+        create: {
+          codigo: c.codigo,
+          nombre: c.nombre,
+          creditos: c.creditos,
+          tipo: c.tipo,
+          estado: true,
+          facultad: PROF_CALC.facultad,
+          horasSemT: c.horasSemT,
+          horasSemP: c.horasSemP,
+          horasSemI: 0,
+        },
+      })
+    }
+
+    // 4) Docente PROF_CALC ---------------------------------------------------
+    const passwordHash = await bcrypt.hash(PROF_CALC.password, 10)
+    const comun = {
+      password: passwordHash,
+      nombre: PROF_CALC.nombre,
+      cedula: PROF_CALC.cedula,
+      rol: "DOCENTE" as const,
+      estadoCuenta: "ACTIVO" as const,
+      sedeBase: PROF_CALC.sedeBase,
+      modalidad: PROF_CALC.modalidad,
+      facultad: PROF_CALC.facultad,
+      programa: PROF_CALC.programa,
+      doctorado: false,
+      cargoAdministrativo: false,
+      tipoCargo: null,
+      proyectosActivos: false,
+    }
+    const docente = await prisma.docente.upsert({
+      where: { email: PROF_CALC.email },
+      update: comun,
+      create: { email: PROF_CALC.email, ...comun },
+    })
+
+    // 5) Limpiar agenda previa (cascade) -------------------------------------
+    await prisma.agendaSemestral.deleteMany({
+      where: { docenteId: docente.id, periodo: PERIODO_CALC },
+    })
+
+    return { docenteId: docente.id }
+  } finally {
+    await prisma.$disconnect()
+  }
+}
+
+/**
+ * Deja la base lista para el test de MODALIDADES (cálculos + reglas de envío):
+ *  1. Período activo "2025-2" con ventana abierta.
+ *  2. Fuerza parámetros globales (semanas) y fórmulas estándar (deterministas).
+ *  3. Fuerza los ParametrosModalidad de las 4 modalidades clave (topes/mínimos del Acuerdo).
+ *  4. Crea el curso grande QA y la actividad de investigación QA.
+ *  5. Crea/actualiza un docente por modalidad (sin cargo, sin proyectos).
+ *  6. Borra sus agendas previas.
+ */
+export async function prepararEscenarioModalidades() {
+  const prisma = makePrisma()
+  try {
+    // 1) Período activo "2025-2" -------------------------------------------
+    const abiertos = await prisma.periodoAcademico.findMany({
+      where: { estado: "ABIERTO", nombre: { not: PERIODO_MOD } },
+      select: { fechaInicio: true },
+      orderBy: { fechaInicio: "desc" },
+      take: 1,
+    })
+    const base = abiertos[0]?.fechaInicio?.getTime() ?? Date.now()
+    const fechaInicio = new Date(base + DAY)
+    const fechaFin = new Date(fechaInicio.getTime() + 22 * 7 * DAY)
+    await prisma.periodoAcademico.upsert({
+      where: { nombre: PERIODO_MOD },
+      update: {
+        estado: "ABIERTO",
+        agendaDesde: new Date("2020-01-01T00:00:00Z"),
+        agendaHasta: new Date("2031-01-01T00:00:00Z"),
+      },
+      create: {
+        nombre: PERIODO_MOD,
+        estado: "ABIERTO",
+        fechaInicio,
+        fechaFin,
+        agendaDesde: new Date("2020-01-01T00:00:00Z"),
+        agendaHasta: new Date("2031-01-01T00:00:00Z"),
+      },
+    })
+
+    // 2) Parámetros globales de semanas (deterministas) ---------------------
+    const globales: { clave: string; valor: string }[] = [
+      { clave: "semanas_periodo", valor: String(SEMANAS_PERIODO) },
+      { clave: "semanas_clases", valor: String(SEMANAS_CLASES) },
+      { clave: "semanas_periodo_ocasional", valor: String(SEMANAS_NO_PLANTA) },
+      { clave: "semanas_periodo_visitante", valor: String(SEMANAS_NO_PLANTA) },
+      { clave: "semanas_periodo_catedra", valor: String(SEMANAS_NO_PLANTA) },
+    ]
+    for (const g of globales) {
+      const ex = await prisma.parametroGlobal.findFirst({
+        where: { periodoId: null, clave: g.clave },
+      })
+      if (ex) {
+        await prisma.parametroGlobal.update({ where: { id: ex.id }, data: { valor: g.valor, activo: true } })
+      } else {
+        await prisma.parametroGlobal.create({
+          data: { clave: g.clave, valor: g.valor, tipo: "int", descripcion: "QA", periodoId: null, activo: true },
+        })
+      }
+    }
+
+    // 2b) Fórmulas estándar por tipo ----------------------------------------
+    for (const tipo of ["TEORICO", "TEORICO_PRACTICO", "PRACTICO"] as const) {
+      const f = await prisma.formulaCurso.findFirst({
+        where: { periodoId: null, tipoCurso: tipo, facultad: null },
+      })
+      const data = { factorHoras: FACTORES[tipo], constanteSuma: CONSTANTE_SUMA, activo: true }
+      if (f) await prisma.formulaCurso.update({ where: { id: f.id }, data })
+      else await prisma.formulaCurso.create({ data: { ...data, tipoCurso: tipo, facultad: null, periodoId: null } })
+    }
+
+    // 3) ParametrosModalidad de las 4 modalidades clave (Acuerdo 048) --------
+    const modParams = [
+      { modalidad: "PLANTA_TC" as const, sedeAplicable: null, horasSemanalMax: 40, horasSemestralMax: 880 as number | null, horasSemestralEstricto: true, minDocencia: 432 as number | null, minDocenciaConProyectos: 288 as number | null, maxInvProySocSemanal: null as number | null },
+      { modalidad: "OCASIONAL_TC" as const, sedeAplicable: null, horasSemanalMax: 40, horasSemestralMax: null as number | null, horasSemestralEstricto: true, minDocencia: 432 as number | null, minDocenciaConProyectos: 288 as number | null, maxInvProySocSemanal: null as number | null },
+      { modalidad: "VISITANTE_TC" as const, sedeAplicable: null, horasSemanalMax: 40, horasSemestralMax: null as number | null, horasSemestralEstricto: false, minDocencia: null as number | null, minDocenciaConProyectos: null as number | null, maxInvProySocSemanal: null as number | null },
+      { modalidad: "CATEDRA" as const, sedeAplicable: "NEIVA" as const, horasSemanalMax: 16, horasSemestralMax: null as number | null, horasSemestralEstricto: true, minDocencia: null as number | null, minDocenciaConProyectos: null as number | null, maxInvProySocSemanal: 4 as number | null },
+    ]
+    for (const p of modParams) {
+      const ex = await prisma.parametrosModalidad.findFirst({
+        where: { periodoId: null, modalidad: p.modalidad, sedeAplicable: p.sedeAplicable ?? null },
+      })
+      if (ex) await prisma.parametrosModalidad.update({ where: { id: ex.id }, data: { ...p, activo: true } })
+      else await prisma.parametrosModalidad.create({ data: { ...p, periodoId: null, activo: true } })
+    }
+
+    // 4) Curso grande QA + actividad de investigación QA --------------------
+    await prisma.cursoMaestro.upsert({
+      where: { codigo: CURSO_GRANDE.codigo },
+      update: {
+        nombre: CURSO_GRANDE.nombre,
+        creditos: CURSO_GRANDE.creditos,
+        tipo: CURSO_GRANDE.tipo,
+        estado: true,
+        facultad: "Facultad QA",
+        horasSemT: CURSO_GRANDE.horasSemT,
+        horasSemP: CURSO_GRANDE.horasSemP,
+        horasSemI: 0,
+      },
+      create: {
+        codigo: CURSO_GRANDE.codigo,
+        nombre: CURSO_GRANDE.nombre,
+        creditos: CURSO_GRANDE.creditos,
+        tipo: CURSO_GRANDE.tipo,
+        estado: true,
+        facultad: "Facultad QA",
+        horasSemT: CURSO_GRANDE.horasSemT,
+        horasSemP: CURSO_GRANDE.horasSemP,
+        horasSemI: 0,
+      },
+    })
+
+    const actExistente = await prisma.catalogoActividad.findFirst({
+      where: { categoria: ACTIVIDAD_INV_QA.categoria, nombre: ACTIVIDAD_INV_QA.nombre },
+    })
+    if (!actExistente) {
+      await prisma.catalogoActividad.create({
+        data: {
+          categoria: ACTIVIDAD_INV_QA.categoria,
+          nombre: ACTIVIDAD_INV_QA.nombre,
+          descripcion: "Actividad de investigación QA sin tope propio",
+          topeSemestralH: null,
+          activo: true,
+          articuloOrigen: "QA",
+        },
+      })
+    } else {
+      await prisma.catalogoActividad.update({
+        where: { id: actExistente.id },
+        data: { topeSemestralH: null, activo: true },
+      })
+    }
+
+    // 5) Un docente por modalidad -------------------------------------------
+    const docenteIds: Record<string, string> = {}
+    for (const caso of CASOS) {
+      const d = caso.docente
+      const passwordHash = await bcrypt.hash(d.password, 10)
+      const comun = {
+        password: passwordHash,
+        nombre: d.nombre,
+        cedula: d.cedula,
+        rol: "DOCENTE" as const,
+        estadoCuenta: "ACTIVO" as const,
+        sedeBase: d.sedeBase,
+        modalidad: d.modalidad,
+        facultad: d.facultad,
+        programa: d.programa,
+        doctorado: false,
+        cargoAdministrativo: false,
+        tipoCargo: null,
+        proyectosActivos: false,
+        semanasVinculacion: d.semanasVinculacion,
+      }
+      const docente = await prisma.docente.upsert({
+        where: { email: d.email },
+        update: comun,
+        create: { email: d.email, ...comun },
+      })
+      docenteIds[caso.key] = docente.id
+
+      // 6) Limpiar agenda previa
+      await prisma.agendaSemestral.deleteMany({
+        where: { docenteId: docente.id, periodo: PERIODO_MOD },
+      })
+    }
+
+    return docenteIds
+  } finally {
+    await prisma.$disconnect()
+  }
+}
+
 if (require.main === module) {
-  prepararEscenario()
+  Promise.all([prepararEscenario(), prepararEscenarioCalculos(), prepararEscenarioModalidades()])
     .then((r) => {
       console.log("Escenario listo:", r)
       process.exit(0)
