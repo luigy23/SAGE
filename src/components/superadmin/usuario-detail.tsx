@@ -6,6 +6,7 @@ import { getModalidadLabel } from "@/lib/utils/modalidad"
 import { UsuarioAdminActions } from "@/components/superadmin/usuario-admin-actions"
 import { UsuarioRoleSelector } from "@/components/superadmin/usuario-role-selector"
 import { DocenteEditSheet } from "@/components/superadmin/docente-edit-sheet"
+import { CredencialesEditDialog } from "@/components/superadmin/credenciales-edit-dialog"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import type { Rol } from "@/generated/prisma/client"
@@ -135,7 +136,10 @@ export function UsuarioDetail({ usuario }: { usuario: UsuarioDetalle }) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle>Datos Personales</CardTitle>
-          <DocenteEditSheet usuario={usuario} />
+          <div className="flex flex-wrap items-center gap-2">
+            <CredencialesEditDialog usuarioId={usuario.id} emailActual={usuario.email} />
+            <DocenteEditSheet usuario={usuario} />
+          </div>
         </CardHeader>
         <CardContent>
           <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">

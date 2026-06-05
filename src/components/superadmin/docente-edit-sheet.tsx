@@ -268,8 +268,9 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
               <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
               <div className="text-xs text-amber-800 dark:text-amber-300">
                 Esta acción no pasa por el flujo de solicitud — se persiste
-                inmediatamente. El email es inmutable. Para cambiar rol o
-                estado de la cuenta usa los controles dedicados.
+                inmediatamente. La cédula es el identificador único de identidad.
+                El correo y la contraseña se cambian con «Cambiar credenciales»;
+                el rol y el estado de la cuenta, con sus controles dedicados.
               </div>
             </div>
 
@@ -295,7 +296,7 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
                   <Label className="text-xs">Email</Label>
                   <Input value={usuario.email} disabled className="bg-muted" />
                   <p className="text-[10px] text-muted-foreground">
-                    No editable (identificador único).
+                    Se cambia desde «Cambiar credenciales».
                   </p>
                 </div>
               </div>
