@@ -1,6 +1,6 @@
 "use client"
 
-import { useFormContext, useWatch } from "react-hook-form"
+import { useWatch } from "react-hook-form"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import { AlertTriangle, CheckCircle, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -19,10 +19,13 @@ export function HorasStickyHeader({
   horasTotalesPeriodo,
   esEstricto,
   periodo,
+  sinTope = false,
 }: {
   horasTotalesPeriodo: number
   esEstricto: boolean
   periodo: string
+  /** INVITADO sin horas autorizadas aún: no hay tope semestral que mostrar/exigir. */
+  sinTope?: boolean
 }) {
   // useWatch escucha cambios reactivamente sin causar re-render del form completo
   const cursos = useWatch<AgendaWizardFormData, "cursos">({ name: "cursos" }) || []
@@ -44,8 +47,8 @@ export function HorasStickyHeader({
   // Redondear a 1 decimal para display limpio
   const totalHoras = Math.round(totalSemestral * 10) / 10
 
-  const porcentaje = Math.min((totalHoras / horasTotalesPeriodo) * 100, 100)
-  const excedido = totalHoras > horasTotalesPeriodo
+  const porcentaje = sinTope ? 0 : Math.min((totalHoras / horasTotalesPeriodo) * 100, 100)
+  const excedido = !sinTope && totalHoras > horasTotalesPeriodo
 
   type Estado = "normal" | "advertencia" | "exceso"
   let estado: Estado = "normal"
@@ -97,18 +100,30 @@ export function HorasStickyHeader({
             <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
           )}
           <span className={textClasses}>
-            {totalHoras} / {horasTotalesPeriodo} hrs/semestre
+            {sinTope
+              ? `${totalHoras} hrs · sin tope asignado`
+              : `${totalHoras} / ${horasTotalesPeriodo} hrs/semestre`}
           </span>
         </div>
       </div>
 
-      {/* Barra de progreso */}
-      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className={barClasses}
-          style={{ width: `${porcentaje}%` }}
-        />
-      </div>
+      {/* Barra de progreso — oculta cuando no hay tope de referencia */}
+      {!sinTope && (
+        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className={barClasses}
+            style={{ width: `${porcentaje}%` }}
+          />
+        </div>
+      )}
+
+      {/* Invitado sin horas autorizadas: aún no hay tope (Art. 4f) */}
+      {sinTope && (
+        <p className="mt-1.5 text-xs font-medium text-muted-foreground">
+          ℹ️ Aún no se han asignado las horas del invitado. Puedes diligenciar la agenda; el tope lo
+          fijará tu decano / Consejo Académico al revisarla (Art. 4f, Acuerdo 048).
+        </p>
+      )}
 
       {/* Mensajes de estado */}
       {estado === "exceso" && (

@@ -32,6 +32,8 @@ export type AgendaLimits = {
   maxInvProySocialCatedra: number | null
   semanas: number
   semanasMaximas: number
+  /** INVITADO sin horas autorizadas (invHorasContratadas null): no hay tope semestral aún. */
+  sinTopeSemestral?: boolean
 }
 
 // ========================================

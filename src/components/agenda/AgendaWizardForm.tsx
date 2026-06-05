@@ -567,6 +567,7 @@ export function AgendaWizardForm({
             minDocencia={minDocencia}
             excluyeTopeGestion20={excluyeTopeGestion20}
             maxInvProySocialCatedra={maxInvProySocialCatedra}
+            sinTope={agendaLimits?.sinTopeSemestral ?? false}
           />
         )
       default:
@@ -595,6 +596,7 @@ export function AgendaWizardForm({
           horasTotalesPeriodo={horasTotalesPeriodo}
           esEstricto={esEstricto}
           periodo={periodo}
+          sinTope={agendaLimits?.sinTopeSemestral ?? false}
         />
 
         <WizardStepper

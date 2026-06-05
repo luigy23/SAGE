@@ -43,6 +43,7 @@ import {
   DECANO_VISTA,
   JEFE_VISTA,
 } from "./consejeria-vista"
+import { PERIODO_INV, INVITADOS } from "./invitado"
 
 function makePrisma() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL })
@@ -666,6 +667,77 @@ export async function prepararEscenarioConsejeriaVista() {
   }
 }
 
+/**
+ * Deja la base lista para el test del INVITADO (Art. 4f):
+ *  1. Período activo "2025-2".
+ *  2. Fuerza ParametrosModalidad de INVITADO (40h/sem, sin tope fijo, no estricto).
+ *  3. Crea 2 invitados: uno SIN horas autorizadas y otro CON (300h).
+ */
+export async function prepararEscenarioInvitado() {
+  const prisma = makePrisma()
+  try {
+    await prisma.periodoAcademico.updateMany({
+      where: { nombre: PERIODO_INV },
+      data: {
+        estado: "ABIERTO",
+        agendaDesde: new Date("2020-01-01T00:00:00Z"),
+        agendaHasta: new Date("2031-01-01T00:00:00Z"),
+      },
+    })
+
+    // ParametrosModalidad INVITADO (Art. 4f): derivado, no estricto, sin mínimos.
+    const invParam = {
+      modalidad: "INVITADO" as const,
+      sedeAplicable: null,
+      horasSemanalMax: 40,
+      horasSemestralMax: null as number | null,
+      horasSemestralEstricto: false,
+      minDocencia: null as number | null,
+      minDocenciaConProyectos: null as number | null,
+      maxInvProySocSemanal: null as number | null,
+    }
+    const exInv = await prisma.parametrosModalidad.findFirst({
+      where: { periodoId: null, modalidad: "INVITADO", sedeAplicable: null },
+    })
+    if (exInv) await prisma.parametrosModalidad.update({ where: { id: exInv.id }, data: { ...invParam, activo: true } })
+    else await prisma.parametrosModalidad.create({ data: { ...invParam, periodoId: null, activo: true } })
+
+    const docenteIds: Record<string, string> = {}
+    for (const inv of INVITADOS) {
+      const passwordHash = await bcrypt.hash(inv.password, 10)
+      const comun = {
+        password: passwordHash,
+        nombre: inv.nombre,
+        cedula: inv.cedula,
+        rol: "DOCENTE" as const,
+        estadoCuenta: "ACTIVO" as const,
+        sedeBase: inv.sedeBase,
+        modalidad: inv.modalidad,
+        facultad: inv.facultad,
+        programa: inv.programa,
+        doctorado: false,
+        cargoAdministrativo: false,
+        tipoCargo: null,
+        proyectosActivos: false,
+        invHorasContratadas: inv.invHorasContratadas,
+      }
+      const d = await prisma.docente.upsert({
+        where: { email: inv.email },
+        update: comun,
+        create: { email: inv.email, ...comun },
+      })
+      docenteIds[inv.email] = d.id
+      await prisma.agendaSemestral.deleteMany({
+        where: { docenteId: d.id, periodo: PERIODO_INV },
+      })
+    }
+
+    return docenteIds
+  } finally {
+    await prisma.$disconnect()
+  }
+}
+
 if (require.main === module) {
   Promise.all([
     prepararEscenario(),
@@ -673,6 +745,7 @@ if (require.main === module) {
     prepararEscenarioModalidades(),
     prepararEscenarioConsejeria(),
     prepararEscenarioConsejeriaVista(),
+    prepararEscenarioInvitado(),
   ])
     .then((r) => {
       console.log("Escenario listo:", r)

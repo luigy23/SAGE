@@ -85,6 +85,7 @@ export function StepRevision({
   minDocencia,
   excluyeTopeGestion20,
   maxInvProySocialCatedra,
+  sinTope = false,
 }: {
   docente: Docente
   horasTotalesPeriodo: number
@@ -92,6 +93,8 @@ export function StepRevision({
   minDocencia: number
   excluyeTopeGestion20: boolean
   maxInvProySocialCatedra: number | null
+  /** INVITADO sin horas autorizadas: no hay tope semestral aún (Art. 4f). */
+  sinTope?: boolean
 }) {
   // Observar todos los arrays del formulario
   const cursos = useWatch<AgendaWizardFormData, "cursos">({ name: "cursos" }) || []
@@ -117,7 +120,7 @@ export function StepRevision({
   // horasTotalesPeriodo viene del servidor (resolver DB → fallback 40×sem)
   // =========================================================
   const horasSemestrales = horasTotalesPeriodo
-  const excedidoSemestral = granTotal > horasSemestrales
+  const excedidoSemestral = !sinTope && granTotal > horasSemestrales
   const porcentajeUso = horasSemestrales > 0 ? Math.round((granTotal / horasSemestrales) * 100) : 0
 
   return (
@@ -357,7 +360,10 @@ export function StepRevision({
             <div>
               <h3 className="text-xl font-bold uppercase">Dedicación del Semestre</h3>
               <p className="text-sm text-muted-foreground print:text-gray-500">
-                <strong>{getModalidadLabelLargo(docente.modalidad)}</strong>: tope máximo de <strong>{horasSemestrales} horas</strong>
+                <strong>{getModalidadLabelLargo(docente.modalidad)}</strong>
+                {sinTope
+                  ? ": sin tope asignado (lo fija el decano / Consejo Académico, Art. 4f)"
+                  : <>: tope máximo de <strong>{horasSemestrales} horas</strong></>}
               </p>
             </div>
             <div className="mt-2 sm:mt-0 text-right">
@@ -365,10 +371,10 @@ export function StepRevision({
                 "text-3xl font-bold tabular-nums print:text-black",
                 excedidoSemestral ? "text-destructive" : "text-primary"
               )}>
-                {granTotal} / {horasSemestrales}h
+                {sinTope ? `${granTotal}h` : `${granTotal} / ${horasSemestrales}h`}
               </p>
               <p className="text-xs text-muted-foreground print:text-gray-500">
-                {porcentajeUso}% del tope contractual
+                {sinTope ? "sin tope asignado" : `${porcentajeUso}% del tope contractual`}
               </p>
             </div>
           </div>
@@ -413,8 +419,19 @@ export function StepRevision({
             )
           })()}
 
-          {/* Requisito 2: Tope máximo (Art. 4) — techo, solo informativo hacia arriba */}
-          {(() => {
+          {/* Requisito 2: Tope máximo (Art. 4) — techo, solo informativo hacia arriba.
+              INVITADO sin horas autorizadas: aún no hay tope que validar (Art. 4f). */}
+          {sinTope ? (
+            <div className="flex items-start gap-3 rounded-lg border p-3 text-sm">
+              <div>
+                <p className="font-medium">Tope contractual: sin asignar (Art. 4f)</p>
+                <p className="mt-0.5 text-xs opacity-75">
+                  El decano / Consejo Académico fijará las horas autorizadas del invitado al revisar
+                  esta agenda. Por ahora no hay un máximo que cumplir.
+                </p>
+              </div>
+            </div>
+          ) : (() => {
             const estado = estadoTope(granTotal, horasSemestrales)
             const { className, Icon } = ESTILO_INDICADOR[estado]
             const margen = horasSemestrales - granTotal

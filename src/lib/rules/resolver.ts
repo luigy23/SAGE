@@ -487,7 +487,12 @@ export async function resolveAgendaLimits(
   // horasTotalesPeriodo: si hay override de semanas, se recalcula siempre desde la tasa semanal.
   // Sin override, PLANTA_TC/MT usan el valor fijo del Acuerdo (880/440); los demás derivan.
   // INVITADO (Art. 4f): el 100% es lo CONTRATADO (horas absolutas autorizadas por el Consejo
-  // Académico), no 40h×semanas. Si no se capturó, cae al comportamiento flexible (derivado).
+  // Académico). Mientras el decano/Consejo NO asigne `invHorasContratadas`, NO se inventa un
+  // tope derivado: la agenda queda "sin tope" (el invitado ya es no-estricto) y el tope real
+  // aparece cuando se asignan las horas.
+  const invitadoSinTope =
+    docente.modalidad === "INVITADO" && docente.invHorasContratadas == null
+
   const horasTotalesPeriodo =
     docente.modalidad === "INVITADO" && docente.invHorasContratadas != null
       ? docente.invHorasContratadas
@@ -534,6 +539,7 @@ export async function resolveAgendaLimits(
     maxInvProySocialCatedra,
     semanas: semanasReales,          // semanas efectivas de trabajo para esta agenda
     semanasMaximas: semanasEfectivas, // techo máximo elegible por el docente
+    sinTopeSemestral: invitadoSinTope,
     fuente: modalidad.fuente,
   }
 }
