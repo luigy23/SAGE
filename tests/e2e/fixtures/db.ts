@@ -51,6 +51,15 @@ import {
   PROYECTO_COINV,
   PROF_COINV,
 } from "./proyecto-inyectado"
+import {
+  PERIODO_DEMO,
+  PROGRAMA_DEMO,
+  COHORTE_DEMO,
+  DOCENTE_DEMO,
+  JEFE_DEMO,
+  PROYECTO_APROBADO_DEMO,
+  PROYECTO_PENDIENTE_DEMO,
+} from "./demo"
 
 function makePrisma() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL })
@@ -864,6 +873,121 @@ export async function prepararEscenarioProyectoInyectado() {
   }
 }
 
+/**
+ * Escenario del DEMO end-to-end (docente DIANA → jefe CARLOS):
+ *  - DIANA (planta) con un proyecto APROBADO (precarga), un proyecto PENDIENTE
+ *    (el jefe lo aprueba) y una consejería activa (la ve el jefe).
+ *  - CARLOS, jefe del programa de DIANA, con autoridad académica.
+ *  - Cursos del catálogo garantizados (CBI001/002/003).
+ */
+export async function prepararEscenarioDemo() {
+  const prisma = makePrisma()
+  try {
+    await prisma.periodoAcademico.updateMany({
+      where: { nombre: PERIODO_DEMO },
+      data: {
+        estado: "ABIERTO",
+        agendaDesde: new Date("2020-01-01T00:00:00Z"),
+        agendaHasta: new Date("2031-01-01T00:00:00Z"),
+      },
+    })
+
+    // Cursos del catálogo (garantizados para el demo).
+    const cursosDemo = [
+      { codigo: "CBI001", nombre: "Fundamentos de Matemáticas" },
+      { codigo: "CBI002", nombre: "Cálculo Diferencial" },
+      { codigo: "CBI003", nombre: "Cálculo Integral" },
+    ]
+    for (const c of cursosDemo) {
+      const datos = {
+        nombre: c.nombre, creditos: 3, tipo: "TEORICO" as const, estado: true,
+        facultad: "Ingeniería", horasSemT: 4, horasSemP: null, horasSemI: 5,
+      }
+      await prisma.cursoMaestro.upsert({ where: { codigo: c.codigo }, update: datos, create: { codigo: c.codigo, ...datos } })
+    }
+
+    // Docente DIANA + Jefe CARLOS.
+    const diana = await prisma.docente.upsert({
+      where: { email: DOCENTE_DEMO.email },
+      update: {},
+      create: {
+        email: DOCENTE_DEMO.email,
+        password: await bcrypt.hash(DOCENTE_DEMO.password, 10),
+        nombre: DOCENTE_DEMO.nombre, cedula: DOCENTE_DEMO.cedula,
+        rol: "DOCENTE", estadoCuenta: "ACTIVO",
+        sedeBase: DOCENTE_DEMO.sedeBase, modalidad: DOCENTE_DEMO.modalidad,
+        facultad: DOCENTE_DEMO.facultad, programa: DOCENTE_DEMO.programa,
+        doctorado: false, cargoAdministrativo: false, tipoCargo: null, proyectosActivos: true,
+      },
+    })
+    // Asegurar contraseña/estado en re-runs.
+    await prisma.docente.update({
+      where: { id: diana.id },
+      data: { password: await bcrypt.hash(DOCENTE_DEMO.password, 10), estadoCuenta: "ACTIVO", proyectosActivos: true },
+    })
+
+    await prisma.docente.upsert({
+      where: { email: JEFE_DEMO.email },
+      update: {
+        password: await bcrypt.hash(JEFE_DEMO.password, 10),
+        estadoCuenta: "ACTIVO", cargoAdministrativo: true,
+        tipoCargo: JEFE_DEMO.tipoCargo, cargoAmbitoValor: JEFE_DEMO.cargoAmbitoValor,
+        facultad: JEFE_DEMO.facultad, programa: JEFE_DEMO.programa,
+      },
+      create: {
+        email: JEFE_DEMO.email,
+        password: await bcrypt.hash(JEFE_DEMO.password, 10),
+        nombre: JEFE_DEMO.nombre, cedula: JEFE_DEMO.cedula,
+        rol: "DOCENTE", estadoCuenta: "ACTIVO",
+        sedeBase: "NEIVA", modalidad: "PLANTA_TC",
+        facultad: JEFE_DEMO.facultad, programa: JEFE_DEMO.programa,
+        doctorado: false, cargoAdministrativo: true,
+        tipoCargo: JEFE_DEMO.tipoCargo, cargoAmbitoValor: JEFE_DEMO.cargoAmbitoValor,
+        proyectosActivos: false,
+      },
+    })
+
+    // Limpiar estado previo de DIANA (agenda, proyectos demo, compromisos).
+    await prisma.agendaSemestral.deleteMany({ where: { docenteId: diana.id, periodo: PERIODO_DEMO } })
+    await prisma.proyecto.deleteMany({
+      where: { creadorId: diana.id, titulo: { in: [PROYECTO_APROBADO_DEMO.titulo, PROYECTO_PENDIENTE_DEMO.titulo] } },
+    })
+    await prisma.consejeriaCompromiso.deleteMany({ where: { docenteId: diana.id, programa: PROGRAMA_DEMO } })
+
+    const fechas = { fechaInicio: new Date("2020-01-01T00:00:00Z"), fechaFin: new Date("2031-01-01T00:00:00Z") }
+
+    // Proyecto APROBADO (se precarga en la agenda).
+    await prisma.proyecto.create({
+      data: {
+        titulo: PROYECTO_APROBADO_DEMO.titulo, tipo: "INVESTIGACION", estado: "APROBADO",
+        creadorId: diana.id, ...fechas, revisadoEn: new Date("2025-01-01T00:00:00Z"),
+        participantes: { create: { docenteId: diana.id, rol: "INVESTIGADOR_PRINCIPAL", horasAsignadas: PROYECTO_APROBADO_DEMO.horas } },
+      },
+    })
+
+    // Proyecto PENDIENTE (ENVIADO) con horas propuestas + fechas (el jefe lo aprueba).
+    await prisma.proyecto.create({
+      data: {
+        titulo: PROYECTO_PENDIENTE_DEMO.titulo, tipo: "INVESTIGACION", estado: "ENVIADO",
+        creadorId: diana.id, ...fechas,
+        participantes: { create: { docenteId: diana.id, rol: "INVESTIGADOR_PRINCIPAL", horasAsignadas: PROYECTO_PENDIENTE_DEMO.horasPropuestas } },
+      },
+    })
+
+    // Consejería activa de DIANA (la ve el jefe en /gestion/consejeria + se precarga).
+    await prisma.consejeriaCompromiso.create({
+      data: {
+        docenteId: diana.id, programa: PROGRAMA_DEMO, cohorte: COHORTE_DEMO,
+        periodoInicio: PERIODO_DEMO, semestresCompromiso: 2, creadaEnPeriodo: PERIODO_DEMO, estado: "ACTIVO",
+      },
+    })
+
+    return { dianaId: diana.id }
+  } finally {
+    await prisma.$disconnect()
+  }
+}
+
 if (require.main === module) {
   Promise.all([
     prepararEscenario(),
@@ -873,6 +997,7 @@ if (require.main === module) {
     prepararEscenarioConsejeriaVista(),
     prepararEscenarioInvitado(),
     prepararEscenarioProyectoInyectado(),
+    prepararEscenarioDemo(),
   ])
     .then((r) => {
       console.log("Escenario listo:", r)
