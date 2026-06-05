@@ -34,10 +34,18 @@ test("FO-19 — proyecto aprobado se precarga bloqueado en la agenda (Art. 11)",
   await anunciar(page, "Precarga de proyecto aprobado (Art. 11)", `Debe aparecer solo y bloqueado: ${PROYECTO_INYECTADO.actividadNombre} · ${PROYECTO_INYECTADO.horasAsignadas}h`)
 
   // La tarjeta bloqueada muestra el rol (actividad del catálogo), el título y las horas.
-  await expect(page.getByText(PROYECTO_INYECTADO.actividadNombre)).toBeVisible()
-  await expect(page.getByText(new RegExp(PROYECTO_INYECTADO.titulo))).toBeVisible()
-  await expect(page.getByText(new RegExp(`${PROYECTO_INYECTADO.horasAsignadas}h`))).toBeVisible()
+  // (.first() porque en modo EXPLAIN el banner repite estos textos.)
+  await expect(page.getByText(PROYECTO_INYECTADO.actividadNombre).first()).toBeVisible()
+  await expect(page.getByText(new RegExp(PROYECTO_INYECTADO.titulo)).first()).toBeVisible()
+  await expect(page.getByText(new RegExp(`${PROYECTO_INYECTADO.horasAsignadas}h`)).first()).toBeVisible()
   await expect(page.getByText(/Precargado de tu proyecto activo/)).toBeVisible()
 
   console.log(`[proy] precargado bloqueado: ${PROYECTO_INYECTADO.actividadNombre} · ${PROYECTO_INYECTADO.horasAsignadas}h ✓`)
+
+  // Modo "míralo con calma": corre con KEEP_OPEN=1 y el navegador queda abierto
+  // hasta que pulses Resume en el Inspector de Playwright.
+  if (process.env.KEEP_OPEN) {
+    console.log("[proy] 👀 Navegador en pausa. Mira la tarjeta precargada y pulsa Resume (▶) para cerrar.")
+    await page.pause()
+  }
 })
