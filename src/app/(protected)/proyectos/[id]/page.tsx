@@ -69,6 +69,8 @@ export default async function DetalleProyectoPage({
       descripcion: proyecto.descripcion ?? "",
       tipo: proyecto.tipo,
       rolDocente: miRol ?? undefined,
+      horasDocente:
+        proyecto.participantes.find((p) => p.docente.id === miId)?.horasAsignadas ?? null,
       entidadConvocatoria: proyecto.entidadConvocatoria ?? "",
       fechaInicio: fechaToInput(proyecto.fechaInicio),
       fechaFin: fechaToInput(proyecto.fechaFin),
@@ -81,6 +83,7 @@ export default async function DetalleProyectoPage({
         cedula: p.docente.cedula,
         programa: p.docente.programa,
         rol: p.rol,
+        horas: p.horasAsignadas,
       })),
   }
 

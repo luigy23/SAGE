@@ -23,6 +23,8 @@ export type ParticipanteAprobar = {
   docenteId: string
   nombre: string
   rol: string
+  /** Horas propuestas por el creador (si las hay). Pre-llenan el input. */
+  horasAsignadas?: number | null
 }
 
 /**
@@ -49,8 +51,14 @@ export function ProyectoAprobarPanel({
   const [pending, startTransition] = useTransition()
   const topePorRol = (rol: string) => topes?.[rol] ?? TOPE_POR_ROL[rol] ?? 0
 
+  // Pre-llenar con la propuesta del creador si existe; si no, con el tope del rol.
   const [horas, setHoras] = useState<Record<string, string>>(() =>
-    Object.fromEntries(participantes.map((p) => [p.docenteId, String(topePorRol(p.rol))])),
+    Object.fromEntries(
+      participantes.map((p) => [
+        p.docenteId,
+        String(p.horasAsignadas ?? topePorRol(p.rol)),
+      ]),
+    ),
   )
   const [fechaInicio, setFechaInicio] = useState<string | undefined>(fechaInicioInicial)
   const [fechaFin, setFechaFin] = useState<string | undefined>(fechaFinInicial)

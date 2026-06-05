@@ -82,6 +82,7 @@ export function ProyectoRevisionDetalle({
             docenteId: p.docenteId,
             nombre: p.docente.nombre,
             rol: p.rol,
+            horasAsignadas: p.horasAsignadas,
           }))}
           topes={topes}
           fechaInicioInicial={fechaInicioStr}

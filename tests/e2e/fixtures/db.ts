@@ -782,7 +782,10 @@ export async function prepararEscenarioProyectoInyectado() {
     // Limpiar agenda + proyectos QA previos del docente (cascade borra participantes).
     await prisma.agendaSemestral.deleteMany({ where: { docenteId: docente.id, periodo: PERIODO_PROY } })
     await prisma.proyecto.deleteMany({
-      where: { titulo: PROYECTO_INYECTADO.titulo, creadorId: docente.id },
+      where: {
+        creadorId: docente.id,
+        OR: [{ titulo: PROYECTO_INYECTADO.titulo }, { titulo: { contains: "QA Propuesta" } }],
+      },
     })
 
     // Proyecto APROBADO con fechas amplias (abarca cualquier período) + horas asignadas.

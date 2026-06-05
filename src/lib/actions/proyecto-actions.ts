@@ -76,8 +76,15 @@ async function construirParticipantes(
   creadorId: string,
   rolCreador: string,
   adicionales: ParticipanteInput[],
-): Promise<{ error: string } | { participantes: { docenteId: string; rol: RolEnProyecto }[] }> {
-  const todos = [{ docenteId: creadorId, rol: rolCreador }, ...adicionales]
+  horasCreador?: number | null,
+): Promise<
+  { error: string }
+  | { participantes: { docenteId: string; rol: RolEnProyecto; horasAsignadas: number | null }[] }
+> {
+  const todos = [
+    { docenteId: creadorId, rol: rolCreador, horas: horasCreador ?? null },
+    ...adicionales.map((a) => ({ docenteId: a.docenteId, rol: a.rol, horas: a.horas ?? null })),
+  ]
 
   const ids = new Set<string>()
   for (const p of todos) {
@@ -123,7 +130,26 @@ async function construirParticipantes(
     }
   }
 
-  return { participantes: todos.map((p) => ({ docenteId: p.docenteId, rol: p.rol as RolEnProyecto })) }
+  // Horas propuestas: validar ≤ tope del rol (mismo tope que usa el revisor).
+  const topesPorRol = await resolverTopesPorRol()
+  for (const p of todos) {
+    if (p.horas != null) {
+      const tope = topesPorRol[p.rol] ?? 0
+      if (p.horas > tope) {
+        return {
+          error: `Las horas propuestas (${p.horas}h) superan el tope del rol (${tope}h).`,
+        }
+      }
+    }
+  }
+
+  return {
+    participantes: todos.map((p) => ({
+      docenteId: p.docenteId,
+      rol: p.rol as RolEnProyecto,
+      horasAsignadas: p.horas ?? null,
+    })),
+  }
 }
 
 /**
@@ -227,8 +253,8 @@ export async function crearProyectoAction(
     }
   }
 
-  const { rolDocente, participantes: adicionales, fechaInicio, fechaFin, ...datos } = parsed.data
-  const armado = await construirParticipantes(datos.tipo, docente.id, rolDocente, adicionales ?? [])
+  const { rolDocente, horasDocente, participantes: adicionales, fechaInicio, fechaFin, ...datos } = parsed.data
+  const armado = await construirParticipantes(datos.tipo, docente.id, rolDocente, adicionales ?? [], horasDocente)
   if ("error" in armado) return armado
 
   const creado = await prisma.proyecto.create({
@@ -277,8 +303,8 @@ export async function actualizarProyectoAction(
     return { error: "Solo se pueden editar proyectos en BORRADOR o RECHAZADO." }
   }
 
-  const { rolDocente, participantes: adicionales, fechaInicio, fechaFin, ...datos } = parsed.data
-  const armado = await construirParticipantes(datos.tipo, session.id, rolDocente, adicionales ?? [])
+  const { rolDocente, horasDocente, participantes: adicionales, fechaInicio, fechaFin, ...datos } = parsed.data
+  const armado = await construirParticipantes(datos.tipo, session.id, rolDocente, adicionales ?? [], horasDocente)
   if ("error" in armado) return armado
 
   await prisma.$transaction([
@@ -298,6 +324,7 @@ export async function actualizarProyectoAction(
         proyectoId: id,
         docenteId: p.docenteId,
         rol: p.rol,
+        horasAsignadas: p.horasAsignadas,
       })),
     }),
   ])

@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { crearProyectoSchema, type CrearProyectoInput } from "@/lib/schemas/proyecto-schema"
+import { crearProyectoSchema, type CrearProyectoInput, TOPE_POR_ROL } from "@/lib/schemas/proyecto-schema"
 import { periodosQueAbarca, type PeriodoRango } from "@/lib/utils/periodo"
 import {
   crearProyectoAction,
@@ -75,6 +75,7 @@ export function ProyectoForm({
       lista.map((p) => ({
         docenteId: p.id,
         rol: p.rol as "INVESTIGADOR_PRINCIPAL" | "COINVESTIGADOR" | "COORDINADOR" | "COGESTOR",
+        horas: p.horas ?? null,
       })),
     )
   }
@@ -89,15 +90,18 @@ export function ProyectoForm({
       entidadConvocatoria: initial?.values.entidadConvocatoria ?? "",
       fechaInicio: initial?.values.fechaInicio,
       fechaFin: initial?.values.fechaFin,
+      horasDocente: initial?.values.horasDocente ?? null,
       participantes: initial?.participantes.map((p) => ({
         docenteId: p.id,
         rol: p.rol as "INVESTIGADOR_PRINCIPAL" | "COINVESTIGADOR" | "COORDINADOR" | "COGESTOR",
+        horas: p.horas ?? null,
       })),
     },
   })
 
   const tipoSeleccionado = useWatch({ control: form.control, name: "tipo" })
   const rolDocenteSel = useWatch({ control: form.control, name: "rolDocente" })
+  const horasDocenteSel = useWatch({ control: form.control, name: "horasDocente" })
   const fechaInicioSel = useWatch({ control: form.control, name: "fechaInicio" })
   const fechaFinSel = useWatch({ control: form.control, name: "fechaFin" })
   const rolesDisponibles = tipoSeleccionado ? ROL_POR_TIPO[tipoSeleccionado] ?? [] : []
@@ -244,10 +248,35 @@ export function ProyectoForm({
         )}
       </div>
 
-      {/* Nota informativa tenue: aquí no se asignan horas; las asigna el revisor. */}
+      {/* Horas propuestas del creador (≤ tope del rol). El revisor las confirma. */}
+      <div className="space-y-2">
+        <Label htmlFor="horasDocente">Horas propuestas para ti (semestre)</Label>
+        <Input
+          id="horasDocente"
+          type="number"
+          min={0}
+          max={rolDocenteSel ? TOPE_POR_ROL[rolDocenteSel] : undefined}
+          placeholder={rolDocenteSel ? `Máx ${TOPE_POR_ROL[rolDocenteSel] ?? 0}h` : "Primero elegí tu rol"}
+          disabled={!rolDocenteSel}
+          value={horasDocenteSel ?? ""}
+          onChange={(e) =>
+            form.setValue("horasDocente", e.target.value === "" ? null : Number(e.target.value), {
+              shouldValidate: true,
+            })
+          }
+          className="w-40"
+        />
+        <p className="text-xs text-muted-foreground">
+          Estas horas se precargan en tu agenda cuando el proyecto sea aprobado. Tu jefe/decano las
+          confirma o ajusta al aprobar (no pueden superar el tope del rol).
+        </p>
+      </div>
+
+      {/* Nota informativa: el revisor confirma las horas al aprobar. */}
       <div className="rounded-md bg-muted/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-       Cuando tu jefe de programa o el decano apruebe el proyecto, <span className="font-medium text-foreground/80">asignará las horas de cada
-        participante</span>.
+       Las horas que propongas aquí son una sugerencia. Cuando tu jefe de programa o el decano
+       apruebe el proyecto, <span className="font-medium text-foreground/80">confirmará o ajustará las horas de cada
+        participante</span> (≤ el tope del rol).
       </div>
 
       {/* Participantes adicionales */}
@@ -263,6 +292,7 @@ export function ProyectoForm({
           onChange={actualizarParticipantes}
           tipo={tipoSeleccionado}
           excluirIds={[creadorId]}
+          topes={TOPE_POR_ROL}
         />
       </div>
 

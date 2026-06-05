@@ -53,6 +53,9 @@ export const participanteSchema = z.object({
     "COORDINADOR",
     "COGESTOR",
   ]),
+  // Horas PROPUESTAS al crear (≤ tope del rol). El revisor las confirma/ajusta al
+  // aprobar. Opcional: si no se ponen, el revisor las asigna desde cero.
+  horas: z.number().int().min(0).max(880).nullable().optional(),
 })
 
 export const crearProyectoSchema = z.object({
@@ -68,6 +71,8 @@ export const crearProyectoSchema = z.object({
     ["INVESTIGADOR_PRINCIPAL", "COINVESTIGADOR", "COORDINADOR", "COGESTOR"],
     { error: "Seleccioná tu rol en el proyecto." },
   ),
+  // Horas PROPUESTAS por el creador para sí mismo (≤ tope del rol). El revisor confirma.
+  horasDocente: z.number().int().min(0).max(880).nullable().optional(),
   entidadConvocatoria: z.string().max(200).optional(),
   // Tiempo del proyecto (fechas yyyy-MM-dd). El profesor las propone; el revisor
   // las confirma/ajusta al aprobar. De aquí se derivan los semestres que abarca.

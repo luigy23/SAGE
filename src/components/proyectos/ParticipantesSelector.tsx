@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
 import { UserPlus, X } from "lucide-react"
 import { buscarDocentesAction } from "@/lib/actions/proyecto-actions"
 import { ROLES_POR_TIPO } from "@/lib/schemas/proyecto-schema"
@@ -39,6 +40,8 @@ export type DocenteParticipante = {
   cedula: string
   programa: string
   rol: string
+  /** Horas propuestas (≤ tope del rol). El revisor las confirma al aprobar. */
+  horas?: number | null
 }
 
 type DocenteBusqueda = {
@@ -55,12 +58,15 @@ export function ParticipantesSelector({
   onChange,
   tipo,
   excluirIds,
+  topes,
 }: {
   value: DocenteParticipante[]
   onChange: (v: DocenteParticipante[]) => void
   tipo: "INVESTIGACION" | "PROYECCION_SOCIAL" | undefined
   /** IDs que no se pueden agregar (ej. el creador y los ya agregados). */
   excluirIds: string[]
+  /** Tope de horas por rol (para mostrar el máximo en el input). Opcional. */
+  topes?: Record<string, number>
 }) {
   const [open, setOpen] = useState(false)
   const [resultados, setResultados] = useState<DocenteBusqueda[]>([])
@@ -93,6 +99,10 @@ export function ParticipantesSelector({
     onChange(value.map((p) => (p.id === id ? { ...p, rol } : p)))
   }
 
+  function cambiarHoras(id: string, horas: number | null) {
+    onChange(value.map((p) => (p.id === id ? { ...p, horas } : p)))
+  }
+
   return (
     <div className="space-y-3">
       {value.length > 0 && (
@@ -110,7 +120,7 @@ export function ParticipantesSelector({
               </div>
               <div className="flex items-center gap-2">
                 <Select value={p.rol} onValueChange={(v) => cambiarRol(p.id, v)}>
-                  <SelectTrigger className="h-9 w-[200px]">
+                  <SelectTrigger className="h-9 w-[180px]">
                     <SelectValue placeholder="Rol" />
                   </SelectTrigger>
                   <SelectContent>
@@ -121,6 +131,23 @@ export function ParticipantesSelector({
                     ))}
                   </SelectContent>
                 </Select>
+                <div className="flex flex-col">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={topes?.[p.rol]}
+                    placeholder="Horas"
+                    value={p.horas ?? ""}
+                    onChange={(e) =>
+                      cambiarHoras(p.id, e.target.value === "" ? null : Number(e.target.value))
+                    }
+                    className="h-9 w-24"
+                    title="Horas propuestas (el revisor confirma)"
+                  />
+                  {topes?.[p.rol] != null && (
+                    <span className="mt-0.5 text-[10px] text-muted-foreground">máx {topes[p.rol]}h</span>
+                  )}
+                </div>
                 <Button
                   type="button"
                   variant="ghost"
