@@ -1,5 +1,11 @@
 import { test, expect, type Page } from "@playwright/test"
-import { PERIODO_PROY, PROYECTO_INYECTADO, PROF_PROY } from "./fixtures/proyecto-inyectado"
+import {
+  PERIODO_PROY,
+  PROYECTO_INYECTADO,
+  PROF_PROY,
+  PROYECTO_COINV,
+  PROF_COINV,
+} from "./fixtures/proyecto-inyectado"
 import { anunciar } from "./fixtures/anunciar"
 
 /**
@@ -46,6 +52,33 @@ test("FO-19 — proyecto aprobado se precarga bloqueado en la agenda (Art. 11)",
   // hasta que pulses Resume en el Inspector de Playwright.
   if (process.env.KEEP_OPEN) {
     console.log("[proy] 👀 Navegador en pausa. Mira la tarjeta precargada y pulsa Resume (▶) para cerrar.")
+    await page.pause()
+  }
+})
+
+test("FO-19 — proyecto como COINVESTIGADOR se precarga bloqueado (Art. 11)", async ({ page }) => {
+  test.setTimeout(120_000)
+
+  await login(page, PROF_COINV.email, PROF_COINV.password)
+  await page.goto("/agenda")
+  await expect(page.getByText(`Crear Agenda del Periodo ${PERIODO_PROY}`)).toBeVisible({ timeout: 20_000 })
+  await page.getByRole("button", { name: "Crear Agenda" }).click()
+
+  await page.getByRole("button", { name: "Siguiente" }).click()
+  await page.getByRole("button", { name: "Siguiente" }).click()
+  await expect(page.getByText("2. Actividades de Investigación")).toBeVisible()
+
+  await anunciar(page, "Precarga como COINVESTIGADOR (Art. 11)", `Debe aparecer bloqueado: ${PROYECTO_COINV.actividadNombre} · ${PROYECTO_COINV.horasAsignadas}h`)
+
+  await expect(page.getByText(PROYECTO_COINV.actividadNombre).first()).toBeVisible()
+  await expect(page.getByText(new RegExp(PROYECTO_COINV.titulo)).first()).toBeVisible()
+  await expect(page.getByText(new RegExp(`${PROYECTO_COINV.horasAsignadas}h`)).first()).toBeVisible()
+  await expect(page.getByText(/Precargado de tu proyecto activo/)).toBeVisible()
+
+  console.log(`[proy] COINVESTIGADOR precargado: ${PROYECTO_COINV.actividadNombre} · ${PROYECTO_COINV.horasAsignadas}h ✓`)
+
+  if (process.env.KEEP_OPEN) {
+    console.log("[proy] 👀 Navegador en pausa (coinvestigador). Pulsa Resume (▶) para cerrar.")
     await page.pause()
   }
 })

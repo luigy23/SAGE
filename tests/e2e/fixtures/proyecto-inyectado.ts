@@ -27,3 +27,23 @@ export const PROF_PROY = {
   facultad: "Facultad Proyecto QA",
   programa: "Programa Proyecto QA",
 }
+
+/** Segundo caso: el docente es COINVESTIGADOR (otra actividad del catálogo). */
+export const PROYECTO_COINV = {
+  titulo: "Proyecto QA Coinvestigador en Agenda",
+  tipo: "INVESTIGACION" as const,
+  rol: "COINVESTIGADOR" as const,
+  actividadNombre: "Coinvestigador",
+  horasAsignadas: 120, // ≤ tope coinvestigador (176)
+}
+
+export const PROF_COINV = {
+  email: "qa.proy.coinv@usco.edu.co",
+  password: "Test1234!",
+  nombre: "QA DOCENTE COINVESTIGADOR",
+  cedula: "90000061",
+  modalidad: "PLANTA_TC" as const,
+  sedeBase: "NEIVA" as const,
+  facultad: "Facultad Proyecto QA",
+  programa: "Programa Proyecto QA",
+}

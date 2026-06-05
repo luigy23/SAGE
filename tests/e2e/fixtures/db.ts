@@ -44,7 +44,13 @@ import {
   JEFE_VISTA,
 } from "./consejeria-vista"
 import { PERIODO_INV, INVITADOS } from "./invitado"
-import { PERIODO_PROY, PROYECTO_INYECTADO, PROF_PROY } from "./proyecto-inyectado"
+import {
+  PERIODO_PROY,
+  PROYECTO_INYECTADO,
+  PROF_PROY,
+  PROYECTO_COINV,
+  PROF_COINV,
+} from "./proyecto-inyectado"
 
 function makePrisma() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL })
@@ -808,7 +814,51 @@ export async function prepararEscenarioProyectoInyectado() {
       },
     })
 
-    return { docenteId: docente.id }
+    // Segundo caso: un docente COINVESTIGADOR en un proyecto aprobado aparte.
+    const passwordHashCo = await bcrypt.hash(PROF_COINV.password, 10)
+    const comunCo = {
+      password: passwordHashCo,
+      nombre: PROF_COINV.nombre,
+      cedula: PROF_COINV.cedula,
+      rol: "DOCENTE" as const,
+      estadoCuenta: "ACTIVO" as const,
+      sedeBase: PROF_COINV.sedeBase,
+      modalidad: PROF_COINV.modalidad,
+      facultad: PROF_COINV.facultad,
+      programa: PROF_COINV.programa,
+      doctorado: false,
+      cargoAdministrativo: false,
+      tipoCargo: null,
+      proyectosActivos: true,
+    }
+    const coinv = await prisma.docente.upsert({
+      where: { email: PROF_COINV.email },
+      update: comunCo,
+      create: { email: PROF_COINV.email, ...comunCo },
+    })
+    await prisma.agendaSemestral.deleteMany({ where: { docenteId: coinv.id, periodo: PERIODO_PROY } })
+    await prisma.proyecto.deleteMany({ where: { titulo: PROYECTO_COINV.titulo } })
+    await prisma.proyecto.create({
+      data: {
+        titulo: PROYECTO_COINV.titulo,
+        tipo: PROYECTO_COINV.tipo,
+        estado: "APROBADO",
+        creadorId: coinv.id,
+        fechaInicio: new Date("2020-01-01T00:00:00Z"),
+        fechaFin: new Date("2031-01-01T00:00:00Z"),
+        revisadoEn: new Date("2025-01-01T00:00:00Z"),
+        // El docente de prueba es COINVESTIGADOR (seed directo; aislado de otros docentes).
+        participantes: {
+          create: {
+            docenteId: coinv.id,
+            rol: PROYECTO_COINV.rol,
+            horasAsignadas: PROYECTO_COINV.horasAsignadas,
+          },
+        },
+      },
+    })
+
+    return { docenteId: docente.id, coinvId: coinv.id }
   } finally {
     await prisma.$disconnect()
   }
