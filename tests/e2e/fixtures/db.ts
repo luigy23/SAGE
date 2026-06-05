@@ -27,6 +27,13 @@ import {
   CURSO_GRANDE,
   ACTIVIDAD_INV_QA,
 } from "./modalidades"
+import {
+  DOCENTES_CONSEJ,
+  PROGRAMAS_CONSEJ,
+  PERIODO_CONSEJ,
+  HORAS_POR_COHORTE,
+  MAX_COHORTES,
+} from "./consejeria"
 
 function makePrisma() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL })
@@ -432,8 +439,133 @@ export async function prepararEscenarioModalidades() {
   }
 }
 
+/**
+ * Deja la base lista para el test de CONSEJERÍA (Acuerdo 048 Art. 11):
+ *  1. Período activo "2025-2".
+ *  2. Fuerza el catálogo "Consejería Académica" (48h/cohorte, máx 2, por COHORTE).
+ *  3. Fuerza ParametrosModalidad de CÁTEDRA (sin mínimo docencia → agenda solo-consejería envía).
+ *  4. Crea los docentes de consejería (CÁTEDRA).
+ *  5. Limpia sus agendas y TODOS los compromisos de sus programas (clave para aislar).
+ */
+export async function prepararEscenarioConsejeria() {
+  const prisma = makePrisma()
+  try {
+    // 1) Período activo "2025-2" --------------------------------------------
+    const abiertos = await prisma.periodoAcademico.findMany({
+      where: { estado: "ABIERTO", nombre: { not: PERIODO_CONSEJ } },
+      select: { fechaInicio: true },
+      orderBy: { fechaInicio: "desc" },
+      take: 1,
+    })
+    const base = abiertos[0]?.fechaInicio?.getTime() ?? Date.now()
+    const fechaInicio = new Date(base + DAY)
+    await prisma.periodoAcademico.upsert({
+      where: { nombre: PERIODO_CONSEJ },
+      update: {
+        estado: "ABIERTO",
+        agendaDesde: new Date("2020-01-01T00:00:00Z"),
+        agendaHasta: new Date("2031-01-01T00:00:00Z"),
+      },
+      create: {
+        nombre: PERIODO_CONSEJ,
+        estado: "ABIERTO",
+        fechaInicio,
+        fechaFin: new Date(fechaInicio.getTime() + 22 * 7 * DAY),
+        agendaDesde: new Date("2020-01-01T00:00:00Z"),
+        agendaHasta: new Date("2031-01-01T00:00:00Z"),
+      },
+    })
+
+    // 2) Catálogo "Consejería Académica" (48h/cohorte, máx 2, por COHORTE) ---
+    const consejCat = await prisma.catalogoActividad.findFirst({
+      where: { categoria: "DOCENCIA", nombre: "Consejería Académica" },
+    })
+    const datosConsej = {
+      topeSemestralH: HORAS_POR_COHORTE,
+      topePorUnidad: "COHORTE" as const,
+      unidadMax: MAX_COHORTES,
+      activo: true,
+    }
+    if (consejCat) {
+      await prisma.catalogoActividad.update({ where: { id: consejCat.id }, data: datosConsej })
+    } else {
+      await prisma.catalogoActividad.create({
+        data: {
+          categoria: "DOCENCIA",
+          nombre: "Consejería Académica",
+          descripcion: "Hasta 2 cohortes; un solo consejero por cohorte y programa (6 semestres).",
+          articuloOrigen: "Art. 11 — Docencia",
+          ...datosConsej,
+        },
+      })
+    }
+
+    // 3) ParametrosModalidad CÁTEDRA (Neiva): sin mínimo de docencia ---------
+    const catParam = {
+      modalidad: "CATEDRA" as const,
+      sedeAplicable: "NEIVA" as const,
+      horasSemanalMax: 16,
+      horasSemestralMax: null as number | null,
+      horasSemestralEstricto: true,
+      minDocencia: null as number | null,
+      minDocenciaConProyectos: null as number | null,
+      maxInvProySocSemanal: 4 as number | null,
+    }
+    const exCat = await prisma.parametrosModalidad.findFirst({
+      where: { periodoId: null, modalidad: "CATEDRA", sedeAplicable: "NEIVA" },
+    })
+    if (exCat) await prisma.parametrosModalidad.update({ where: { id: exCat.id }, data: { ...catParam, activo: true } })
+    else await prisma.parametrosModalidad.create({ data: { ...catParam, periodoId: null, activo: true } })
+
+    // 4) Docentes de consejería + 5) limpieza de agendas --------------------
+    const docenteIds: Record<string, string> = {}
+    for (const d of DOCENTES_CONSEJ) {
+      const passwordHash = await bcrypt.hash(d.password, 10)
+      const comun = {
+        password: passwordHash,
+        nombre: d.nombre,
+        cedula: d.cedula,
+        rol: "DOCENTE" as const,
+        estadoCuenta: "ACTIVO" as const,
+        sedeBase: d.sedeBase,
+        modalidad: d.modalidad,
+        facultad: d.facultad,
+        programa: d.programa,
+        doctorado: false,
+        cargoAdministrativo: false,
+        tipoCargo: null,
+        proyectosActivos: false,
+        semanasVinculacion: d.semanasVinculacion,
+      }
+      const docente = await prisma.docente.upsert({
+        where: { email: d.email },
+        update: comun,
+        create: { email: d.email, ...comun },
+      })
+      docenteIds[d.email] = docente.id
+      await prisma.agendaSemestral.deleteMany({
+        where: { docenteId: docente.id, periodo: PERIODO_CONSEJ },
+      })
+    }
+
+    // 5b) Limpiar TODOS los compromisos de los programas de prueba ----------
+    await prisma.consejeriaCompromiso.deleteMany({
+      where: { programa: { in: PROGRAMAS_CONSEJ } },
+    })
+
+    return docenteIds
+  } finally {
+    await prisma.$disconnect()
+  }
+}
+
 if (require.main === module) {
-  Promise.all([prepararEscenario(), prepararEscenarioCalculos(), prepararEscenarioModalidades()])
+  Promise.all([
+    prepararEscenario(),
+    prepararEscenarioCalculos(),
+    prepararEscenarioModalidades(),
+    prepararEscenarioConsejeria(),
+  ])
     .then((r) => {
       console.log("Escenario listo:", r)
       process.exit(0)

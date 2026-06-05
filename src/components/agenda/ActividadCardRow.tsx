@@ -384,7 +384,7 @@ export function ActividadCardRow({
                               setNuevaDuracion(1)
                             }}
                           >
-                            <SelectTrigger>
+                            <SelectTrigger data-testid="consejeria-cohorte-select">
                               <SelectValue placeholder="Elegir cohorte" />
                             </SelectTrigger>
                             <SelectContent>
@@ -403,7 +403,7 @@ export function ActividadCardRow({
                             onValueChange={(v) => setNuevaDuracion(Number(v))}
                             disabled={!nuevaCohorte}
                           >
-                            <SelectTrigger>
+                            <SelectTrigger data-testid="consejeria-semestres-select">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -415,7 +415,7 @@ export function ActividadCardRow({
                             </SelectContent>
                           </Select>
                         </div>
-                        <Button type="button" size="sm" onClick={agregar} disabled={!nuevaCohorte}>
+                        <Button type="button" size="sm" onClick={agregar} disabled={!nuevaCohorte} data-testid="consejeria-agregar">
                           Agregar
                         </Button>
                       </div>
