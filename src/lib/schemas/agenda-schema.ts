@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { cohorteVigente } from "@/lib/utils/periodo"
+import { cohorteVigente, semanasClasesDeSede } from "@/lib/utils/periodo"
 
 // Default semestral: 22 semanas (Acuerdo 048). Se sobreescribe vía
 // SUPERADMIN al crear el schema dinámico con `createAgendaSchema(...)`.
@@ -18,6 +18,8 @@ const FACTOR_POR_TIPO: Record<string, { factorHoras: number; constanteSuma: numb
 
 export function createCursoAgendaSchema(
   semanasClases: number = DEFAULT_SEMANAS_CLASES,
+  /** Override de semanas de clase por sede donde se dicta el curso (opcional). */
+  semanasClasesPorSede?: Record<string, number>,
 ) {
   return z.object({
     // FK al catálogo maestro. null cuando el curso se ingresó a mano (no se eligió del catálogo).
@@ -52,19 +54,20 @@ export function createCursoAgendaSchema(
     dedicacionPeriodo: z.coerce.number().optional().default(0),
   }).transform((data) => {
     // Art. 3 Par. 4 Acuerdo 048: factor varía según tipo de curso.
-    // El curso se calcula sobre las SEMANAS DE CLASE del parámetro (semanasClases),
-    // no sobre las semanas del contrato ni un valor elegido por el docente. Coincide
-    // con SilentDedicacionCalc, que también fuerza `semanas` = semanasClases.
+    // Las SEMANAS DE CLASE salen de la SEDE donde se dicta el curso (override por sede;
+    // si la sede no tiene override, cae al default `semanasClases`). Coincide con
+    // SilentDedicacionCalc, que también fuerza `semanas` con el mismo cálculo.
     // Guard horas > 0 igual al de SilentDedicacionCalc (constanteSuma no aplica si no hay horas).
+    const semanasCurso = semanasClasesDeSede(semanasClasesPorSede, semanasClases, data.sede)
     const f = FACTOR_POR_TIPO[data.tipoCurso ?? "TEORICO_PRACTICO"] ?? { factorHoras: 1.5, constanteSuma: 1 }
     const horasSemanalesCalculadas = data.horasPresenciales > 0
       ? (data.horasPresenciales * f.factorHoras) + f.constanteSuma
       : 0
-    const calculoLegalTotal = horasSemanalesCalculadas * semanasClases
+    const calculoLegalTotal = horasSemanalesCalculadas * semanasCurso
 
     return {
       ...data,
-      semanas: semanasClases,
+      semanas: semanasCurso,
       dedicacionPeriodo: calculoLegalTotal,
     }
   })
@@ -136,9 +139,10 @@ export type ActividadFormData = z.infer<typeof actividadSchema>
 export function createAgendaWizardBaseSchema(
   semanasPeriodo: number = DEFAULT_SEMANAS_PERIODO,
   semanasClases: number = DEFAULT_SEMANAS_CLASES,
+  semanasClasesPorSede?: Record<string, number>,
 ) {
   return z.object({
-    cursos: z.array(createCursoAgendaSchema(semanasClases)).default([]),
+    cursos: z.array(createCursoAgendaSchema(semanasClases, semanasClasesPorSede)).default([]),
     otrasActividadesDocencia: z.array(createActividadSchema(semanasPeriodo)).default([]),
     actividadesInvestigacion: z.array(createActividadSchema(semanasPeriodo)).default([]),
     actividadesProyeccionSocial: z.array(createActividadSchema(semanasPeriodo)).default([]),
@@ -219,8 +223,9 @@ export function createAgendaSchema(
   maxGestionOverride?: number,
   periodoActual?: string,
   semanasClases: number = DEFAULT_SEMANAS_CLASES,
+  semanasClasesPorSede?: Record<string, number>,
 ) {
-  return createAgendaWizardBaseSchema(semanasPeriodo, semanasClases).superRefine((data, ctx) => {
+  return createAgendaWizardBaseSchema(semanasPeriodo, semanasClases, semanasClasesPorSede).superRefine((data, ctx) => {
     const totalHorasSemestrales = calcularTotalHoras(data);
     const maxHorasSemestrales = maxHoras * semanasPeriodo; // tope semestral derivado del semanal
     const TOLERANCIA_SEMANAL = 0.5;

@@ -18,8 +18,10 @@ import { esCargoExentoGestion20, esJefeDePrograma } from "@/lib/utils/cargo"
 import { verificarCupoCargo } from "@/lib/validations/cupo-cargo"
 import {
   assertPuedeGestionarDe,
-  esModalidadNoPlanta,
+  getAutoridadAcademica,
+  rangoAutoridad,
 } from "@/lib/auth/autoridad"
+import { aprobarAgendaAction } from "@/lib/actions/revision"
 import { registrarAuditoria } from "@/lib/audit"
 import type { Sede, Docente, Rol } from "@/generated/prisma/client"
 
@@ -86,19 +88,25 @@ async function resolverDocenteObjetivo(
   })
   if (denied) return denied
 
-  if (!esModalidadNoPlanta(target.modalidad)) {
+  // No se puede gestionar la agenda de un docente con autoridad IGUAL o SUPERIOR
+  // a la del actor: un jefe no le hace la agenda al decano ni al superadmin.
+  const rangoActor = rangoAutoridad(getAutoridadAcademica(actorRow))
+  const rangoTarget = rangoAutoridad(getAutoridadAcademica(target))
+  if (rangoTarget >= rangoActor) {
     return {
       error:
-        "La creación delegada solo aplica a docentes No-Planta (cátedra, ocasional, visitante, invitado). Los de planta diligencian su propia agenda.",
+        "No podés crear la agenda de un docente con autoridad igual o superior a la tuya.",
     }
   }
 
+  // La creación delegada aplica a CUALQUIER modalidad (planta y No-Planta): el
+  // jefe/decano/superadmin puede armarle la agenda a cualquier docente de su ámbito.
   return { docente: target, actor, delegada: true }
 }
 
 export async function upsertAgendaCompletaAction(
   payload: AgendaWizardPayload
-): Promise<{ success: true; agendaId: string } | { error: string }> {
+): Promise<{ success: true; agendaId: string; aprobada?: boolean } | { error: string }> {
 
   const resuelto = await resolverDocenteObjetivo(payload.targetDocenteId)
   if ("error" in resuelto) {
@@ -335,8 +343,8 @@ export async function upsertAgendaCompletaAction(
   // Borradores: solo validación estructural (tipos y transformaciones)
   // Envío final: validación completa con reglas de negocio resueltas
   const schema = enviar
-    ? createAgendaSchema(limits.maxHorasSemanales, limits.esEstricto, flags, limits.minDocencia, limits.semanas, topesActividades, limits.maxInvProySocialCatedra, undefined, periodo, globales.semanasClases)
-    : createAgendaWizardBaseSchema(limits.semanas, globales.semanasClases)
+    ? createAgendaSchema(limits.maxHorasSemanales, limits.esEstricto, flags, limits.minDocencia, limits.semanas, topesActividades, limits.maxInvProySocialCatedra, undefined, periodo, globales.semanasClases, globales.semanasClasesPorSede)
+    : createAgendaWizardBaseSchema(limits.semanas, globales.semanasClases, globales.semanasClasesPorSede)
 
   const parseResult = schema.safeParse(data)
 
@@ -490,7 +498,17 @@ export async function upsertAgendaCompletaAction(
       revalidatePath("/gestion/agendas")
     }
 
-    return { success: true, agendaId: result.id }
+    // La autoridad que registra la agenda ES el aprobador: no se manda a "petición".
+    // Al enviar de forma delegada, se auto-aprueba reusando la aprobación real
+    // (corre cupo Art. 11, conflicto "uno por programa", SoD y auditoría). Best-effort:
+    // si hay un conflicto, la agenda queda ENVIADA para revisión manual.
+    let aprobada = false
+    if (delegada && enviar) {
+      const aprob = await aprobarAgendaAction(result.id)
+      aprobada = !("error" in aprob)
+    }
+
+    return { success: true, agendaId: result.id, aprobada }
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Error inesperado al guardar la agenda."

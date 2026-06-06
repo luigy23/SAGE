@@ -15,6 +15,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
+import { Badge } from "@/components/ui/badge"
 import {
   Select,
   SelectContent,
@@ -22,7 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Input } from "@/components/ui/input"
 import { UserPlus, X } from "lucide-react"
 import { buscarDocentesAction } from "@/lib/actions/proyecto-actions"
 import { ROLES_POR_TIPO } from "@/lib/schemas/proyecto-schema"
@@ -40,8 +40,6 @@ export type DocenteParticipante = {
   cedula: string
   programa: string
   rol: string
-  /** Horas propuestas (≤ tope del rol). El revisor las confirma al aprobar. */
-  horas?: number | null
 }
 
 type DocenteBusqueda = {
@@ -58,22 +56,29 @@ export function ParticipantesSelector({
   onChange,
   tipo,
   excluirIds,
-  topes,
+  permitirLider = false,
 }: {
   value: DocenteParticipante[]
   onChange: (v: DocenteParticipante[]) => void
   tipo: "INVESTIGACION" | "PROYECCION_SOCIAL" | undefined
   /** IDs que no se pueden agregar (ej. el creador y los ya agregados). */
   excluirIds: string[]
-  /** Tope de horas por rol (para mostrar el máximo en el input). Opcional. */
-  topes?: Record<string, number>
+  /** Si true, se puede asignar el rol líder a un participante (autoridad arma el
+   *  equipo para otro). Si false, todos entran con el rol secundario. */
+  permitirLider?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [resultados, setResultados] = useState<DocenteBusqueda[]>([])
   const [, startTransition] = useTransition()
 
   const roles = tipo ? ROLES_POR_TIPO[tipo] : []
-  const rolPorDefecto = roles[roles.length - 1] ?? "" // el no-líder (coinvestigador/cogestor)
+  // Por defecto los participantes entran con el rol secundario (no-líder):
+  // Coinvestigador (investigación) o Cogestor (PS).
+  const rolSecundario = roles[roles.length - 1] ?? ""
+
+  function cambiarRol(id: string, rol: string) {
+    onChange(value.map((p) => (p.id === id ? { ...p, rol } : p)))
+  }
 
   function buscar(q: string) {
     startTransition(async () => {
@@ -85,7 +90,7 @@ export function ParticipantesSelector({
     if (value.some((p) => p.id === d.id) || excluirIds.includes(d.id)) return
     onChange([
       ...value,
-      { id: d.id, nombre: d.nombre, cedula: d.cedula, programa: d.programa, rol: rolPorDefecto },
+      { id: d.id, nombre: d.nombre, cedula: d.cedula, programa: d.programa, rol: rolSecundario },
     ])
     setOpen(false)
     setResultados([])
@@ -93,14 +98,6 @@ export function ParticipantesSelector({
 
   function quitar(id: string) {
     onChange(value.filter((p) => p.id !== id))
-  }
-
-  function cambiarRol(id: string, rol: string) {
-    onChange(value.map((p) => (p.id === id ? { ...p, rol } : p)))
-  }
-
-  function cambiarHoras(id: string, horas: number | null) {
-    onChange(value.map((p) => (p.id === id ? { ...p, horas } : p)))
   }
 
   return (
@@ -119,35 +116,24 @@ export function ParticipantesSelector({
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Select value={p.rol} onValueChange={(v) => cambiarRol(p.id, v)}>
-                  <SelectTrigger className="h-9 w-[180px]">
-                    <SelectValue placeholder="Rol" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {ROL_LABEL[r] ?? r}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex flex-col">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={topes?.[p.rol]}
-                    placeholder="Horas"
-                    value={p.horas ?? ""}
-                    onChange={(e) =>
-                      cambiarHoras(p.id, e.target.value === "" ? null : Number(e.target.value))
-                    }
-                    className="h-9 w-24"
-                    title="Horas propuestas (el revisor confirma)"
-                  />
-                  {topes?.[p.rol] != null && (
-                    <span className="mt-0.5 text-[10px] text-muted-foreground">máx {topes[p.rol]}h</span>
-                  )}
-                </div>
+                {permitirLider ? (
+                  <Select value={p.rol} onValueChange={(v) => cambiarRol(p.id, v)}>
+                    <SelectTrigger className="h-9 w-[190px]">
+                      <SelectValue placeholder="Rol" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {roles.map((r) => (
+                        <SelectItem key={r} value={r}>
+                          {ROL_LABEL[r] ?? r}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Badge variant="secondary" className="font-normal">
+                    {ROL_LABEL[p.rol] ?? p.rol}
+                  </Badge>
+                )}
                 <Button
                   type="button"
                   variant="ghost"

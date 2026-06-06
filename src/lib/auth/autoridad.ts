@@ -102,6 +102,24 @@ export function tieneAutoridadDelegada(actor: DocenteAutoridadInput): boolean {
   return getAutoridadAcademica(actor).tipo !== null
 }
 
+/**
+ * Rango jerárquico de una autoridad: SUPERADMIN(3) > DECANO(2) > JEFE(1) > sin
+ * autoridad(0). Sirve para impedir que una autoridad gestione (p. ej. cree la
+ * agenda de) un docente con autoridad IGUAL o SUPERIOR a la suya.
+ */
+export function rangoAutoridad(autoridad: AutoridadAcademica): number {
+  switch (autoridad.tipo) {
+    case "SUPERADMIN":
+      return 3
+    case "DECANO":
+      return 2
+    case "JEFE":
+      return 1
+    default:
+      return 0
+  }
+}
+
 /** Etiqueta de la sección de gestión en el menú, según el ámbito de autoridad. */
 export function getEtiquetaGestion(autoridad: AutoridadAcademica): string {
   switch (autoridad.tipo) {

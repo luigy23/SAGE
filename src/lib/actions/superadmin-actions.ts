@@ -51,6 +51,23 @@ export async function updateParametroGlobal(id: string, valor: string) {
     }
   }
 
+  // Guarda de sentido: las semanas de CLASE (docencia, global o por sede) no pueden
+  // superar las semanas de PERÍODO (semestre). Sería absurdo dictar más semanas de
+  // clase que las del semestre, e inflaría las horas de los cursos.
+  if (param.clave === "semanas_clases" || param.clave.startsWith("semanas_clases_")) {
+    const n = parseInt(valor, 10)
+    const periodoParam = await prisma.parametroGlobal.findFirst({
+      where: { periodoId: null, clave: "semanas_periodo" },
+      select: { valor: true },
+    })
+    const semanasPeriodo = periodoParam ? parseInt(periodoParam.valor, 10) : 22
+    if (Number.isFinite(n) && Number.isFinite(semanasPeriodo) && n > semanasPeriodo) {
+      return {
+        error: `Las semanas de clase (${n}) no pueden superar las semanas de período (${semanasPeriodo}). Un curso no puede dictarse más semanas que las del semestre.`,
+      }
+    }
+  }
+
   await prisma.parametroGlobal.update({
     where: { id },
     data: { valor },

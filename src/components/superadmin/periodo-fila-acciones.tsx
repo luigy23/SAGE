@@ -23,6 +23,7 @@ export function PeriodoFilaAcciones({ periodo, canEdit, semanasPeriodo }: Props)
     <>
       <PeriodoAccionesDropdown
         periodoId={periodo.id}
+        periodoNombre={periodo.nombre}
         currentStatus={periodo.estado}
         canEdit={canEdit}
         onEdit={() => setSheetOpen(true)}

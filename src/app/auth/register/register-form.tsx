@@ -61,6 +61,8 @@ function EyeOffIcon() {
   )
 }
 
+import Image from "next/image"
+
 export function RegisterForm() {
   const [state, formAction, pending] = useActionState(registerAction, null)
   const v = state?.values
@@ -121,9 +123,18 @@ export function RegisterForm() {
   return (
     <Card className="w-full max-w-2xl border-0 shadow-xl bg-white my-8">
       <CardHeader className="text-center pb-2 pt-8">
-        <div className="lg:hidden mb-4">
-          <h2 className="text-3xl font-bold tracking-tight text-[#8F141B]">SAGE</h2>
-          <p className="text-xs text-gray-400 mt-1">Universidad Surcolombiana</p>
+        <div className="lg:hidden flex flex-col items-center mb-6">
+          <div className="flex shrink-0 items-center justify-center mb-2">
+            <Image 
+              src="/Img/logo.png" 
+              alt="Universidad Surcolombiana" 
+              width={200} 
+              height={100} 
+              priority
+              unoptimized
+              className="object-contain"
+            />
+          </div>
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Crear cuenta</h1>
         <p className="text-sm text-gray-500 mt-1">Registra tu cuenta de docente en SAGE</p>

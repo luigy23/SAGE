@@ -1,12 +1,16 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
+import { prisma } from "@/lib/prisma"
 import { getAutoridadDeSesion } from "@/lib/auth/get-autoridad"
 import { getEtiquetaGestion } from "@/lib/auth/autoridad"
 import { getPeriodoActivoConFechas } from "@/lib/utils/periodo-server"
-import { listConsejerosDeAmbito } from "@/lib/consejeria"
+import { listConsejerosDeAmbito, getCohortesDisponibles, type CohorteDisponible } from "@/lib/consejeria"
+import { ConsejerosLista } from "@/components/consejeria/ConsejerosLista"
+import { AsignarConsejeroDialog, type DocenteAsignable } from "@/components/consejeria/AsignarConsejeroDialog"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Users, Inbox } from "lucide-react"
+import { Users } from "lucide-react"
+import type { Prisma } from "@/generated/prisma/client"
 
 export const metadata: Metadata = {
   title: "Consejeros | Gestión SAGE",
@@ -42,17 +46,48 @@ export default async function GestionConsejeriaPage() {
   }
 
   const periodo = periodoInfo.nombre
-  const consejeros = await listConsejerosDeAmbito(sesion.autoridad, periodo)
-  const esDecano = sesion.autoridad.tipo === "DECANO"
+  const { autoridad } = sesion
+  const consejeros = await listConsejerosDeAmbito(autoridad, periodo)
+  const esDecano = autoridad.tipo === "DECANO"
+  const mostrarPrograma = autoridad.tipo !== "JEFE" // decano/superadmin ven varios programas
   const totalCohortes = consejeros.reduce((s, c) => s + c.cohortes.length, 0)
+
+  // Docentes asignables como consejeros dentro del ámbito (excluye cátedra: Art. 11).
+  const scopeDocente: Prisma.DocenteWhereInput =
+    autoridad.tipo === "SUPERADMIN"
+      ? {}
+      : autoridad.tipo === "DECANO"
+        ? { facultad: autoridad.ambitoValor ?? " " }
+        : { programa: autoridad.ambitoValor ?? " " }
+
+  const docentesAmbito = await prisma.docente.findMany({
+    where: { ...scopeDocente, estadoCuenta: "ACTIVO", modalidad: { not: "CATEDRA" } },
+    select: { id: true, nombre: true, programa: true, facultad: true },
+    orderBy: { nombre: "asc" },
+  })
+  const docentesAsignables: DocenteAsignable[] = docentesAmbito
+
+  // Cohortes libres por programa (la exclusividad se resuelve por programa).
+  const programas = [...new Set(docentesAmbito.map((d) => d.programa))]
+  const pares = await Promise.all(
+    programas.map(async (p) => [p, await getCohortesDisponibles(p, periodo)] as const),
+  )
+  const cohortesPorPrograma: Record<string, CohorteDisponible[]> = Object.fromEntries(pares)
 
   return (
     <Card>
       <CardHeader className="space-y-1">
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <Users className="h-5 w-5" />
-          Consejeros académicos · {getEtiquetaGestion(sesion.autoridad)}
-        </CardTitle>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Users className="h-5 w-5" />
+            Consejeros académicos · {getEtiquetaGestion(autoridad)}
+          </CardTitle>
+          <AsignarConsejeroDialog
+            docentes={docentesAsignables}
+            cohortesPorPrograma={cohortesPorPrograma}
+            mostrarPrograma={mostrarPrograma}
+          />
+        </div>
         <p className="text-sm text-muted-foreground">
           {esDecano
             ? "Docentes que ejercen consejería en los programas de tu facultad"
@@ -69,37 +104,11 @@ export default async function GestionConsejeriaPage() {
         </p>
       </CardHeader>
       <CardContent>
-        {consejeros.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-12 text-center">
-            <Inbox className="h-10 w-10 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              No hay consejeros activos en tu ámbito para el período {periodo}.
-            </p>
-          </div>
-        ) : (
-          <ul className="divide-y rounded-md border">
-            {consejeros.map((c) => (
-              <li key={c.docenteId} className="flex flex-wrap items-center gap-3 p-3">
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium">{c.nombre}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {esDecano ? `${c.programa} · ${c.facultad}` : c.programa}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center justify-end gap-1.5">
-                  {c.cohortes.map((co) => (
-                    <Badge key={co.cohorte} variant="outline" className="font-normal">
-                      Cohorte <span className="ml-1 font-mono font-medium">{co.cohorte}</span>
-                      <span className="ml-1 text-muted-foreground">
-                        · sem {co.semestreActual} de {co.semestresCompromiso}
-                      </span>
-                    </Badge>
-                  ))}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        <ConsejerosLista
+          consejeros={consejeros}
+          periodo={periodo}
+          mostrarPrograma={mostrarPrograma}
+        />
       </CardContent>
     </Card>
   )

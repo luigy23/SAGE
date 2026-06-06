@@ -128,12 +128,15 @@ export async function editarDocenteSuperadminAction(
   }
 
   const isCatedra = data.modalidad === "CATEDRA"
-  const finalCargoAdministrativo = isCatedra ? false : data.cargoAdministrativo
-  const finalTipoCargo = isCatedra
+  // CÁTEDRA (Art. 10) e INVITADO (Art. 4f) no pueden ejercer cargo administrativo.
+  const sinCargoAdmin = isCatedra || data.modalidad === "INVITADO"
+  const finalCargoAdministrativo = sinCargoAdmin ? false : data.cargoAdministrativo
+  const finalTipoCargo = sinCargoAdmin
     ? null
     : finalCargoAdministrativo
       ? (data.tipoCargo ?? null)
       : null
+  // Proyectos activos: solo CÁTEDRA los tiene vedados (Art. 3 Par. 1); el invitado sí puede.
   const finalProyectosActivos = isCatedra ? false : data.proyectosActivos
   const finalTituloDoctorado = data.doctorado
     ? (data.tituloDoctorado ?? null)

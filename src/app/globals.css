@@ -34,6 +34,10 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  /* Paleta oficial USCO (Manual de Identidad e Imagen) — usable como bg-usco-*, text-usco-* */
+  --color-usco-vinotinto: var(--usco-vinotinto);
+  --color-usco-gris: var(--usco-gris);
+  --color-usco-ocre: var(--usco-ocre);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -55,8 +59,13 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
+  /* Vinotinto institucional oficial USCO: #8D191D (Pantone 7623 C) */
   --primary: oklch(0.419 0.156 25.102);
   --primary-foreground: oklch(0.985 0 0);
+  /* Paleta oficial del Manual de Identidad e Imagen USCO */
+  --usco-vinotinto: #8D191D; /* principal — Pantone 7623 C */
+  --usco-gris: #4E6470;      /* secundario — Pantone 7546 C */
+  --usco-ocre: #D8CEA3;      /* acento dorado — Pantone 4535 C */
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);

@@ -7,6 +7,7 @@ import { UsuarioAdminActions } from "@/components/superadmin/usuario-admin-actio
 import { UsuarioRoleSelector } from "@/components/superadmin/usuario-role-selector"
 import { DocenteEditSheet } from "@/components/superadmin/docente-edit-sheet"
 import { CredencialesEditDialog } from "@/components/superadmin/credenciales-edit-dialog"
+import { resolveGlobales } from "@/lib/rules/resolver"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import type { Rol } from "@/generated/prisma/client"
@@ -67,7 +68,16 @@ function formatearTipoCargo(raw: string): string {
   return limpio.charAt(0).toUpperCase() + limpio.slice(1)
 }
 
-export function UsuarioDetail({ usuario }: { usuario: UsuarioDetalle }) {
+export async function UsuarioDetail({ usuario }: { usuario: UsuarioDetalle }) {
+  // Semanas base parametrizadas (Parámetros Globales) para mostrar al editar el docente.
+  const globales = await resolveGlobales(null)
+  const semanasBase = {
+    planta: globales.semanasPeriodo,
+    catedra: globales.semanasPeriodoCatedra,
+    ocasional: globales.semanasPeriodoOcasional,
+    visitante: globales.semanasPeriodoVisitante,
+  }
+
   const tipoCargoActivo =
     usuario.cargoAdministrativo && usuario.tipoCargo?.trim()
       ? usuario.tipoCargo.trim()
@@ -138,7 +148,7 @@ export function UsuarioDetail({ usuario }: { usuario: UsuarioDetalle }) {
           <CardTitle>Datos Personales</CardTitle>
           <div className="flex flex-wrap items-center gap-2">
             <CredencialesEditDialog usuarioId={usuario.id} emailActual={usuario.email} />
-            <DocenteEditSheet usuario={usuario} />
+            <DocenteEditSheet usuario={usuario} semanasBase={semanasBase} />
           </div>
         </CardHeader>
         <CardContent>
@@ -170,7 +180,7 @@ export function UsuarioDetail({ usuario }: { usuario: UsuarioDetalle }) {
             <div>
               <dt className="text-sm font-medium text-muted-foreground">Modalidad</dt>
               <dd>
-                <Badge variant="secondary">{getModalidadLabel(usuario.modalidad as any)}</Badge>
+                <Badge variant="secondary">{getModalidadLabel(usuario.modalidad as Parameters<typeof getModalidadLabel>[0])}</Badge>
               </dd>
             </div>
             <div>

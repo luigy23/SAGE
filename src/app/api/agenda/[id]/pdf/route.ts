@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { renderFo19Pdf } from "@/lib/pdf/fo19-render"
 import type { AgendaConRelaciones } from "@/lib/types/agenda"
+import { getAutoridadDeSesion } from "@/lib/auth/get-autoridad"
+import { puedeGestionarFormulario } from "@/lib/auth/autoridad"
 
 export const runtime = "nodejs"
 
@@ -31,7 +33,20 @@ export async function GET(
     },
   })
 
-  if (!agenda || agenda.docenteId !== session.user.id) {
+  if (!agenda) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
+
+  // Autorización: el dueño siempre; o una autoridad académica (Jefe/Decano/SUPERADMIN)
+  // dentro de su ámbito, para la supervisión global y la revisión de agendas.
+  let autorizado = agenda.docenteId === session.user.id
+  if (!autorizado) {
+    const sesion = await getAutoridadDeSesion()
+    if (sesion && puedeGestionarFormulario(sesion.autoridad, agenda.docente)) {
+      autorizado = true
+    }
+  }
+  if (!autorizado) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 

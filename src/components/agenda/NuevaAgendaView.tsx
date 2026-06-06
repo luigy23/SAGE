@@ -37,6 +37,7 @@ export function NuevaAgendaView({
   periodo,
   semanasPeriodo,
   semanasClases,
+  semanasClasesPorSede,
   semanasMaximas,
   formulas,
   agendaLimits,
@@ -50,6 +51,7 @@ export function NuevaAgendaView({
   periodo: string
   semanasPeriodo: number
   semanasClases: number
+  semanasClasesPorSede?: Record<string, number>
   semanasMaximas?: number
   formulas?: FormulasCursos
   agendaLimits?: AgendaLimits
@@ -71,6 +73,7 @@ export function NuevaAgendaView({
         periodo={periodo}
         semanasPeriodo={semanasPeriodo}
         semanasClases={semanasClases}
+        semanasClasesPorSede={semanasClasesPorSede}
         semanasMaximas={semanasMaximas}
         formulas={formulas}
         agendaLimits={agendaLimits}
@@ -85,33 +88,35 @@ export function NuevaAgendaView({
   // Estado 1: Empty State con botón de acción
   // ==========================================
   return (
-    <Card className="mx-auto max-w-lg">
-      <CardHeader className="text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-          <CalendarDays className="h-8 w-8 text-primary" />
-        </div>
-        <CardTitle>Crear Agenda del Periodo {periodo}</CardTitle>
-        <CardDescription>
-          No se encontró una agenda semestral para el periodo{" "}
-          <Badge variant="secondary" className="text-xs">
-            {periodo}
-          </Badge>
-          . Inicie el proceso completando el formulario paso a paso.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col items-center gap-4">
-        <Button
-          size="lg"
-          className="gap-2 px-8"
-          onClick={() => setMostrarFormulario(true)}
-        >
-          <Plus className="h-5 w-5" />
-          Crear Agenda
-        </Button>
-        <p className="text-center text-xs text-muted-foreground">
-          Podrá guardar su progreso como borrador en cualquier momento.
-        </p>
-      </CardContent>
-    </Card>
+    <div className="flex min-h-[60vh] flex-col items-center justify-center p-4">
+      <Card className="mx-auto w-full max-w-md border-muted shadow-sm">
+        <CardHeader className="text-center pb-6">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+            <CalendarDays className="h-8 w-8 text-primary" />
+          </div>
+          <CardTitle className="text-xl">Crear Agenda del Período {periodo}</CardTitle>
+          <CardDescription className="text-sm mt-2 leading-relaxed">
+            No se encontró una agenda semestral para el período{" "}
+            <Badge variant="secondary" className="text-xs font-medium">
+              {periodo}
+            </Badge>
+            . Inicie el proceso completando el formulario paso a paso.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col items-center gap-5 pb-8">
+          <Button
+            size="lg"
+            className="gap-2 px-8 w-full sm:w-auto"
+            onClick={() => setMostrarFormulario(true)}
+          >
+            <Plus className="h-5 w-5" />
+            Crear Agenda
+          </Button>
+          <p className="text-center text-xs text-muted-foreground">
+            Podrá guardar su progreso como borrador en cualquier momento.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
   )
 }

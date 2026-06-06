@@ -1,14 +1,15 @@
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { ProyectoStatusBadge } from "@/components/proyectos/ProyectoStatusBadge"
 import { ProyectoAprobarPanel } from "@/components/proyectos/ProyectoAprobarPanel"
-import { RechazarProyectoDialog } from "@/components/proyectos/RechazarProyectoDialog"
 import { RehabilitarProyectoButton } from "@/components/proyectos/RehabilitarProyectoButton"
-import { ArrowLeft, GraduationCap, Microscope } from "lucide-react"
+import { ArrowLeft, GraduationCap, Microscope, ShieldAlert } from "lucide-react"
 import { getModalidadLabel } from "@/lib/utils/modalidad"
-import { formatFechaInicio } from "@/lib/utils"
+import { formatFechaInicio, cn } from "@/lib/utils"
 import { periodosQueAbarca, type PeriodoRango } from "@/lib/utils/periodo"
+import { ROL_LIDER } from "@/lib/schemas/proyecto-schema"
 import type { getProyectoDetalle } from "@/lib/actions/proyecto-actions"
 
 type ProyectoDetalle = NonNullable<Awaited<ReturnType<typeof getProyectoDetalle>>>
@@ -34,17 +35,20 @@ const ROL_LABEL: Record<string, string> = {
 export function ProyectoRevisionDetalle({
   proyecto,
   puedeRevisar,
-  topes,
   periodos,
   backHref,
   backLabel = "Volver al listado",
+  avisoRevision = null,
 }: {
   proyecto: ProyectoDetalle
   puedeRevisar: boolean
-  topes?: Record<string, number>
   periodos: PeriodoRango[]
   backHref: string
   backLabel?: string
+  /** Si el proyecto está ENVIADO pero el actor NO puede aprobarlo (p. ej. es el suyo). */
+  avisoRevision?: string | null
+  /** Si el usuario actual es el creador del proyecto (para permitir edición) */
+  esCreador?: boolean
 }) {
   const fechaInicioStr = proyecto.fechaInicio
     ? new Date(proyecto.fechaInicio).toISOString().slice(0, 10)
@@ -56,87 +60,59 @@ export function ProyectoRevisionDetalle({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Encabezado: volver + (rehabilitar si ya está aprobado) */}
+      <div className="flex items-center justify-between gap-3">
         <Button asChild variant="ghost" size="sm" className="w-fit gap-1.5">
           <Link href={backHref}>
             <ArrowLeft className="h-4 w-4" />
             {backLabel}
           </Link>
         </Button>
-        {puedeRevisar && (
-          <RechazarProyectoDialog
-            proyectoId={proyecto.id}
-            docenteName={proyecto.creador.nombre}
-          />
-        )}
-        {proyecto.estado === "APROBADO" && (
-          <RehabilitarProyectoButton proyectoId={proyecto.id} />
-        )}
+        <div className="flex items-center gap-2">
+          {esCreador && (proyecto.estado === "BORRADOR" || proyecto.estado === "RECHAZADO" || proyecto.estado === "ENVIADO") && (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/gestion/proyectos/${proyecto.id}/editar`}>
+                Editar proyecto
+              </Link>
+            </Button>
+          )}
+          {proyecto.estado === "APROBADO" && (
+            <RehabilitarProyectoButton proyectoId={proyecto.id} />
+          )}
+        </div>
       </div>
 
-      {/* Panel de aprobación inline: horas + tiempo, antes de aprobar */}
-      {puedeRevisar && (
-        <ProyectoAprobarPanel
-          proyectoId={proyecto.id}
-          participantes={proyecto.participantes.map((p) => ({
-            docenteId: p.docenteId,
-            nombre: p.docente.nombre,
-            rol: p.rol,
-            horasAsignadas: p.horasAsignadas,
-          }))}
-          topes={topes}
-          fechaInicioInicial={fechaInicioStr}
-          fechaFinInicial={fechaFinStr}
-          periodos={periodos}
-        />
-      )}
-
-      {/* Docente creador */}
+      {/* 1) INFORMACIÓN COMPLETA DEL PROYECTO (todo integrado, para revisar primero) */}
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <GraduationCap className="h-5 w-5" />
-              {proyecto.creador.nombre}
+        <CardHeader className="space-y-2">
+          <div className="flex items-start justify-between gap-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Microscope className="h-5 w-5" />
+              {proyecto.titulo}
             </CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {proyecto.creador.email}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {getModalidadLabel(proyecto.creador.modalidad)}
-            </p>
+            <ProyectoStatusBadge estado={proyecto.estado} />
           </div>
-          <ProyectoStatusBadge estado={proyecto.estado} />
-        </CardHeader>
-      </Card>
-
-      {/* Proyecto */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Microscope className="h-4 w-4" />
-            {proyecto.titulo}
-          </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Enviado el {new Date(proyecto.createdAt).toLocaleString("es-CO")}
+            Registrado por {proyecto.creador.nombre} · Enviado el{" "}
+            {new Date(proyecto.createdAt).toLocaleString("es-CO")}
+            {proyecto.revisadoEn && (
+              <> · Revisado el {new Date(proyecto.revisadoEn).toLocaleString("es-CO")}</>
+            )}
           </p>
-          {proyecto.revisadoEn && (
-            <p className="text-xs text-muted-foreground">
-              Revisado el {new Date(proyecto.revisadoEn).toLocaleString("es-CO")}
-            </p>
-          )}
         </CardHeader>
         <CardContent>
-          <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+          <dl className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-xs font-medium text-muted-foreground">Tipo</dt>
               <dd>{TIPO_LABEL[proyecto.tipo] ?? proyecto.tipo}</dd>
             </div>
+            <div>
+              <dt className="text-xs font-medium text-muted-foreground">Entidad / Convocatoria</dt>
+              <dd>{proyecto.entidadConvocatoria || "—"}</dd>
+            </div>
             {(fechaInicioStr || fechaFinStr) && (
-              <div>
-                <dt className="text-xs font-medium text-muted-foreground">
-                  Tiempo del proyecto
-                </dt>
+              <div className="sm:col-span-2">
+                <dt className="text-xs font-medium text-muted-foreground">Tiempo del proyecto</dt>
                 <dd>
                   {fechaInicioStr ? formatFechaInicio(fechaInicioStr) : "—"} →{" "}
                   {fechaFinStr ? formatFechaInicio(fechaFinStr) : "—"}
@@ -150,44 +126,47 @@ export function ProyectoRevisionDetalle({
             )}
             <div className="sm:col-span-2">
               <dt className="text-xs font-medium text-muted-foreground">
-                Participantes
+                Equipo ({proyecto.participantes.length})
               </dt>
               <dd>
-                <ul className="mt-1 space-y-1">
-                  {proyecto.participantes.map((p) => (
-                    <li key={p.id} className="flex items-center justify-between gap-2">
-                      <span>
-                        {p.docente.nombre} · {ROL_LABEL[p.rol] ?? p.rol}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {p.horasAsignadas != null ? `${p.horasAsignadas} h` : "horas sin asignar"}
-                      </span>
-                    </li>
-                  ))}
+                <ul className="mt-1 space-y-2">
+                  {proyecto.participantes.map((p) => {
+                    const esLider = p.rol === ROL_LIDER[proyecto.tipo as keyof typeof ROL_LIDER]
+                    return (
+                      <li
+                        key={p.id}
+                        className={cn(
+                          "flex items-center justify-between gap-3 rounded-md border p-3",
+                          esLider && "border-primary/40 bg-primary/5",
+                        )}
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <GraduationCap className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">{p.docente.nombre}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {p.docente.email} · {getModalidadLabel(p.docente.modalidad)}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge
+                          variant={esLider ? "default" : "secondary"}
+                          className="shrink-0 font-normal"
+                        >
+                          {ROL_LABEL[p.rol] ?? p.rol}
+                        </Badge>
+                      </li>
+                    )
+                  })}
                 </ul>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Las horas de cada docente se definen en su agenda (FO-19), no acá.
+                </p>
               </dd>
             </div>
-            {proyecto.entidadConvocatoria && (
-              <div>
-                <dt className="text-xs font-medium text-muted-foreground">
-                  Entidad / Convocatoria
-                </dt>
-                <dd>{proyecto.entidadConvocatoria}</dd>
-              </div>
-            )}
-            {proyecto.periodoInicio && (
-              <div>
-                <dt className="text-xs font-medium text-muted-foreground">
-                  Periodo de inicio
-                </dt>
-                <dd>{formatFechaInicio(proyecto.periodoInicio)}</dd>
-              </div>
-            )}
             {proyecto.descripcion && (
               <div className="sm:col-span-2">
-                <dt className="text-xs font-medium text-muted-foreground">
-                  Descripción
-                </dt>
+                <dt className="text-xs font-medium text-muted-foreground">Descripción</dt>
                 <dd className="whitespace-pre-wrap">{proyecto.descripcion}</dd>
               </div>
             )}
@@ -195,15 +174,34 @@ export function ProyectoRevisionDetalle({
         </CardContent>
       </Card>
 
+      {/* 2) Motivo del rechazo (si aplica) */}
       {proyecto.estado === "RECHAZADO" && proyecto.observacionesAdmin && (
         <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950">
-          <p className="text-xs font-medium text-red-900 dark:text-red-200">
-            Motivo del rechazo
-          </p>
-          <p className="mt-1 text-sm text-red-800 dark:text-red-300">
-            {proyecto.observacionesAdmin}
-          </p>
+          <p className="text-xs font-medium text-red-900 dark:text-red-200">Motivo del rechazo</p>
+          <p className="mt-1 text-sm text-red-800 dark:text-red-300">{proyecto.observacionesAdmin}</p>
         </div>
+      )}
+
+      {/* 3) Aviso de Separación de Deberes (no podés aprobar el tuyo) */}
+      {avisoRevision && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-700 dark:bg-amber-950">
+          <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div>
+            <p className="font-semibold text-amber-800 dark:text-amber-300">No podés aprobar este proyecto</p>
+            <p className="mt-0.5 text-amber-700 dark:text-amber-400">{avisoRevision}</p>
+          </div>
+        </div>
+      )}
+
+      {/* 4) ZONA DE DECISIÓN — al final, después de revisar la info */}
+      {puedeRevisar && (
+        <ProyectoAprobarPanel
+          proyectoId={proyecto.id}
+          creadorNombre={proyecto.creador.nombre}
+          fechaInicioInicial={fechaInicioStr}
+          fechaFinInicial={fechaFinStr}
+          periodos={periodos}
+        />
       )}
     </div>
   )

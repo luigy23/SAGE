@@ -34,7 +34,7 @@ export default async function ProtectedLayout({
         <div className="print:hidden">
           <AppHeader />
         </div>
-        <main className="flex-1 p-6 print:p-0">{children}</main>
+        <main className="min-w-0 flex-1 p-4 sm:p-6 print:p-0">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   )

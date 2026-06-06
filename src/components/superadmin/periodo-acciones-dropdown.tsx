@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import {
   abrirPeriodoSuperadminAction,
   cerrarPeriodoSuperadminAction,
+  eliminarPeriodoSuperadminAction,
 } from "@/lib/actions/superadmin-periodo-actions"
 import { EstadoPeriodo } from "@/generated/prisma/client"
 import { Button } from "@/components/ui/button"
@@ -16,19 +17,33 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { MoreHorizontal, Loader2, LockOpen, Lock, Pencil } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { MoreHorizontal, Loader2, LockOpen, Lock, Pencil, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 interface Props {
   periodoId: string
+  periodoNombre: string
   currentStatus: EstadoPeriodo
   canEdit: boolean
   onEdit: () => void
 }
 
-export function PeriodoAccionesDropdown({ periodoId, currentStatus, canEdit, onEdit }: Props) {
+export function PeriodoAccionesDropdown({ periodoId, periodoNombre, currentStatus, canEdit, onEdit }: Props) {
   const [isPending, startTransition] = useTransition()
   const [isOpen, setIsOpen] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  // Mensaje de la 2ª etapa cuando el período tiene borradores que se descartarán.
+  const [descartarMsg, setDescartarMsg] = useState<string | null>(null)
   const router = useRouter()
 
   function handleAbrir() {
@@ -55,6 +70,29 @@ export function PeriodoAccionesDropdown({ periodoId, currentStatus, canEdit, onE
       }
       setIsOpen(false)
     })
+  }
+
+  function handleEliminar(descartarBorradores = false) {
+    startTransition(async () => {
+      const result = await eliminarPeriodoSuperadminAction(periodoId, { descartarBorradores })
+      if ("needsConfirm" in result) {
+        // 2ª etapa: el período tiene borradores. Mostrar advertencia reforzada.
+        setDescartarMsg(result.mensaje)
+        return
+      }
+      if ("error" in result) {
+        toast.error(result.error)
+      } else {
+        toast.success(`Período "${periodoNombre}" eliminado.`)
+        router.refresh()
+      }
+      cerrarDialogo()
+    })
+  }
+
+  function cerrarDialogo() {
+    setConfirmDelete(false)
+    setDescartarMsg(null)
   }
 
   return (
@@ -100,7 +138,52 @@ export function PeriodoAccionesDropdown({ periodoId, currentStatus, canEdit, onE
           <Lock className="mr-2 h-4 w-4" />
           Cerrar semestre
         </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuItem
+          disabled={isPending}
+          onClick={() => { setIsOpen(false); setConfirmDelete(true) }}
+          className="text-red-700 focus:text-red-700 focus:bg-red-50 cursor-pointer"
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          Eliminar período
+        </DropdownMenuItem>
       </DropdownMenuContent>
+
+      <AlertDialog
+        open={confirmDelete}
+        onOpenChange={(open) => { if (!open) cerrarDialogo(); else setConfirmDelete(true) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {descartarMsg
+                ? `¿Descartar borradores y eliminar "${periodoNombre}"?`
+                : `¿Eliminar el período "${periodoNombre}"?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {descartarMsg ?? (
+                <>
+                  Esta acción es permanente. No se permite si hay agendas (FO-19) o monitoreos
+                  (FO-20) <strong>enviados o aprobados</strong> — esos son registros oficiales.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleEliminar(descartarMsg !== null) }}
+              disabled={isPending}
+              className="bg-red-700 hover:bg-red-800 focus:ring-red-700"
+            >
+              {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              {descartarMsg ? "Sí, descartar y eliminar" : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DropdownMenu>
   )
 }

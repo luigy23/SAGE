@@ -67,19 +67,27 @@ export const crearProyectoSchema = z.object({
   tipo: z.enum(["INVESTIGACION", "PROYECCION_SOCIAL"], {
     error: "Seleccioná el tipo de proyecto.",
   }),
-  rolDocente: z.enum(
-    ["INVESTIGADOR_PRINCIPAL", "COINVESTIGADOR", "COORDINADOR", "COGESTOR"],
-    { error: "Seleccioná tu rol en el proyecto." },
-  ),
+  // Rol del creador en el proyecto. Solo aplica cuando un PROFESOR registra su
+  // propio proyecto (es el líder). Cuando una AUTORIDAD lo registra para otros,
+  // va vacío y el líder se elige entre los participantes.
+  rolDocente: z
+    .enum(["INVESTIGADOR_PRINCIPAL", "COINVESTIGADOR", "COORDINADOR", "COGESTOR"])
+    .optional(),
   // Horas PROPUESTAS por el creador para sí mismo (≤ tope del rol). El revisor confirma.
   horasDocente: z.number().int().min(0).max(880).nullable().optional(),
-  entidadConvocatoria: z.string().max(200).optional(),
+  entidadConvocatoria: z
+    .string()
+    .trim()
+    .min(1, "Indicá la entidad o convocatoria del proyecto.")
+    .max(200, "Máximo 200 caracteres."),
   // Tiempo del proyecto (fechas yyyy-MM-dd). El profesor las propone; el revisor
   // las confirma/ajusta al aprobar. De aquí se derivan los semestres que abarca.
   fechaInicio: z.string().optional(),
   fechaFin: z.string().optional(),
   // Participantes ADICIONALES (sin el creador, que se agrega aparte con `rolDocente`).
   participantes: z.array(participanteSchema).optional(),
+  // Indica si el proyecto está siendo creado por una autoridad PARA otro docente.
+  esParaOtro: z.boolean().optional(),
 }).refine(
   (d) => !d.fechaInicio || !d.fechaFin || d.fechaFin >= d.fechaInicio,
   { message: "La fecha de fin no puede ser anterior a la de inicio.", path: ["fechaFin"] },

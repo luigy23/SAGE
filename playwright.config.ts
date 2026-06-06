@@ -22,13 +22,16 @@ export default defineConfig({
   use: {
     baseURL: "http://localhost:3000",
     headless: false,
-    viewport: { width: 1440, height: 900 },
+    viewport: { width: 1920, height: 1080 }, // 1080p para mejor calidad
     locale: "es-CO",
-    launchOptions: { slowMo: 700 },
+    launchOptions: { slowMo: 300 }, // Reducido de 700ms a 300ms para que no sea tan lento
     actionTimeout: 20_000,
     navigationTimeout: 30_000,
     trace: "on",
-    video: "on",
+    video: {
+      mode: "on",
+      size: { width: 1920, height: 1080 } // Forzar grabación en 1080p
+    },
     screenshot: "on",
   },
 

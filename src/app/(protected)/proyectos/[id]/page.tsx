@@ -49,11 +49,14 @@ export default async function DetalleProyectoPage({
   const semestres = periodosQueAbarca(proyecto.fechaInicio, proyecto.fechaFin, periodos)
 
   // Cualquier participante puede ver el proyecto; editar/enviar/retirar es solo del creador.
+  // El creador puede verlo aunque NO sea participante (autoridad que registró para otros).
   const miId = session.user.id
   const esParticipante = proyecto.participantes.some((p) => p.docente.id === miId)
-  if (!esParticipante) notFound()
-
   const esCreador = proyecto.creador.id === miId
+  if (!esParticipante && !esCreador) notFound()
+
+  // El creador es autoridad si NO figura entre los participantes (registró para otros).
+  const creadorEsAutoridad = !proyecto.participantes.some((p) => p.docente.id === proyecto.creador.id)
   const miRol = proyecto.participantes.find((p) => p.docente.id === miId)?.rol ?? null
   const puedeCancelar =
     esCreador && (proyecto.estado === "BORRADOR" || proyecto.estado === "ENVIADO")
@@ -87,13 +90,19 @@ export default async function DetalleProyectoPage({
       })),
   }
 
+  // La autoridad que registró el proyecto para otros vuelve a la gestión de su ámbito;
+  // un participante normal, a "mis proyectos".
+  const volverGestion = esCreador && creadorEsAutoridad
+  const volverHref = volverGestion ? "/gestion/proyectos" : "/proyectos"
+  const volverLabel = volverGestion ? "Volver a la gestión de proyectos" : "Volver a mis proyectos"
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Button asChild variant="ghost" size="sm" className="w-fit gap-1.5">
-          <Link href="/proyectos">
+          <Link href={volverHref}>
             <ArrowLeft className="h-4 w-4" />
-            Volver a mis proyectos
+            {volverLabel}
           </Link>
         </Button>
         {puedeCancelar && (
@@ -130,6 +139,7 @@ export default async function DetalleProyectoPage({
               periodos={periodos}
               proyectoId={id}
               initial={initialProyecto}
+              creadorEsAutoridad={creadorEsAutoridad}
             />
           </CardContent>
         </Card>

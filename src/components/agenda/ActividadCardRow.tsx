@@ -107,8 +107,8 @@ export function ActividadCardRow({
   )
 
   // Actividades que exigen proyecto aprobado (Investigador Principal / Coinvestigador /
-  // Coordinador / Cogestor). Las horas salen de las horas asignadas al docente en el
-  // proyecto (las puso el revisor al aprobar) y quedan bloqueadas a ese valor.
+  // Coordinador / Cogestor). El docente vincula el proyecto y define él mismo las horas
+  // que le dedicará (el revisor ya no asigna horas al aprobar).
   const requiereProyecto = actividadCatalogo?.requiereProyectoAprobado === true
 
   // Proyectos ya vinculados en CUALQUIER tarjeta (para no ofrecer duplicados).
@@ -121,8 +121,8 @@ export function ActividadCardRow({
     (p) => p.tipo === categoria && (p.id === proyectoIdSel || !proyectosUsados.has(p.id)),
   )
 
-  // Proyecto aprobado+activo precargado: la tarjeta queda BLOQUEADA (solo lectura;
-  // no se quita ni se editan las horas, que son las que asignó el revisor al aprobar).
+  // Proyecto aprobado+activo precargado: la tarjeta es FIJA (no se quita ni se cambia
+  // el proyecto), pero el docente sí edita las horas que le dedicará.
   const proyectoBloqueado = (proyectosAprobados ?? []).find((p) => p.id === proyectoIdSel) ?? null
   const bloqueado = proyectoBloqueado !== null
 
@@ -201,22 +201,42 @@ export function ActividadCardRow({
     setValue(`${arrayName}.${index}.proyectoId` as any, null)
   }
 
-  // Tarjeta BLOQUEADA: proyecto aprobado precargado. Solo lectura, sin quitar.
+  // Tarjeta FIJA: proyecto aprobado precargado. No se quita, pero el docente SÍ
+  // define cuántas horas le dedicará (las horas no las pone el revisor).
   if (bloqueado && proyectoBloqueado) {
     return (
       <div className="relative rounded-lg border bg-muted/30 p-4">
         <div className="flex items-start gap-3 text-sm">
           <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="font-medium">📌 {nombre}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
               Proyecto aprobado:{" "}
-              <span className="font-medium text-foreground/80">{proyectoBloqueado.titulo}</span>{" "}
-              · <span className="font-semibold tabular-nums">{proyectoBloqueado.horasAsignadas}h</span> asignadas
+              <span className="font-medium text-foreground/80">{proyectoBloqueado.titulo}</span>
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Precargado de tu proyecto activo. Las horas las fijó el revisor al aprobar; no se editan aquí.
+              Precargado de tu proyecto activo (no se puede quitar). Indicá las horas que vas a
+              dedicarle este semestre.
             </p>
+            <div className="mt-3 flex items-center gap-2">
+              <label className="text-xs font-medium text-foreground" htmlFor={`${arrayName}-${index}-horasProy`}>
+                Horas del semestre
+              </label>
+              <Input
+                id={`${arrayName}-${index}-horasProy`}
+                type="number"
+                min={0}
+                className="h-9 w-28"
+                value={dedicacionPeriodo || ""}
+                onChange={(e) =>
+                  setValue(
+                    `${arrayName}.${index}.dedicacionPeriodo`,
+                    e.target.value === "" ? 0 : Number(e.target.value),
+                    { shouldValidate: true },
+                  )
+                }
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -255,8 +275,8 @@ export function ActividadCardRow({
         <div className="space-y-4">
 
           {/* Proyecto aprobado vinculado (Investigador Principal / Coinvestigador /
-              Coordinador / Cogestor): las horas salen de las horas asignadas al
-              docente en el proyecto y quedan bloqueadas a ese valor. */}
+              Coordinador / Cogestor): el docente elige el proyecto y luego indica
+              cuántas horas le dedicará (las horas las pone él, no el revisor). */}
           {requiereProyecto && (
             <FormField
               control={control}
@@ -268,17 +288,7 @@ export function ActividadCardRow({
                   {proyectosElegibles.length > 0 ? (
                     <Select
                       value={(f.value as string) || ""}
-                      onValueChange={(v) => {
-                        f.onChange(v || null)
-                        const proy = proyectosElegibles.find((p) => p.id === v)
-                        if (proy) {
-                          setValue(
-                            `${arrayName}.${index}.dedicacionPeriodo`,
-                            proy.horasAsignadas,
-                            { shouldValidate: true }
-                          )
-                        }
-                      }}
+                      onValueChange={(v) => f.onChange(v || null)}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -288,7 +298,7 @@ export function ActividadCardRow({
                       <SelectContent>
                         {proyectosElegibles.map((p) => (
                           <SelectItem key={p.id} value={p.id}>
-                            {p.titulo} — {p.horasAsignadas}h
+                            {p.titulo}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -297,12 +307,11 @@ export function ActividadCardRow({
                     <p className="rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                       No tienes proyectos aprobados de este tipo donde participes. Regístralo en{" "}
                       <span className="font-medium">Mis Proyectos</span>; cuando el revisor lo
-                      apruebe y te asigne horas, aparecerá aquí.
+                      apruebe, aparecerá aquí para que le asignes tus horas.
                     </p>
                   )}
                   <FormDescription>
-                    Las horas de esta actividad salen de las horas que el revisor te asignó en el
-                    proyecto. No se editan a mano.
+                    Elegí el proyecto e indicá abajo las horas que vas a dedicarle este semestre.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -602,7 +611,6 @@ export function ActividadCardRow({
                         name={f.name}
                         ref={f.ref}
                         onBlur={f.onBlur}
-                        disabled={requiereProyecto && Boolean(proyectoIdSel)}
                         value={f.value === 0 ? "" : f.value}
                         placeholder="0"
                         onKeyDown={(e) => {
@@ -623,7 +631,7 @@ export function ActividadCardRow({
                     </FormControl>
                     {requiereProyecto && Boolean(proyectoIdSel) && (
                       <FormDescription>
-                        Horas fijadas por el proyecto vinculado.
+                        Horas que vas a dedicarle a este proyecto (≤ el tope de tu rol).
                       </FormDescription>
                     )}
                     <FormMessage />

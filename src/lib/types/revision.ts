@@ -10,6 +10,8 @@ export type RevisionFilters = {
   sede?: Sede
   facultad?: string
   programa?: string
+  /** Cohorte de consejería (Art. 11): filtra docentes que la asesoran. */
+  cohorte?: string
   rehabilitadas?: "true" | "false"
   page?: number
   perPage?: number
@@ -64,6 +66,7 @@ export function parseRevisionFilters(
   const periodo = first(sp.periodo)?.trim() || undefined
   const facultad = first(sp.facultad)?.trim() || undefined
   const programa = first(sp.programa)?.trim() || undefined
+  const cohorte = first(sp.cohorte)?.trim() || undefined
 
   const estadoRaw = first(sp.estado) as FiltroEstado | undefined
   const estado = estadoRaw && ESTADOS.has(estadoRaw) ? estadoRaw : "TODAS"
@@ -109,6 +112,7 @@ export function parseRevisionFilters(
     sede,
     facultad,
     programa,
+    cohorte,
     rehabilitadas,
     page,
     perPage,
@@ -127,6 +131,7 @@ export function serializeRevisionFilters(f: Partial<RevisionFilters>): string {
   if (f.sede) sp.set("sede", f.sede)
   if (f.facultad) sp.set("facultad", f.facultad)
   if (f.programa) sp.set("programa", f.programa)
+  if (f.cohorte) sp.set("cohorte", f.cohorte)
   if (f.rehabilitadas) sp.set("rehabilitadas", f.rehabilitadas)
   if (f.page && f.page > 1) sp.set("page", String(f.page))
   if (f.perPage && f.perPage !== 20) sp.set("perPage", String(f.perPage))

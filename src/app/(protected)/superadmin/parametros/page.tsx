@@ -64,7 +64,7 @@ export default async function ParametrosGlobalesPage() {
                         {p.tipo}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground max-w-md">
+                    <TableCell className="text-sm text-muted-foreground max-w-sm whitespace-normal min-w-[250px]">
                       {p.descripcion ?? "—"}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">

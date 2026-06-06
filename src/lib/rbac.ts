@@ -20,9 +20,10 @@ const JERARQUIA: Record<Rol, number> = {
 
 /**
  * ¿Puede `actor` administrar (mutar/desactivar) a `target`?
- * Estrictamente mayor — NO permite operar sobre peers.
+ * Estrictamente mayor para ADMIN/DOCENTE — Los SUPERADMIN pueden operar sobre cualquier usuario (incluso peers).
  */
 export function puedeAdministrar(actor: Rol, target: Rol): boolean {
+  if (actor === "SUPERADMIN") return true
   return JERARQUIA[actor] > JERARQUIA[target]
 }
 

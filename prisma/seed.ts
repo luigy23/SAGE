@@ -60,6 +60,27 @@ const parametrosGlobales = [
     articuloOrigen: "Calendario académico USCO",
   },
   {
+    clave: "semanas_clases_pitalito",
+    valor: "16",
+    tipo: "int",
+    descripcion: "Semanas de clase para cursos dictados en la sede PITALITO (override de semanas_clases)",
+    articuloOrigen: "Calendario académico USCO — Sede regional",
+  },
+  {
+    clave: "semanas_clases_garzon",
+    valor: "16",
+    tipo: "int",
+    descripcion: "Semanas de clase para cursos dictados en la sede GARZÓN (override de semanas_clases)",
+    articuloOrigen: "Calendario académico USCO — Sede regional",
+  },
+  {
+    clave: "semanas_clases_la_plata",
+    valor: "16",
+    tipo: "int",
+    descripcion: "Semanas de clase para cursos dictados en la sede LA PLATA (override de semanas_clases)",
+    articuloOrigen: "Calendario académico USCO — Sede regional",
+  },
+  {
     clave: "horas_por_credito",
     valor: "48",
     tipo: "int",
@@ -225,6 +246,28 @@ const parametrosModalidad = [
   // Visitante MT — Art. 4e: medio tiempo, según tipo de dedicación (derivado).
   {
     modalidad: "VISITANTE_MT" as const,
+    sedeAplicable: null,
+    horasSemanalMax: 20,
+    horasSemestralMax: null as number | null,
+    horasSemestralEstricto: false,
+    minDocencia: null,
+    minDocenciaConProyectos: null,
+    maxInvProySocSemanal: null,
+  },
+  // Cátedra Visitante TC — mismas reglas que Visitante TC (Art. 4e); distinción solo de nombre.
+  {
+    modalidad: "CATEDRA_VISITANTE_TC" as const,
+    sedeAplicable: null,
+    horasSemanalMax: 40,
+    horasSemestralMax: null as number | null,
+    horasSemestralEstricto: false,
+    minDocencia: null,
+    minDocenciaConProyectos: null,
+    maxInvProySocSemanal: null,
+  },
+  // Cátedra Visitante MT — mismas reglas que Visitante MT (Art. 4e).
+  {
+    modalidad: "CATEDRA_VISITANTE_MT" as const,
     sedeAplicable: null,
     horasSemanalMax: 20,
     horasSemestralMax: null as number | null,

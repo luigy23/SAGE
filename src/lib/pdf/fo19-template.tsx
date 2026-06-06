@@ -1,26 +1,32 @@
 import React from "react"
 import { Document, Page, View, Text, StyleSheet, Image } from "@react-pdf/renderer"
+import fs from "fs"
 import path from "path"
 import type { AgendaConRelaciones } from "@/lib/types/agenda"
-import type { Docente } from "@/generated/prisma/client"
+import type { Docente, Modalidad } from "@/generated/prisma/client"
 import { Watermark } from "./shared/watermark"
 import { getSedeLabel } from "@/lib/utils/sede"
+import { getModalidadLabel } from "@/lib/utils/modalidad"
 
 const RED = "#9F1721"
 const BORDER = "#999999"
 const MUTED = "#555555"
+// Gris claro del encabezado de tabla — compartido con monitoreo (FO-20).
+// Más definido que el gris de los totales (#f0f0f0) para diferenciarlos.
+const HEAD_GRAY = "#e2e2e2"
+const HEAD_TEXT = "#333333"
 
 type Col = { label: string; width: number; align?: "left" | "center" | "right" }
 
 // Content width = 612 - 20*2 = 572pt
 const CURSO_COLS: Col[] = [
-  { label: "N°", width: 38, align: "center" },
-  { label: "Nombre del Curso", width: 183, align: "left" },
-  { label: "Sede", width: 45, align: "center" },
-  { label: "H. Presenc.", width: 62, align: "center" },
-  { label: "Créditos", width: 50, align: "center" },
-  { label: "Semanas", width: 52, align: "center" },
-  { label: "Ded. al Período", width: 142, align: "right" },
+  { label: "Número del Curso", width: 52, align: "center" },
+  { label: "Nombre del Curso", width: 158, align: "left" },
+  { label: "Sede", width: 44, align: "center" },
+  { label: "Nro. Horas Presenciales", width: 68, align: "center" },
+  { label: "Nro. de Créditos", width: 58, align: "center" },
+  { label: "Número de Semanas", width: 62, align: "center" },
+  { label: "Dedicación por Periodo", width: 130, align: "right" },
 ]
 
 const ACT_COLS: Col[] = [
@@ -31,10 +37,13 @@ const ACT_COLS: Col[] = [
 
 // ---- Header institucional ----
 
-function FO19Header() {
-  const logoUsco = path.join(process.cwd(), "public/img/Escudo_de_la_Universidad_Surcolombiana.svg.png")
-  const logoCerts = path.join(process.cwd(), "public/img/Certificaiones-ISO-IQnet.png")
+// Las imágenes se leen como Buffer (no como path): en Windows, pasar un path
+// absoluto con letra de unidad ("D:\\...") rompe a @react-pdf porque url.parse
+// interpreta "D:" como protocolo y descarta el archivo. Un Buffer lo evita.
+const logoUsco = fs.readFileSync(path.join(process.cwd(), "public/Img/Escudo_de_la_Universidad_Surcolombiana.svg.png"))
+const logoCerts = fs.readFileSync(path.join(process.cwd(), "public/Img/iqnet.png"))
 
+function FO19Header() {
   return (
     <View style={s.headerContainer}>
       {/* Primera fila: Logos y Títulos */}
@@ -96,33 +105,13 @@ function FieldRow({ fields, topBorder }: { fields: FieldDef[]; topBorder?: boole
   )
 }
 
-// ---- Modalidad checkboxes ----
-
-const MOD_OPTS = [
-  { key: "PLANTA_TC", label: "TC Planta" },
-  { key: "PLANTA_MT", label: "MT Planta" },
-  { key: "OCASIONAL_TC", label: "TC Ocasional" },
-  { key: "OCASIONAL_MT", label: "MT Catedra" },
-  { key: "CATEDRA", label: "Catedrático" },
-  { key: "_OTRO", label: "Otra" },
-]
+// ---- Modalidad ----
 
 function ModalidadRow({ modalidad }: { modalidad: string }) {
-  const isOtro = ["VISITANTE_TC", "VISITANTE_MT", "CATEDRA_VISITANTE_TC", "CATEDRA_VISITANTE_MT", "INVITADO"].includes(modalidad)
   return (
     <View style={s.modalidadRow}>
       <Text style={s.fieldLabel}>Modalidad/Dedicación: </Text>
-      {MOD_OPTS.map((opt) => {
-        const checked = opt.key === "_OTRO" ? isOtro : modalidad === opt.key
-        return (
-          <View key={opt.key} style={s.checkItem}>
-            <View style={s.checkbox}>
-              {checked && <Text style={s.checkX}>X</Text>}
-            </View>
-            <Text style={s.checkLabel}>{opt.label}</Text>
-          </View>
-        )
-      })}
+      <Text style={s.fieldValue}>{getModalidadLabel(modalidad as Modalidad)}</Text>
     </View>
   )
 }
@@ -145,7 +134,7 @@ function THead({ cols }: { cols: Col[] }) {
       {cols.map((col, i) => (
         <View
           key={i}
-          style={{ ...s.theadCell, width: col.width, ...(i < cols.length - 1 ? { borderRightWidth: 1, borderRightColor: "rgba(255,255,255,0.4)" } : {}) }}
+          style={{ ...s.theadCell, width: col.width, ...(i < cols.length - 1 ? { borderRightWidth: 1, borderRightColor: "#8a8a8a" } : {}) }}
         >
           <Text style={s.theadText}>{col.label}</Text>
         </View>
@@ -241,9 +230,8 @@ function GranTotal({ value }: { value: number }) {
 
 function Firmas({ docente }: { docente: Docente }) {
   const cols = [
-    { label: "Firma del Docente", name: docente.nombre },
-    { label: "Firma del Director del Programa", name: "" },
-    { label: "Firma del Decano", name: "" },
+    { label: "Docente", name: docente.nombre },
+    { label: "Jefe del Programa o Departamento", name: "" },
   ]
   return (
     <View style={s.firmasRow}>
@@ -281,12 +269,12 @@ export function FO19Document({ agenda, estado }: { agenda: AgendaConRelaciones; 
           topBorder
           fields={[
             { label: "Facultad", value: docente.facultad },
-            { label: "Programa", value: docente.programa },
+            { label: "Programa/Dpto.", value: docente.programa },
           ]}
         />
         <FieldRow
           fields={[
-            { label: "Docente", value: docente.nombre },
+            { label: "Nombre del Docente", value: docente.nombre },
             { label: "Cédula", value: docente.cedula },
           ]}
         />
@@ -298,7 +286,7 @@ export function FO19Document({ agenda, estado }: { agenda: AgendaConRelaciones; 
         />
         <ModalidadRow modalidad={docente.modalidad} />
 
-        <SectionBand>1.0 ACTIVIDADES DE DOCENCIA (DIRECTA)</SectionBand>
+        <SectionBand>1. DOCENCIA</SectionBand>
         <THead cols={CURSO_COLS} />
         {agenda.cursos.map((c) => (
           <TRow
@@ -316,7 +304,7 @@ export function FO19Document({ agenda, estado }: { agenda: AgendaConRelaciones; 
           />
         ))}
         {agenda.cursos.length === 0 && <EmptyRow />}
-        <TotalRow label="Subtotal 1.0" value={sumCursos} />
+        <TotalRow label="Subtotal" value={sumCursos} />
 
         <SectionBand>1.2 OTRAS ACTIVIDADES DE DOCENCIA</SectionBand>
         <THead cols={ACT_COLS} />
@@ -325,10 +313,13 @@ export function FO19Document({ agenda, estado }: { agenda: AgendaConRelaciones; 
         ))}
         {agenda.otrasActividadesDocencia.length === 0 && <EmptyRow />}
         <TotalRow
-          label="Subtotal 1.2"
+          label="Subtotal"
           value={sumOtras}
           extra={{ label: "Total 1", value: sumCursos + sumOtras }}
         />
+        <Text style={s.notaArt11}>
+          Comprende las actividades de docencia que trata el Artículo 11 del acuerdo 048 de 2018 distintas al desarrollo de cursos.
+        </Text>
       </Page>
 
       {/* === PÁGINA 2 === */}
@@ -337,19 +328,19 @@ export function FO19Document({ agenda, estado }: { agenda: AgendaConRelaciones; 
         <FO19Header />
 
         <ActivitySection
-          title="2. ACTIVIDADES DE INVESTIGACIÓN"
+          title="2. INVESTIGACIÓN"
           items={agenda.actividadesInvestigacion}
           total={sumInv}
           totalLabel="Total 2"
         />
         <ActivitySection
-          title="3. ACTIVIDADES DE PROYECCIÓN SOCIAL"
+          title="3. PROYECCIÓN SOCIAL"
           items={agenda.actividadesProyeccionSocial}
           total={sumProy}
           totalLabel="Total 3"
         />
         <ActivitySection
-          title="4. ACTIVIDADES DE GESTIÓN"
+          title="4. GESTIÓN ACADÉMICO ADMINISTRATIVA"
           items={agenda.actividadesGestion}
           total={sumGest}
           totalLabel="Total 4"
@@ -499,29 +490,6 @@ const s = StyleSheet.create({
     marginBottom: 4,
     flexWrap: "wrap",
   },
-  checkItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 14,
-    marginTop: 2,
-  },
-  checkbox: {
-    width: 10,
-    height: 10,
-    borderWidth: 1,
-    borderColor: "#444",
-    marginRight: 3,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  checkX: {
-    fontSize: 8,
-    fontFamily: "Helvetica-Bold",
-    lineHeight: 1,
-  },
-  checkLabel: {
-    fontSize: 7.5,
-  },
   // Section band
   sectionBand: {
     backgroundColor: RED,
@@ -537,7 +505,7 @@ const s = StyleSheet.create({
   // Table
   thead: {
     flexDirection: "row",
-    backgroundColor: "#555",
+    backgroundColor: HEAD_GRAY,
     borderLeftWidth: 1,
     borderRightWidth: 1,
     borderBottomWidth: 1,
@@ -551,7 +519,7 @@ const s = StyleSheet.create({
   theadText: {
     fontSize: 7,
     fontFamily: "Helvetica-Bold",
-    color: "white",
+    color: HEAD_TEXT,
     textAlign: "center",
   },
   trow: {
@@ -582,6 +550,13 @@ const s = StyleSheet.create({
     fontSize: 8,
     color: MUTED,
     fontFamily: "Helvetica-Oblique",
+  },
+  notaArt11: {
+    fontSize: 7,
+    color: MUTED,
+    fontFamily: "Helvetica-Oblique",
+    marginTop: 3,
+    paddingHorizontal: 2,
   },
   totalRow: {
     flexDirection: "row",

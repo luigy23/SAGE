@@ -370,6 +370,7 @@ export default async function AgendaPage() {
           periodo={periodo}
           semanasPeriodo={semanasPeriodo}
           semanasClases={globales.semanasClases}
+          semanasClasesPorSede={globales.semanasClasesPorSede}
           semanasMaximas={agendaLimits.semanasMaximas}
           defaultValues={nuevaDefaults}
           formulas={formulas}
@@ -591,6 +592,7 @@ export default async function AgendaPage() {
           defaultValues={defaultValues}
           semanasPeriodo={semanasPeriodo}
           semanasClases={globales.semanasClases}
+          semanasClasesPorSede={globales.semanasClasesPorSede}
           semanasMaximas={agendaLimits.semanasMaximas}
           defaultSemanasAgenda={agenda.semanasAgenda}
           formulas={formulas}

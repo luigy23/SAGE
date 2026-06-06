@@ -199,3 +199,87 @@ export async function cerrarPeriodoSuperadminAction(
     return { error: "No se pudo cerrar el período." }
   }
 }
+
+// ─────────────────────────────────────────────────────
+// Eliminación
+// ─────────────────────────────────────────────────────
+
+// Estados de agenda/monitoreo que cuentan como "trabajo oficial" (bloquean el borrado).
+const ESTADOS_OFICIALES = ["ENVIADO", "APROBADO"] as const
+// Estados "blandos": borradores/devueltos. Se pueden descartar al borrar el período.
+const ESTADOS_BLANDOS = ["BORRADOR", "RECHAZADO"] as const
+
+export type EliminarPeriodoResult =
+  | { success: true }
+  | { error: string }
+  | { needsConfirm: true; mensaje: string }
+
+/**
+ * Elimina un período académico, con una política POR NIVELES según su contenido:
+ *
+ *  - ABIERTO            → bloqueado. Hay que cerrar el semestre primero.
+ *  - tiene ENVIADO/APROBADO (agendas FO-19 o monitoreos FO-20)
+ *                       → bloqueado. Son registros oficiales; no se borran por error.
+ *  - solo BORRADOR/RECHAZADO
+ *                       → permitido, pero requiere confirmación explícita
+ *                         (`descartarBorradores`). Se descartan en cascada.
+ *  - vacío              → se borra directo.
+ *
+ * Los parámetros con `periodoId` apuntando a él quedan en NULL (SetNull), no se pierden.
+ */
+export async function eliminarPeriodoSuperadminAction(
+  id: string,
+  opts?: { descartarBorradores?: boolean }
+): Promise<EliminarPeriodoResult> {
+  await ensureSuperadmin()
+
+  const periodo = await prisma.periodoAcademico.findUnique({
+    where: { id },
+    select: { nombre: true, estado: true },
+  })
+  if (!periodo) return { error: "Período no encontrado." }
+
+  if (periodo.estado === "ABIERTO") {
+    return { error: "Cierra el semestre antes de eliminarlo (no se borra el período activo)." }
+  }
+
+  // Nivel "duro": agendas o monitoreos oficiales → bloqueo total.
+  const [agendasOficiales, monitoreosOficiales] = await Promise.all([
+    prisma.agendaSemestral.count({
+      where: { periodo: periodo.nombre, estado: { in: [...ESTADOS_OFICIALES] } },
+    }),
+    prisma.monitoreo.count({
+      where: { periodo: periodo.nombre, estado: { in: [...ESTADOS_OFICIALES] } },
+    }),
+  ])
+  if (agendasOficiales > 0 || monitoreosOficiales > 0) {
+    return {
+      error: `No se puede eliminar "${periodo.nombre}": tiene ${agendasOficiales} agenda(s) y ${monitoreosOficiales} monitoreo(s) enviados/aprobados. Son registros oficiales — archívalo en vez de borrarlo.`,
+    }
+  }
+
+  // Nivel "blando": solo borradores/devueltos → se pueden descartar, pero con confirmación.
+  const agendasBlandas = await prisma.agendaSemestral.count({
+    where: { periodo: periodo.nombre, estado: { in: [...ESTADOS_BLANDOS] } },
+  })
+  if (agendasBlandas > 0 && !opts?.descartarBorradores) {
+    return {
+      needsConfirm: true,
+      mensaje: `Este período tiene ${agendasBlandas} agenda(s) en borrador/devuelta(s). Si continúas, se descartarán junto con el período. ¿Eliminar de todas formas?`,
+    }
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Borrar las agendas blandas del período arrastra en cascada sus cursos,
+      // actividades y cualquier monitoreo asociado.
+      await tx.agendaSemestral.deleteMany({ where: { periodo: periodo.nombre } })
+      await tx.periodoAcademico.delete({ where: { id } })
+    })
+    revalidatePath("/superadmin/periodos")
+    revalidatePath("/admin/periodos")
+    return { success: true }
+  } catch {
+    return { error: "No se pudo eliminar el período." }
+  }
+}

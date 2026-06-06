@@ -161,18 +161,28 @@ function aplicarReglasEstatutarias(
 ): { cambios: Partial<DocenteSnapshot>; error?: string } {
   const resultante = { ...actual, ...cambios }
 
-  if (resultante.modalidad === "CATEDRA") {
-    if (resultante.cargoAdministrativo === true) {
+  // Modalidades que NO pueden ejercer cargo administrativo:
+  //  - CÁTEDRA (Art. 10): vínculo por horas, sin gestión.
+  //  - INVITADO (Art. 4f): nombramiento temporal del Consejo Académico, no orgánico.
+  if (resultante.cargoAdministrativo === true) {
+    if (resultante.modalidad === "CATEDRA") {
       return {
         cambios,
         error:
           "Art. 10: un docente catedrático no puede tener cargo administrativo. Desactívelo para esta solicitud.",
       }
     }
-    // La restricción de proyectos activos para catedráticos (Art. 3 Par. 1) se
-    // valida en el módulo de proyectos, no aquí (proyectosActivos no es editable
-    // por solicitud).
+    if (resultante.modalidad === "INVITADO") {
+      return {
+        cambios,
+        error:
+          "Un profesor invitado no puede tener cargo administrativo. Desactívelo para esta solicitud.",
+      }
+    }
   }
+  // La restricción de proyectos activos para catedráticos (Art. 3 Par. 1) se
+  // valida en el módulo de proyectos, no aquí (proyectosActivos no es editable
+  // por solicitud).
 
   if (resultante.cargoAdministrativo === true && !resultante.tipoCargo) {
     return {
@@ -421,9 +431,11 @@ export async function aprobarSolicitudCambioPerfilAction(
     }
   }
 
-  // Construir el data del update aplicando override defensivo CATEDRA.
+  // Construir el data del update aplicando override defensivo: CÁTEDRA e INVITADO
+  // no pueden ejercer cargo administrativo, así que se fuerza a vacío.
   const resultante = { ...snapshotActual, ...cambios }
   const isCatedra = resultante.modalidad === "CATEDRA"
+  const sinCargoAdmin = isCatedra || resultante.modalidad === "INVITADO"
 
   const dataDocente: Prisma.DocenteUpdateInput = {}
   if ("modalidad" in cambios)
@@ -432,11 +444,11 @@ export async function aprobarSolicitudCambioPerfilAction(
   if ("facultad" in cambios) dataDocente.facultad = cambios.facultad as string
   if ("sedeBase" in cambios) dataDocente.sedeBase = cambios.sedeBase as Sede
   if ("cargoAdministrativo" in cambios)
-    dataDocente.cargoAdministrativo = isCatedra
+    dataDocente.cargoAdministrativo = sinCargoAdmin
       ? false
       : (cambios.cargoAdministrativo as boolean)
   if ("tipoCargo" in cambios)
-    dataDocente.tipoCargo = isCatedra
+    dataDocente.tipoCargo = sinCargoAdmin
       ? null
       : ((cambios.tipoCargo as string | null) ?? null)
   // Ámbito del cargo: se recalcula de forma determinista cuando cambia algo que
@@ -447,9 +459,9 @@ export async function aprobarSolicitudCambioPerfilAction(
     "cargoAmbitoValor" in cambios ||
     "modalidad" in cambios
   if (ambitoAfectado) {
-    const cargoFinal = isCatedra ? null : ((resultante.tipoCargo as string | null) ?? null)
+    const cargoFinal = sinCargoAdmin ? null : ((resultante.tipoCargo as string | null) ?? null)
     const cfgFinal = cargoFinal ? CARGO_AMBITO[cargoFinal] : null
-    if (isCatedra || !resultante.cargoAdministrativo || !cfgFinal) {
+    if (sinCargoAdmin || !resultante.cargoAdministrativo || !cfgFinal) {
       dataDocente.cargoAmbitoTipo = null
       dataDocente.cargoAmbitoValor = null
     } else {

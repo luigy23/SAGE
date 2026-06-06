@@ -3,6 +3,7 @@
 import { Suspense, useActionState, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import { loginAction } from "@/lib/actions/auth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -85,14 +86,18 @@ export default function LoginPage() {
   return (
     <Card className="w-full max-w-md border-0 shadow-xl bg-white">
       <CardHeader className="text-center pb-2 pt-8">
-        {/* Título SAGE visible solo en móvil */}
-        <div className="lg:hidden mb-4">
-          <h2 className="text-3xl font-bold tracking-tight text-[#8F141B]">
-            SAGE
-          </h2>
-          <p className="text-xs text-gray-400 mt-1">
-            Universidad Surcolombiana
-          </p>
+        <div className="lg:hidden flex flex-col items-center mb-6">
+          <div className="flex shrink-0 items-center justify-center mb-2">
+            <Image
+              src="/Img/universidad-surcolombiana-login.png"
+              alt="Universidad Surcolombiana"
+              width={180}
+              height={102}
+              priority
+              unoptimized
+              className="object-contain"
+            />
+          </div>
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Iniciar sesión</h1>
         <p className="text-sm text-gray-500 mt-1">

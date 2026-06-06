@@ -67,24 +67,36 @@ async function recomputeProyectosActivos(
 }
 
 /**
- * Valida y arma la lista final de participantes (creador + adicionales):
- * sin duplicados, roles válidos para el tipo, EXACTAMENTE un rol líder
- * (Investigador Principal / Coordinador), todos activos y ninguno catedrático.
+ * Valida y arma la lista final de participantes: sin duplicados, roles válidos
+ * para el tipo, EXACTAMENTE un rol líder (Investigador Principal / Coordinador),
+ * todos activos y ninguno catedrático. Las horas NO se fijan acá (se ponen en la
+ * agenda de cada docente).
+ *
+ * `creadorId`:
+ *  - string → el creador es un PROFESOR que registra su propio proyecto; entra
+ *    automáticamente como líder y los `adicionales` son el rol secundario.
+ *  - null   → el creador es una AUTORIDAD (decano/jefe/superadmin) que registra el
+ *    proyecto PARA otros; el equipo es solo `adicionales`, y uno de ellos debe ser
+ *    el líder (la autoridad NO queda como participante).
  */
 async function construirParticipantes(
   tipo: TipoProyecto,
-  creadorId: string,
-  rolCreador: string,
+  creadorId: string | null,
   adicionales: ParticipanteInput[],
-  horasCreador?: number | null,
 ): Promise<
   { error: string }
   | { participantes: { docenteId: string; rol: RolEnProyecto; horasAsignadas: number | null }[] }
 > {
+  const lider = ROL_LIDER[tipo]
+  const liderLabel = lider === "INVESTIGADOR_PRINCIPAL" ? "Investigador Principal" : "Coordinador"
+
   const todos = [
-    { docenteId: creadorId, rol: rolCreador, horas: horasCreador ?? null },
-    ...adicionales.map((a) => ({ docenteId: a.docenteId, rol: a.rol, horas: a.horas ?? null })),
+    ...(creadorId ? [{ docenteId: creadorId, rol: lider as string }] : []),
+    ...adicionales.map((a) => ({ docenteId: a.docenteId, rol: a.rol as string })),
   ]
+  if (todos.length === 0) {
+    return { error: "Agrega al menos un participante al proyecto." }
+  }
 
   const ids = new Set<string>()
   for (const p of todos) {
@@ -105,11 +117,14 @@ async function construirParticipantes(
     }
   }
 
-  const lider = ROL_LIDER[tipo]
-  const liderLabel = lider === "INVESTIGADOR_PRINCIPAL" ? "Investigador Principal" : "Coordinador"
   const numLideres = todos.filter((p) => p.rol === lider).length
   if (numLideres !== 1) {
-    return { error: `Debe haber exactamente un ${liderLabel} en el proyecto (hay ${numLideres}).` }
+    return {
+      error:
+        numLideres === 0
+          ? `Falta designar al ${liderLabel} responsable del proyecto.`
+          : `Debe haber exactamente un ${liderLabel} en el proyecto (hay ${numLideres}).`,
+    }
   }
 
   const docentes = await prisma.docente.findMany({
@@ -130,24 +145,11 @@ async function construirParticipantes(
     }
   }
 
-  // Horas propuestas: validar ≤ tope del rol (mismo tope que usa el revisor).
-  const topesPorRol = await resolverTopesPorRol()
-  for (const p of todos) {
-    if (p.horas != null) {
-      const tope = topesPorRol[p.rol] ?? 0
-      if (p.horas > tope) {
-        return {
-          error: `Las horas propuestas (${p.horas}h) superan el tope del rol (${tope}h).`,
-        }
-      }
-    }
-  }
-
   return {
     participantes: todos.map((p) => ({
       docenteId: p.docenteId,
       rol: p.rol as RolEnProyecto,
-      horasAsignadas: p.horas ?? null,
+      horasAsignadas: null,
     })),
   }
 }
@@ -243,23 +245,38 @@ export async function crearProyectoAction(
 
   const docente = await prisma.docente.findUnique({
     where: { id: session.id },
-    select: { id: true, modalidad: true },
+    select: {
+      id: true, modalidad: true, rol: true, estadoCuenta: true,
+      cargoAdministrativo: true, tipoCargo: true, cargoAmbitoValor: true,
+    },
   })
   if (!docente) return { error: "Docente no encontrado." }
-  if (docente.modalidad === "CATEDRA") {
+
+  const esAutoridadReal = getAutoridadAcademica(docente).tipo !== null
+  const esAutoridad = esAutoridadReal && parsed.data.esParaOtro === true
+
+  if (parsed.data.esParaOtro && !esAutoridadReal) {
+    return { error: "Solo las autoridades académicas pueden registrar proyectos para otros docentes." }
+  }
+
+  // El bloqueo a catedráticos solo aplica si el creador va a ser participante.
+  if (!esAutoridad && docente.modalidad === "CATEDRA") {
     return {
       error:
         "Art. 3 Par. 1: los docentes catedráticos no pueden registrar proyectos activos.",
     }
   }
 
-  const { rolDocente, horasDocente, participantes: adicionales, fechaInicio, fechaFin, ...datos } = parsed.data
-  const armado = await construirParticipantes(datos.tipo, docente.id, rolDocente, adicionales ?? [], horasDocente)
+  const { titulo, descripcion, tipo, entidadConvocatoria, participantes: adicionales, fechaInicio, fechaFin } = parsed.data
+  const armado = await construirParticipantes(tipo, esAutoridad ? null : docente.id, adicionales ?? [])
   if ("error" in armado) return armado
 
   const creado = await prisma.proyecto.create({
     data: {
-      ...datos,
+      titulo,
+      descripcion,
+      tipo,
+      entidadConvocatoria,
       fechaInicio: fechaInicio ? new Date(fechaInicio) : null,
       fechaFin: fechaFin ? new Date(fechaFin) : null,
       estado: "BORRADOR",
@@ -303,15 +320,34 @@ export async function actualizarProyectoAction(
     return { error: "Solo se pueden editar proyectos en BORRADOR o RECHAZADO." }
   }
 
-  const { rolDocente, horasDocente, participantes: adicionales, fechaInicio, fechaFin, ...datos } = parsed.data
-  const armado = await construirParticipantes(datos.tipo, session.id, rolDocente, adicionales ?? [], horasDocente)
+  const actor = await prisma.docente.findUnique({
+    where: { id: session.id },
+    select: {
+      id: true, rol: true, estadoCuenta: true,
+      cargoAdministrativo: true, tipoCargo: true, cargoAmbitoValor: true,
+    },
+  })
+  if (!actor) return { error: "Docente no encontrado." }
+  
+  const esAutoridadReal = getAutoridadAcademica(actor).tipo !== null
+  const esAutoridad = esAutoridadReal && parsed.data.esParaOtro === true
+
+  if (parsed.data.esParaOtro && !esAutoridadReal) {
+    return { error: "Solo las autoridades académicas pueden editar proyectos para otros docentes." }
+  }
+
+  const { titulo, descripcion, tipo, entidadConvocatoria, participantes: adicionales, fechaInicio, fechaFin } = parsed.data
+  const armado = await construirParticipantes(tipo, esAutoridad ? null : session.id, adicionales ?? [])
   if ("error" in armado) return armado
 
   await prisma.$transaction([
     prisma.proyecto.update({
       where: { id },
       data: {
-        ...datos,
+        titulo,
+        descripcion,
+        tipo,
+        entidadConvocatoria,
         fechaInicio: fechaInicio ? new Date(fechaInicio) : null,
         fechaFin: fechaFin ? new Date(fechaFin) : null,
         estado: "BORRADOR",
@@ -472,12 +508,11 @@ export async function resolverTopesPorRol(): Promise<Record<string, number>> {
 export async function aprobarProyectoAction(
   id: string,
   payload: {
-    horas: { docenteId: string; horas: number }[]
     fechaInicio?: string | null
     fechaFin?: string | null
   },
 ): Promise<{ error: string } | { success: true }> {
-  const { horas, fechaInicio, fechaFin } = payload
+  const { fechaInicio, fechaFin } = payload
   const session = await auth()
   if (!session?.user?.id) return { error: "No autenticado." }
   const user = session.user
@@ -508,22 +543,9 @@ export async function aprobarProyectoAction(
   const authError = await verificarRevisor(user.id, proyecto.tipo, proyecto.participantes)
   if (authError) return authError
 
-  // Validar las horas asignadas a cada participante (≥ 0 y ≤ tope del rol).
-  // El tope sale del Catálogo de Actividades (parametrizable por el superadmin).
-  const topesPorRol = await resolverTopesPorRol()
-  const mapaHoras = new Map(horas.map((h) => [h.docenteId, h.horas]))
-  for (const p of proyecto.participantes) {
-    const h = mapaHoras.get(p.docenteId)
-    if (h == null || !Number.isFinite(h) || h < 0) {
-      return { error: "Asigná las horas (≥ 0) de todos los participantes antes de aprobar." }
-    }
-    const tope = topesPorRol[p.rol] ?? 0
-    if (h > tope) {
-      return { error: `Las horas asignadas no pueden superar el tope del rol (${tope}h).` }
-    }
-  }
-
-  // Validar el tiempo del proyecto (el revisor confirma/ajusta las fechas).
+  // El revisor SOLO aprueba la correctitud del proyecto y su tiempo de duración.
+  // Las horas NO se asignan aquí: cada docente las define en su propia agenda
+  // (FO-19) para el proyecto. Por eso la aprobación no toca `horasAsignadas`.
   if (!fechaInicio || !fechaFin) {
     return { error: "Definí la fecha de inicio y de fin del proyecto antes de aprobar." }
   }
@@ -532,12 +554,6 @@ export async function aprobarProyectoAction(
   }
 
   await prisma.$transaction(async (tx) => {
-    for (const p of proyecto.participantes) {
-      await tx.participanteProyecto.update({
-        where: { id: p.id },
-        data: { horasAsignadas: Math.round(mapaHoras.get(p.docenteId)!) },
-      })
-    }
     await tx.proyecto.update({
       where: { id },
       data: {
@@ -889,8 +905,16 @@ const LIDER_ROLES = ["INVESTIGADOR_PRINCIPAL", "COORDINADOR"] as const
  * Decano = su facultad, SUPERADMIN = global). El ámbito se ancla al líder del
  * proyecto (Investigador Principal / Coordinador), igual que `verificarRevisor`.
  */
+/**
+ * Estados de proyecto visibles para la autoridad. Los BORRADOR NO se muestran:
+ * son privados del creador, EXCEPTO los que la propia autoridad haya creado.
+ */
+const ESTADOS_GESTION = ["ENVIADO", "APROBADO", "RECHAZADO"] as const
+
 export async function getProyectosParaGestion(opts?: {
   estado?: "ENVIADO" | "APROBADO" | "RECHAZADO" | "BORRADOR" | "TODAS"
+  tipo?: "INVESTIGACION" | "PROYECCION_SOCIAL"
+  periodo?: string
   q?: string
   page?: number
   perPage?: number
@@ -917,7 +941,35 @@ export async function getProyectosParaGestion(opts?: {
 
   const page = opts?.page ?? 1
   const perPage = opts?.perPage ?? 20
-  const estado = !opts?.estado || opts.estado === "TODAS" ? undefined : opts.estado
+  const estadoFiltro: Prisma.ProyectoWhereInput["estado"] =
+    opts?.estado && opts.estado !== "TODAS"
+      ? opts.estado
+      : undefined
+
+  // Condición de estado y visibilidad de borradores
+  const visibilidadWhere: Prisma.ProyectoWhereInput =
+    estadoFiltro === "BORRADOR"
+      ? { estado: "BORRADOR", creadorId: actor.id }
+      : estadoFiltro
+        ? { estado: estadoFiltro }
+        : {
+            OR: [
+              { estado: { in: [...ESTADOS_GESTION] } },
+              { estado: "BORRADOR", creadorId: actor.id },
+            ],
+          }
+
+  // Filtro por período académico: proyectos cuyo rango de fechas se solapa con el período.
+  let periodoWhere: Prisma.ProyectoWhereInput = {}
+  if (opts?.periodo) {
+    const per = await prisma.periodoAcademico.findUnique({
+      where: { nombre: opts.periodo },
+      select: { fechaInicio: true, fechaFin: true },
+    })
+    if (per) {
+      periodoWhere = { fechaInicio: { lte: per.fechaFin }, fechaFin: { gte: per.fechaInicio } }
+    }
+  }
 
   // Scope por el líder del proyecto. SUPERADMIN: sin filtro de ámbito.
   const scopeWhere: Prisma.ProyectoWhereInput =
@@ -943,7 +995,9 @@ export async function getProyectosParaGestion(opts?: {
       }
     : {}
 
-  const where: Prisma.ProyectoWhereInput = { AND: [{ estado }, scopeWhere, qWhere] }
+  const where: Prisma.ProyectoWhereInput = {
+    AND: [{ tipo: opts?.tipo }, visibilidadWhere, scopeWhere, qWhere, periodoWhere],
+  }
 
   const [total, items] = await Promise.all([
     prisma.proyecto.count({ where }),
@@ -967,6 +1021,55 @@ export async function getProyectosParaGestion(opts?: {
     totalPages: Math.max(1, Math.ceil(total / perPage)),
     autoridad,
   }
+}
+
+export type ConteosProyectosGestion = {
+  ENVIADO: number
+  APROBADO: number
+  RECHAZADO: number
+  BORRADOR: number
+  TODAS: number
+}
+
+/**
+ * Cuenta los proyectos por estado en el ámbito de la autoridad en sesión.
+ * Utiliza las mismas reglas de visibilidad y anclaje al líder que
+ * `getProyectosParaGestion`.
+ */
+export async function getConteosProyectosGestion(): Promise<ConteosProyectosGestion> {
+  const cero: ConteosProyectosGestion = { ENVIADO: 0, APROBADO: 0, RECHAZADO: 0, BORRADOR: 0, TODAS: 0 }
+  const session = await auth()
+  if (!session?.user?.id) return cero
+
+  const actor = await prisma.docente.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, rol: true, estadoCuenta: true, cargoAdministrativo: true, tipoCargo: true, cargoAmbitoValor: true },
+  })
+  if (!actor) return cero
+
+  const autoridad = getAutoridadAcademica(actor)
+  if (autoridad.tipo === null) return cero
+
+  const scopeWhere: Prisma.ProyectoWhereInput =
+    autoridad.tipo === "JEFE"
+      ? { participantes: { some: { rol: { in: [...LIDER_ROLES] }, docente: { programa: autoridad.ambitoValor ?? "" } } } }
+      : autoridad.tipo === "DECANO"
+        ? { participantes: { some: { rol: { in: [...LIDER_ROLES] }, docente: { facultad: autoridad.ambitoValor ?? "" } } } }
+        : {}
+
+  const grupos = await prisma.proyecto.groupBy({
+    by: ["estado"],
+    where: { AND: [scopeWhere, { estado: { in: [...ESTADOS_GESTION] } }] },
+    _count: { _all: true },
+  })
+
+  const conteos = { ...cero }
+  for (const g of grupos) {
+    const n = g._count._all
+    if (g.estado in conteos) conteos[g.estado as keyof ConteosProyectosGestion] = n
+    conteos.TODAS += n
+  }
+  return conteos
 }
 
 /**
@@ -1006,8 +1109,7 @@ export async function getEstadisticasProyectosGestion() {
     where: { proyecto: { estado: "APROBADO" }, docente: docenteScope },
     select: {
       rol: true,
-      horasAsignadas: true,
-      docente: { select: { id: true, nombre: true, programa: true } },
+      docente: { select: { id: true, nombre: true, programa: true, facultad: true } },
       proyecto: { select: { id: true, titulo: true, tipo: true } },
     },
     orderBy: { docente: { nombre: "asc" } },
@@ -1017,33 +1119,32 @@ export async function getEstadisticasProyectosGestion() {
     id: string
     nombre: string
     programa: string
-    totalHoras: number
-    proyectos: { id: string; titulo: string; tipo: string; rol: string; horas: number }[]
+    facultad: string
+    // Las horas de cada proyecto se definen en la agenda (FO-19), no acá: este
+    // panel resume QUÉ proyectos activos tiene cada docente, no cuántas horas.
+    proyectos: { id: string; titulo: string; tipo: string; rol: string }[]
   }
 
   const porDocente = new Map<string, DocenteResumen>()
   const proyectoIds = new Set<string>()
   for (const p of participaciones) {
     proyectoIds.add(p.proyecto.id)
-    const horas = p.horasAsignadas ?? 0
     let entry = porDocente.get(p.docente.id)
     if (!entry) {
       entry = {
         id: p.docente.id,
         nombre: p.docente.nombre,
         programa: p.docente.programa,
-        totalHoras: 0,
+        facultad: p.docente.facultad,
         proyectos: [],
       }
       porDocente.set(p.docente.id, entry)
     }
-    entry.totalHoras += horas
     entry.proyectos.push({
       id: p.proyecto.id,
       titulo: p.proyecto.titulo,
       tipo: p.proyecto.tipo,
       rol: p.rol,
-      horas,
     })
   }
 
@@ -1055,7 +1156,6 @@ export async function getEstadisticasProyectosGestion() {
     totales: {
       docentes: docentes.length,
       proyectos: proyectoIds.size,
-      horas: docentes.reduce((s, d) => s + d.totalHoras, 0),
     },
     docentes,
   }

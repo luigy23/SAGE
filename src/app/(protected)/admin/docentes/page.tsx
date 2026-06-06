@@ -139,7 +139,7 @@ export default async function AdminUsuariosPage() {
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-sm">{f.cedula}</TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-normal min-w-[200px]">
                       <div className="flex flex-col gap-0.5">
                         <span className="text-sm font-medium">{f.facultad}</span>
                         <span className="text-xs text-muted-foreground">{f.programa}</span>

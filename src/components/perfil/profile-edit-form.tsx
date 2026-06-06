@@ -160,12 +160,15 @@ export function ProfileEditForm({
     ? (ambitoCfg.tipo === "PROGRAMA" ? watchedPrograma : watchedFacultad) || ""
     : ""
   const isCatedra = watchedModalidad === "CATEDRA"
+  const isInvitado = watchedModalidad === "INVITADO"
+  // CÁTEDRA (Art. 10) e INVITADO (Art. 4f) no pueden tener cargo administrativo.
+  const bloqueaCargo = isCatedra || isInvitado
 
   useEffect(() => {
-    if (isCatedra) {
+    if (bloqueaCargo) {
       form.setValue("cargoAdministrativo", false, { shouldValidate: true })
     }
-  }, [isCatedra, form])
+  }, [bloqueaCargo, form])
 
   useEffect(() => {
     if (!watchedDoctorado) {
@@ -605,14 +608,14 @@ export function ProfileEditForm({
                   <FormItem
                     className={cn(
                       "flex items-center justify-between rounded-lg border p-4 transition-colors",
-                      isCatedra && "opacity-50 border-dashed",
+                      bloqueaCargo && "opacity-50 border-dashed",
                     )}
                   >
                     <div className="flex items-center gap-3">
                       <Briefcase
                         className={cn(
                           "h-5 w-5",
-                          field.value && !isCatedra
+                          field.value && !bloqueaCargo
                             ? "text-emerald-600"
                             : "text-muted-foreground",
                         )}
@@ -624,7 +627,9 @@ export function ProfileEditForm({
                         <FormDescription>
                           {isCatedra
                             ? "Estatutariamente inhabilitado para modalidad Cátedra"
-                            : "Art. 10 — Gestión no puede exceder 20% del tiempo laboral"}
+                            : isInvitado
+                              ? "Estatutariamente inhabilitado para modalidad Invitado"
+                              : "Art. 10 — Gestión no puede exceder 20% del tiempo laboral"}
                         </FormDescription>
                       </div>
                     </div>
@@ -632,14 +637,14 @@ export function ProfileEditForm({
                       <Switch
                         checked={field.value}
                         onCheckedChange={field.onChange}
-                        disabled={isCatedra || disabled}
+                        disabled={bloqueaCargo || disabled}
                       />
                     </FormControl>
                   </FormItem>
                 )}
               />
 
-              {watchedCargo && !isCatedra && (
+              {watchedCargo && !bloqueaCargo && (
                 <FormField
                   control={form.control}
                   name="tipoCargo"
@@ -675,7 +680,7 @@ export function ProfileEditForm({
               )}
 
               {/* Ámbito del cargo: SIEMPRE es el propio del docente, no se elige. */}
-              {watchedCargo && !isCatedra && ambitoCfg && (
+              {watchedCargo && !bloqueaCargo && ambitoCfg && (
                 <div className="ml-14 animate-in fade-in slide-in-from-top-2">
                   <p className="text-sm">
                     <span className="font-medium">

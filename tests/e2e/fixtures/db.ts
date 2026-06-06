@@ -60,6 +60,13 @@ import {
   PROYECTO_APROBADO_DEMO,
   PROYECTO_PENDIENTE_DEMO,
 } from "./demo"
+import {
+  PERIODO_PROC,
+  PROGRAMA_PROC,
+  DOCENTE_PROC,
+  JEFE_PROC,
+  PROYECTO_PROC,
+} from "./demo-procesos"
 
 function makePrisma() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL })
@@ -988,6 +995,123 @@ export async function prepararEscenarioDemo() {
   }
 }
 
+/**
+ * Escenario del DEMO de PROCESOS (creación en vivo): el docente crea su proyecto y
+ * elige su cohorte de consejería EN VIVO; el jefe aprueba el proyecto. Por eso aquí
+ * NO se precrea ni proyecto aprobado ni compromiso de consejería: solo se deja la
+ * base lista y limpia.
+ *
+ * Usa un período DEDICADO "2026-1" con fechas alrededor de hoy (para que el
+ * calendario de fechas del proyecto caiga en el mes actual) y un programa propio,
+ * para no chocar con el "2025-2" de los demás escenarios.
+ */
+export async function prepararEscenarioDemoProcesos() {
+  const prisma = makePrisma()
+  try {
+    // 1) Período dedicado ABIERTO, con fechas alrededor de "ahora" (2026-1).
+    const fechaInicio = new Date("2026-02-01T00:00:00Z")
+    const fechaFin = new Date("2026-06-30T00:00:00Z")
+    const ventanas = {
+      agendaDesde: new Date("2020-01-01T00:00:00Z"),
+      agendaHasta: new Date("2031-01-01T00:00:00Z"),
+    }
+    await prisma.periodoAcademico.upsert({
+      where: { nombre: PERIODO_PROC },
+      update: { estado: "ABIERTO", fechaInicio, fechaFin, ...ventanas },
+      create: { nombre: PERIODO_PROC, estado: "ABIERTO", fechaInicio, fechaFin, ...ventanas },
+    })
+
+    // 2) Cursos del catálogo (mismos del otro demo, garantizados).
+    const cursosDemo = [
+      { codigo: "CBI001", nombre: "Fundamentos de Matemáticas" },
+      { codigo: "CBI002", nombre: "Cálculo Diferencial" },
+      { codigo: "CBI003", nombre: "Cálculo Integral" },
+    ]
+    for (const c of cursosDemo) {
+      const datos = {
+        nombre: c.nombre, creditos: 3, tipo: "TEORICO" as const, estado: true,
+        facultad: "Ingeniería", horasSemT: 4, horasSemP: null, horasSemI: 5,
+      }
+      await prisma.cursoMaestro.upsert({ where: { codigo: c.codigo }, update: datos, create: { codigo: c.codigo, ...datos } })
+    }
+
+    // 3) Catálogo "Consejería Académica" (48h/cohorte, máx 2, por COHORTE).
+    const datosConsej = {
+      topeSemestralH: HORAS_POR_COHORTE,
+      topePorUnidad: "COHORTE" as const,
+      unidadMax: MAX_COHORTES,
+      activo: true,
+    }
+    const consejCat = await prisma.catalogoActividad.findFirst({
+      where: { categoria: "DOCENCIA", nombre: "Consejería Académica" },
+    })
+    if (consejCat) {
+      await prisma.catalogoActividad.update({ where: { id: consejCat.id }, data: datosConsej })
+    } else {
+      await prisma.catalogoActividad.create({
+        data: {
+          categoria: "DOCENCIA",
+          nombre: "Consejería Académica",
+          descripcion: "Hasta 2 cohortes; un solo consejero por cohorte y programa (6 semestres).",
+          articuloOrigen: "Art. 11 — Docencia",
+          ...datosConsej,
+        },
+      })
+    }
+
+    // 4) Docente de planta (crea proyecto + consejería + agenda).
+    const docente = await prisma.docente.upsert({
+      where: { email: DOCENTE_PROC.email },
+      update: {
+        password: await bcrypt.hash(DOCENTE_PROC.password, 10),
+        estadoCuenta: "ACTIVO", modalidad: DOCENTE_PROC.modalidad,
+        sedeBase: DOCENTE_PROC.sedeBase, facultad: DOCENTE_PROC.facultad, programa: DOCENTE_PROC.programa,
+        cargoAdministrativo: false, tipoCargo: null,
+      },
+      create: {
+        email: DOCENTE_PROC.email,
+        password: await bcrypt.hash(DOCENTE_PROC.password, 10),
+        nombre: DOCENTE_PROC.nombre, cedula: DOCENTE_PROC.cedula,
+        rol: "DOCENTE", estadoCuenta: "ACTIVO",
+        sedeBase: DOCENTE_PROC.sedeBase, modalidad: DOCENTE_PROC.modalidad,
+        facultad: DOCENTE_PROC.facultad, programa: DOCENTE_PROC.programa,
+        doctorado: false, cargoAdministrativo: false, tipoCargo: null, proyectosActivos: false,
+      },
+    })
+
+    // 5) Jefe de Programa (cargo administrativo + ámbito = programa del docente).
+    await prisma.docente.upsert({
+      where: { email: JEFE_PROC.email },
+      update: {
+        password: await bcrypt.hash(JEFE_PROC.password, 10),
+        estadoCuenta: "ACTIVO", cargoAdministrativo: true,
+        tipoCargo: JEFE_PROC.tipoCargo, cargoAmbitoValor: JEFE_PROC.cargoAmbitoValor,
+        facultad: JEFE_PROC.facultad, programa: JEFE_PROC.programa,
+      },
+      create: {
+        email: JEFE_PROC.email,
+        password: await bcrypt.hash(JEFE_PROC.password, 10),
+        nombre: JEFE_PROC.nombre, cedula: JEFE_PROC.cedula,
+        rol: "DOCENTE", estadoCuenta: "ACTIVO",
+        sedeBase: "NEIVA", modalidad: "PLANTA_TC",
+        facultad: JEFE_PROC.facultad, programa: JEFE_PROC.programa,
+        doctorado: false, cargoAdministrativo: true,
+        tipoCargo: JEFE_PROC.tipoCargo, cargoAmbitoValor: JEFE_PROC.cargoAmbitoValor,
+        proyectosActivos: false,
+      },
+    })
+
+    // 6) Limpiar TODO lo que el docente creará en vivo (re-runs idempotentes).
+    await prisma.agendaSemestral.deleteMany({ where: { docenteId: docente.id, periodo: PERIODO_PROC } })
+    await prisma.proyecto.deleteMany({ where: { creadorId: docente.id, titulo: PROYECTO_PROC.titulo } })
+    await prisma.consejeriaCompromiso.deleteMany({ where: { programa: PROGRAMA_PROC } })
+
+    return { docenteId: docente.id }
+  } finally {
+    await prisma.$disconnect()
+  }
+}
+
 if (require.main === module) {
   Promise.all([
     prepararEscenario(),
@@ -998,6 +1122,7 @@ if (require.main === module) {
     prepararEscenarioInvitado(),
     prepararEscenarioProyectoInyectado(),
     prepararEscenarioDemo(),
+    prepararEscenarioDemoProcesos(),
   ])
     .then((r) => {
       console.log("Escenario listo:", r)

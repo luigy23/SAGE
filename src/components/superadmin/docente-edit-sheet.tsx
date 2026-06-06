@@ -43,6 +43,7 @@ import {
 import { TIPOS_CARGO } from "@/lib/schemas/profile-schema"
 import { CARGO_AMBITO, FACULTADES, FACULTAD_PROGRAMAS } from "@/lib/constants"
 import { editarDocenteSuperadminAction } from "@/lib/actions/superadmin-docente-edit"
+import { getMaxHoras } from "@/lib/utils/periodo"
 
 const MODALIDADES = [
   { value: "PLANTA_TC", label: "Tiempo Completo Planta" },
@@ -107,7 +108,21 @@ function toDateInput(v: Date | string | null | undefined): string {
   return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10)
 }
 
-export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
+/** Semanas base por modalidad (valores parametrizados, resueltos en el server). */
+export type SemanasBase = {
+  planta: number
+  catedra: number
+  ocasional: number
+  visitante: number
+}
+
+export function DocenteEditSheet({
+  usuario,
+  semanasBase,
+}: {
+  usuario: Usuario
+  semanasBase: SemanasBase
+}) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -178,20 +193,50 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
   const programaActual = programaW || usuario.programa
   const facultadActual = facultadW || usuario.facultad
 
+  const sedeBaseW = useWatch({ control: form.control, name: "sedeBase" })
+
   const isCatedra = modalidad === "CATEDRA"
   const isInvitado = modalidad === "INVITADO"
   const isModalidadTemporal = MODALIDADES_TEMPORALES.has(modalidad ?? "")
   // Temporales con rango de contrato (ocasional/visitante/cátedra visitante); INVITADO usa inv*.
   const isTemporalNoInvitado = isModalidadTemporal && !isInvitado
 
-  // UI Lock — CATEDRA fuerza false
+  // Parámetros EFECTIVOS para las características del docente (modalidad + sede).
+  // Semanas base por modalidad (parametrizadas en Parámetros Globales) y horas/semana
+  // (Modalidades; la cátedra depende de la sede: 16 Neiva / 19 regionales).
+  const semanasEfectivas = (() => {
+    switch (modalidad) {
+      case "CATEDRA":
+        return semanasBase.catedra
+      case "OCASIONAL_TC":
+      case "OCASIONAL_MT":
+        return semanasBase.ocasional
+      case "VISITANTE_TC":
+      case "VISITANTE_MT":
+      case "CATEDRA_VISITANTE_TC":
+      case "CATEDRA_VISITANTE_MT":
+        return semanasBase.visitante
+      default:
+        return semanasBase.planta // PLANTA / INVITADO
+    }
+  })()
+  const horasSemanaEfectivas = modalidad ? getMaxHoras(modalidad, sedeBaseW).maxHoras : 0
+
+  // CÁTEDRA (Art. 10) e INVITADO (Art. 4f) no pueden tener cargo administrativo.
+  const bloqueaCargo = isCatedra || isInvitado
+
+  // UI Lock — sin cargo administrativo fuerza vacío los campos del cargo.
   useEffect(() => {
-    if (isCatedra) {
+    if (bloqueaCargo) {
       form.setValue("cargoAdministrativo", false, { shouldValidate: true })
-      form.setValue("proyectosActivos", false, { shouldValidate: true })
       form.setValue("tipoCargo", "", { shouldValidate: true })
       form.setValue("cargoAmbitoValor", "", { shouldValidate: true })
     }
+  }, [bloqueaCargo, form])
+
+  // CÁTEDRA además no puede tener proyectos activos (Art. 3 Par. 1); el invitado sí.
+  useEffect(() => {
+    if (isCatedra) form.setValue("proyectosActivos", false, { shouldValidate: true })
   }, [isCatedra, form])
 
   // Si no hay doctorado, limpiar título
@@ -392,32 +437,16 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
                     </SelectContent>
                   </Select>
                 </Field>
-                {isModalidadTemporal && (
-                  <Field
-                    label="Semanas de vinculación"
-                    error={errors.semanasVinculacion?.message}
-                  >
-                    <Input
-                      type="number"
-                      min={1}
-                      max={22}
-                      {...form.register("semanasVinculacion", {
-                        setValueAs: (v) =>
-                          v === "" || v === null || v === undefined
-                            ? null
-                            : Number(v),
-                      })}
-                    />
-                  </Field>
-                )}
               </div>
 
+              {/* Duración del contrato — solo ocasional/visitante/cátedra-visitante.
+                  El INVITADO NO usa semanas: su base son las horas contratadas (abajo). */}
               {isTemporalNoInvitado && (
-                <div className="space-y-2 rounded-md border border-blue-200 bg-blue-50/50 p-3 dark:border-blue-900 dark:bg-blue-950/30">
+                <div className="space-y-3 rounded-md border border-blue-200 bg-blue-50/50 p-3 dark:border-blue-900 dark:bg-blue-950/30">
                   <p className="text-xs text-muted-foreground">
-                    Rango del contrato. Si abarca varios semestres (p. ej. un ocasional de ~11
-                    meses), SAGE deriva automáticamente los periodos cubiertos y las semanas en
-                    cada uno. Si lo dejas vacío, se usa el número de semanas de vinculación.
+                    Duración del contrato. <span className="font-medium text-foreground/80">Lo principal son las fechas</span>:
+                    SAGE deriva solo las semanas que caen en cada período (soporta contratos
+                    multi-semestre, p. ej. un ocasional de ~11 meses).
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="Inicio del contrato" error={errors.vinculacionDesde?.message}>
@@ -427,16 +456,54 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
                       <Input type="date" {...form.register("vinculacionHasta")} />
                     </Field>
                   </div>
+                  <Field
+                    label="Semanas (alternativa — solo si no tenés las fechas exactas)"
+                    error={errors.semanasVinculacion?.message}
+                  >
+                    <Input
+                      type="number"
+                      min={1}
+                      max={22}
+                      className="sm:w-44"
+                      placeholder="Ej: 16"
+                      {...form.register("semanasVinculacion", {
+                        setValueAs: (v) =>
+                          v === "" || v === null || v === undefined ? null : Number(v),
+                      })}
+                    />
+                  </Field>
                 </div>
               )}
 
-              {isCatedra && (
-                <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 dark:border-amber-800 dark:bg-amber-950">
-                  <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                  <p className="text-xs text-amber-800 dark:text-amber-300">
-                    Modalidad Cátedra: cargo administrativo y proyectos activos
-                    quedan deshabilitados automáticamente (Art. 10 y Art. 3 Par. 1).
-                  </p>
+              {/* Resumen de parámetros EFECTIVOS para las características del docente */}
+              {modalidad && (
+                <div className="rounded-md border bg-muted/30 p-3 text-xs">
+                  <p className="font-medium text-foreground">Parámetros fijados para este docente</p>
+                  {isInvitado ? (
+                    <p className="mt-1 text-muted-foreground">
+                      El invitado se rige por <span className="font-medium text-foreground/80">horas contratadas</span> (su 100%),
+                      no por semanas. Defínelas abajo en la sección de invitación.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="mt-1 text-muted-foreground">
+                        <span className="font-mono font-medium text-foreground/80">{semanasEfectivas}</span> semanas ·{" "}
+                        <span className="font-mono font-medium text-foreground/80">{horasSemanaEfectivas}</span> h/semana
+                        {isTemporalNoInvitado && " (base; las reales se derivan del rango del contrato)"}
+                        .
+                      </p>
+                      {isCatedra && (
+                        <p className="mt-1 text-muted-foreground">
+                          La cátedra usa <span className="font-medium text-foreground/80">16 h/sem en Neiva</span> y{" "}
+                          <span className="font-medium text-foreground/80">19 en sedes regionales</span> (por eso varía con la sede).
+                        </p>
+                      )}
+                      <p className="mt-1 text-[11px] text-muted-foreground/80">
+                        Las semanas se configuran en <span className="font-medium">Parámetros Globales</span> y las horas/semana en{" "}
+                        <span className="font-medium">Modalidades</span>.
+                      </p>
+                    </>
+                  )}
                 </div>
               )}
             </section>
@@ -472,13 +539,23 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
                         type="number"
                         min={1}
                         max={4000}
-                        {...form.register("invHorasContratadas", {
-                          setValueAs: (v) =>
-                            v === "" || v === null || v === undefined ? null : Number(v),
-                        })}
+                        placeholder="Ej: 120"
+                        value={form.watch("invHorasContratadas") ?? ""}
+                        onChange={(e) => {
+                          const raw = e.target.value
+                          // Tope al máximo legal (4000) y mínimo 1; evita números absurdos.
+                          const n =
+                            raw === "" ? null : Math.min(4000, Math.max(1, Math.floor(Number(raw) || 0)))
+                          form.setValue("invHorasContratadas", n, { shouldValidate: true })
+                        }}
                       />
                     </Field>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Las <span className="font-medium text-foreground/80">horas contratadas</span> son el 100% de la
+                    agenda del invitado (su tope). El invitado <span className="font-medium text-foreground/80">no</span> usa
+                    semanas de vinculación: su duración son las fechas de arriba (pueden ser días).
+                  </p>
                   <SwitchRow
                     icon={<ShieldAlert className="h-4 w-4" />}
                     label="Autorizado por el Consejo Académico"
@@ -528,15 +605,17 @@ export function DocenteEditSheet({ usuario }: { usuario: Usuario }) {
                 description={
                   isCatedra
                     ? "Inhabilitado para Cátedra"
-                    : "Art. 10 — Gestión ≤ 20% del tiempo"
+                    : isInvitado
+                      ? "Inhabilitado para Invitado"
+                      : "Art. 10 — Gestión ≤ 20% del tiempo"
                 }
                 checked={cargoAdministrativo}
-                disabled={isCatedra}
+                disabled={bloqueaCargo}
                 onChange={(v) =>
                   form.setValue("cargoAdministrativo", v, { shouldValidate: true })
                 }
               />
-              {cargoAdministrativo && !isCatedra && (
+              {cargoAdministrativo && !bloqueaCargo && (
                 <div className="ml-7">
                   <Field
                     label="Tipo de cargo"

@@ -178,6 +178,7 @@ export function AgendaWizardForm({
   defaultValues,
   semanasPeriodo,
   semanasClases,
+  semanasClasesPorSede,
   semanasMaximas,
   defaultSemanasAgenda,
   formulas = DEFAULT_FORMULAS,
@@ -197,6 +198,8 @@ export function AgendaWizardForm({
   semanasPeriodo: number
   /** Semanas de clase — base del cálculo de horas de los cursos (default 16, independiente del contrato). */
   semanasClases: number
+  /** Override de semanas de clase por sede donde se dicta el curso. */
+  semanasClasesPorSede?: Record<string, number>
   /** Techo máximo de semanas elegibles (semanasVinculacion o semanasPeriodo global). */
   semanasMaximas?: number
   /** Semanas guardadas en el BORRADOR (si existe). */
@@ -310,8 +313,9 @@ export function AgendaWizardForm({
       maxGestion,
       periodo,
       semanasClases,
+      semanasClasesPorSede,
     ),
-    [maxHoras, esEstricto, minDocencia, semanasAgenda, docente.doctorado, docente.cargoAdministrativo, docente.proyectosActivos, excluyeTopeGestion20, esJefeProg, topesActividades, maxInvProySocialCatedra, maxGestion, periodo, semanasClases]
+    [maxHoras, esEstricto, minDocencia, semanasAgenda, docente.doctorado, docente.cargoAdministrativo, docente.proyectosActivos, excluyeTopeGestion20, esJefeProg, topesActividades, maxInvProySocialCatedra, maxGestion, periodo, semanasClases, semanasClasesPorSede]
   )
 
   const steps = useMemo(
@@ -497,7 +501,10 @@ export function AgendaWizardForm({
       if ("error" in result) {
         toast.error(result.error)
       } else {
-        toast.success("¡Agenda enviada exitosamente!")
+        // En el flujo delegado, la autoridad que la registra ya la aprueba.
+        toast.success(
+          result.aprobada ? "¡Agenda registrada y aprobada!" : "¡Agenda enviada exitosamente!",
+        )
         if (redirectOnSuccess) {
           router.push(redirectOnSuccess)
         } else {
@@ -531,6 +538,7 @@ export function AgendaWizardForm({
             sedeBase={docente.sedeBase}
             semanasPeriodo={semanasAgenda}
             semanasClases={semanasClases}
+            semanasClasesPorSede={semanasClasesPorSede}
             esJefeDePrograma={esJefeProg}
             periodo={periodo}
             consejeria={consejeria}
@@ -585,6 +593,7 @@ export function AgendaWizardForm({
           key={i}
           cursoIndex={i}
           semanasClases={semanasClases}
+          semanasClasesPorSede={semanasClasesPorSede}
           formulas={formulas ?? DEFAULT_FORMULAS}
         />
       ))}

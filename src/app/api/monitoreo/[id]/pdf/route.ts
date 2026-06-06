@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { renderFo20Pdf } from "@/lib/pdf/fo20-render"
 import type { MonitoreoConRelaciones } from "@/lib/types/monitoreo"
+import { getAutoridadDeSesion } from "@/lib/auth/get-autoridad"
+import { puedeGestionarFormulario } from "@/lib/auth/autoridad"
 
 export const runtime = "nodejs"
 
@@ -41,7 +43,20 @@ export async function GET(
     },
   })
 
-  if (!monitoreo || monitoreo.docenteId !== session.user.id) {
+  if (!monitoreo) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
+
+  // Autorización: el dueño siempre; o una autoridad académica (Jefe/Decano/SUPERADMIN)
+  // dentro de su ámbito, para la supervisión global y la revisión de monitoreos.
+  let autorizado = monitoreo.docenteId === session.user.id
+  if (!autorizado) {
+    const sesion = await getAutoridadDeSesion()
+    if (sesion && puedeGestionarFormulario(sesion.autoridad, monitoreo.docente)) {
+      autorizado = true
+    }
+  }
+  if (!autorizado) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 

@@ -43,6 +43,22 @@ export const editarDocenteSuperadminSchema = z.object({
   invFechaHasta: z.string().trim().nullable().optional(),
   invHorasContratadas: z.number().int().min(1).max(4000).nullable().optional(),
   invAutorizadoCA: z.boolean().optional(),
+}).superRefine((d, ctx) => {
+  // Las fechas llegan como yyyy-mm-dd: la comparación de strings respeta el orden.
+  if (d.vinculacionDesde && d.vinculacionHasta && d.vinculacionHasta < d.vinculacionDesde) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["vinculacionHasta"],
+      message: "El fin del contrato no puede ser anterior al inicio.",
+    })
+  }
+  if (d.invFechaDesde && d.invFechaHasta && d.invFechaHasta < d.invFechaDesde) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["invFechaHasta"],
+      message: "La fecha 'hasta' no puede ser anterior a 'desde'.",
+    })
+  }
 })
 
 export type EditarDocenteSuperadminInput = z.infer<

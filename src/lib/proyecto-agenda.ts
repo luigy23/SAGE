@@ -6,12 +6,13 @@ import type { ProyectoAprobadoOpcion } from "@/lib/actions/proyecto-actions"
  * Inyección forzosa de PROYECTOS aprobados+activos en la agenda (Art. 11).
  *
  * Cada proyecto aprobado donde el docente participa se precarga como una actividad
- * BLOQUEADA en Investigación o Proyección Social (según su tipo), con la actividad
- * del catálogo correspondiente al rol, el `proyectoId` y las horas que el revisor
- * asignó. El docente no la edita ni la quita (es un compromiso del proyecto).
+ * FIJA en Investigación o Proyección Social (según su tipo), con la actividad del
+ * catálogo correspondiente al rol y el `proyectoId`. El docente NO la quita (es un
+ * compromiso del proyecto), pero SÍ define cuántas horas le dedicará: las horas no
+ * las pone el revisor al aprobar, las pone cada docente en su agenda.
  *
- * Espeja el patrón de `inyectarConsejeriaEnActividades`. Preserva la descripción
- * previa si el proyecto ya estaba en un borrador.
+ * Espeja el patrón de `inyectarConsejeriaEnActividades`. Preserva la descripción y
+ * las horas ya escritas si el proyecto estaba en un borrador.
  */
 export function inyectarProyectosEnActividades(
   investigacion: ActividadFormData[],
@@ -35,7 +36,8 @@ export function inyectarProyectosEnActividades(
       ...EMPTY_ACTIVIDAD,
       nombre,
       descripcion: previa?.descripcion || p.titulo,
-      dedicacionPeriodo: p.horasAsignadas,
+      // El docente define las horas en su agenda; preserva lo ya escrito en el borrador.
+      dedicacionPeriodo: previa?.dedicacionPeriodo ?? 0,
       proyectoId: p.id,
     }
   }

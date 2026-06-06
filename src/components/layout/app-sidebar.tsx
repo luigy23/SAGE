@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   User,
@@ -59,13 +60,18 @@ export function AppSidebar({
 
   return (
     <Sidebar>
-      <SidebarHeader className="border-b px-6 py-4">
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <span className="text-xl font-bold text-[#8F141B]">SAGE</span>
+      <SidebarHeader className="border-b px-5 py-4 bg-slate-50/50 dark:bg-slate-900/50">
+        <Link href="/dashboard" className="flex items-center justify-center transition-opacity hover:opacity-90 w-full py-1">
+          <Image
+            src="/Img/usco-logo-full.png"
+            alt="Logo USCO"
+            width={220}
+            height={70}
+            className="object-contain w-full h-auto max-h-16 drop-shadow-sm"
+            priority
+            unoptimized
+          />
         </Link>
-        <p className="text-xs text-muted-foreground">
-          Sistema de Agenda y Gestion Educativa
-        </p>
       </SidebarHeader>
 
       <SidebarContent>
@@ -84,7 +90,7 @@ export function AppSidebar({
                 </SidebarMenuItem>
               ))}
 
-              {user.rol === "DOCENTE" && docenteNavItems.map((item) => (
+              {docenteNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton asChild isActive={pathname.startsWith(item.href)}>
                     <Link href={item.href}>

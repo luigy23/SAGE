@@ -83,7 +83,7 @@ export default async function AdminCursosPage() {
                   return (
                     <TableRow key={curso.id} className={!curso.estado ? "opacity-50" : ""}>
                       <TableCell className="font-mono font-medium">{curso.codigo}</TableCell>
-                      <TableCell className="font-medium">
+                      <TableCell className="font-medium whitespace-normal min-w-[200px]">
                         <div className="inline-flex items-center gap-2">
                           <span>{curso.nombre}</span>
                           {enUso > 0 && (

@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { crearProyectoSchema, type CrearProyectoInput, TOPE_POR_ROL } from "@/lib/schemas/proyecto-schema"
+import { crearProyectoSchema, type CrearProyectoInput, ROL_LIDER } from "@/lib/schemas/proyecto-schema"
 import { periodosQueAbarca, type PeriodoRango } from "@/lib/utils/periodo"
 import {
   crearProyectoAction,
@@ -35,15 +35,10 @@ const TIPO_OPTIONS = [
   { value: "PROYECCION_SOCIAL", label: "Proyección Social" },
 ] as const
 
-const ROL_POR_TIPO: Record<string, { value: string; label: string }[]> = {
-  INVESTIGACION: [
-    { value: "INVESTIGADOR_PRINCIPAL", label: "Investigador Principal" },
-    { value: "COINVESTIGADOR", label: "Coinvestigador" },
-  ],
-  PROYECCION_SOCIAL: [
-    { value: "COORDINADOR", label: "Coordinador" },
-    { value: "COGESTOR", label: "Cogestor" },
-  ],
+/** Une una lista en español: ["a","b","c"] → "a, b y c". */
+function unirEspanol(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? ""
+  return `${items.slice(0, -1).join(", ")} y ${items[items.length - 1]}`
 }
 
 export function ProyectoForm({
@@ -51,6 +46,7 @@ export function ProyectoForm({
   periodos,
   proyectoId,
   initial,
+  creadorEsAutoridad = false,
 }: {
   creadorId: string
   periodos: PeriodoRango[]
@@ -60,6 +56,9 @@ export function ProyectoForm({
     values: Partial<CrearProyectoInput>
     participantes: DocenteParticipante[]
   }
+  /** El que registra es autoridad (decano/jefe/superadmin) → lo hace PARA otro docente:
+   *  no entra como participante y elige al responsable entre el equipo. */
+  creadorEsAutoridad?: boolean
 }) {
   const router = useRouter()
   const esEdicion = Boolean(proyectoId)
@@ -75,7 +74,6 @@ export function ProyectoForm({
       lista.map((p) => ({
         docenteId: p.id,
         rol: p.rol as "INVESTIGADOR_PRINCIPAL" | "COINVESTIGADOR" | "COORDINADOR" | "COGESTOR",
-        horas: p.horas ?? null,
       })),
     )
   }
@@ -90,27 +88,34 @@ export function ProyectoForm({
       entidadConvocatoria: initial?.values.entidadConvocatoria ?? "",
       fechaInicio: initial?.values.fechaInicio,
       fechaFin: initial?.values.fechaFin,
-      horasDocente: initial?.values.horasDocente ?? null,
       participantes: initial?.participantes.map((p) => ({
         docenteId: p.id,
         rol: p.rol as "INVESTIGADOR_PRINCIPAL" | "COINVESTIGADOR" | "COORDINADOR" | "COGESTOR",
-        horas: p.horas ?? null,
       })),
     },
   })
 
   const tipoSeleccionado = useWatch({ control: form.control, name: "tipo" })
-  const rolDocenteSel = useWatch({ control: form.control, name: "rolDocente" })
-  const horasDocenteSel = useWatch({ control: form.control, name: "horasDocente" })
   const fechaInicioSel = useWatch({ control: form.control, name: "fechaInicio" })
   const fechaFinSel = useWatch({ control: form.control, name: "fechaFin" })
-  const rolesDisponibles = tipoSeleccionado ? ROL_POR_TIPO[tipoSeleccionado] ?? [] : []
   const semestresAbarca = periodosQueAbarca(fechaInicioSel, fechaFinSel, periodos)
+  // El rol del creador es el LÍDER del tipo (IP / Coordinador); no se elige.
+  const rolCreadorLabel =
+    tipoSeleccionado === "PROYECCION_SOCIAL" ? "Coordinador" : tipoSeleccionado ? "Investigador Principal" : null
+
+  // Duración real del proyecto (inclusiva) en días y semanas, para no confundir
+  // "tocar un semestre" con "durar todo el semestre".
+  const diasProyecto =
+    fechaInicioSel && fechaFinSel
+      ? Math.max(1, Math.round((Date.parse(fechaFinSel) - Date.parse(fechaInicioSel)) / 86_400_000) + 1)
+      : 0
+  const semanasProyecto = diasProyecto > 0 ? Math.max(1, Math.ceil(diasProyecto / 7)) : 0
 
   function handleGuardar(data: CrearProyectoInput) {
     startTransition(async () => {
+      const payload = { ...data, esParaOtro: creadorEsAutoridad }
       if (proyectoId) {
-        const res = await actualizarProyectoAction(proyectoId, data)
+        const res = await actualizarProyectoAction(proyectoId, payload)
         if ("error" in res) {
           toast.error(res.error)
           return
@@ -119,27 +124,28 @@ export function ProyectoForm({
         router.refresh()
         return
       }
-      const res = await crearProyectoAction(data)
+      const res = await crearProyectoAction(payload)
       if ("error" in res) {
         toast.error(res.error)
         return
       }
       toast.success("Proyecto guardado como borrador")
-      router.push(`/proyectos/${res.id}`)
+      router.push(creadorEsAutoridad ? `/gestion/proyectos/${res.id}/editar` : `/proyectos/${res.id}`)
     })
   }
 
   function handleEnviar(data: CrearProyectoInput) {
     startTransition(async () => {
       let pid = proyectoId
+      const payload = { ...data, esParaOtro: creadorEsAutoridad }
       if (pid) {
-        const upd = await actualizarProyectoAction(pid, data)
+        const upd = await actualizarProyectoAction(pid, payload)
         if ("error" in upd) {
           toast.error(upd.error)
           return
         }
       } else {
-        const crearRes = await crearProyectoAction(data)
+        const crearRes = await crearProyectoAction(payload)
         if ("error" in crearRes) {
           toast.error(crearRes.error)
           return
@@ -149,13 +155,13 @@ export function ProyectoForm({
       const enviarRes = await enviarProyectoAction(pid)
       if ("error" in enviarRes) {
         toast.error(enviarRes.error)
-        if (!proyectoId) router.push(`/proyectos/${pid}`)
+        if (!proyectoId) router.push(creadorEsAutoridad ? `/gestion/proyectos/${pid}/editar` : `/proyectos/${pid}`)
         else router.refresh()
         return
       }
       toast.success("Proyecto enviado a revisión")
       if (proyectoId) router.refresh()
-      else router.push(`/proyectos/${pid}`)
+      else router.push(creadorEsAutoridad ? `/gestion/proyectos/${pid}/editar` : `/proyectos/${pid}`)
     })
   }
 
@@ -185,8 +191,15 @@ export function ProyectoForm({
         </Label>
         <Select
           onValueChange={(val) => {
-            form.setValue("tipo", val as CrearProyectoInput["tipo"], { shouldValidate: true })
-            form.setValue("rolDocente", undefined as unknown as CrearProyectoInput["rolDocente"])
+            const t = val as "INVESTIGACION" | "PROYECCION_SOCIAL"
+            form.setValue("tipo", t, { shouldValidate: true })
+            // Profesor: él es el líder del tipo (no se elige). Autoridad: el líder
+            // se designa entre los participantes, así que no se fija acá.
+            form.setValue(
+              "rolDocente",
+              creadorEsAutoridad ? undefined : ROL_LIDER[t],
+              { shouldValidate: true },
+            )
             // Los roles dependen del tipo: al cambiarlo, limpiar participantes.
             actualizarParticipantes([])
           }}
@@ -210,89 +223,51 @@ export function ProyectoForm({
         )}
       </div>
 
-      {/* Rol docente — depende del tipo */}
-      <div className="space-y-2">
-        <Label htmlFor="rolDocente">
-          Rol en el proyecto <span className="text-destructive">*</span>
-        </Label>
-        <Select
-          disabled={!tipoSeleccionado}
-          onValueChange={(val) =>
-            form.setValue("rolDocente", val as CrearProyectoInput["rolDocente"], {
-              shouldValidate: true,
-            })
-          }
-          value={rolDocenteSel ?? ""}
-        >
-          <SelectTrigger id="rolDocente">
-            <SelectValue
-              placeholder={
-                tipoSeleccionado
-                  ? "Seleccionar rol"
-                  : "Primero seleccioná el tipo"
-              }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {rolesDisponibles.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {form.formState.errors.rolDocente && (
-          <p className="text-xs text-destructive">
-            {form.formState.errors.rolDocente.message}
-          </p>
-        )}
-      </div>
+      {/* Rol del creador — fijo: es el líder del proyecto (solo si es profesor) */}
+      {!creadorEsAutoridad && rolCreadorLabel && (
+        <div className="space-y-2">
+          <Label>Tu rol en el proyecto</Label>
+          <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+            <span className="font-medium">{rolCreadorLabel}</span>
+            <span className="text-xs text-muted-foreground">
+              · quien registra el proyecto es su responsable principal
+            </span>
+          </div>
+        </div>
+      )}
 
-      {/* Horas propuestas del creador (≤ tope del rol). El revisor las confirma. */}
+      {/* Aviso: la autoridad registra el proyecto para otro docente */}
+      {creadorEsAutoridad && (
+        <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300">
+          Estás registrando este proyecto <span className="font-medium">para otro docente</span>. No
+          quedás como participante: agrega al equipo y designá al{" "}
+          {tipoSeleccionado === "PROYECCION_SOCIAL" ? "Coordinador" : "Investigador Principal"} responsable.
+        </div>
+      )}
+
+      {/* Equipo / participantes */}
       <div className="space-y-2">
-        <Label htmlFor="horasDocente">Horas propuestas para ti (semestre)</Label>
-        <Input
-          id="horasDocente"
-          type="number"
-          min={0}
-          max={rolDocenteSel ? TOPE_POR_ROL[rolDocenteSel] : undefined}
-          placeholder={rolDocenteSel ? `Máx ${TOPE_POR_ROL[rolDocenteSel] ?? 0}h` : "Primero elegí tu rol"}
-          disabled={!rolDocenteSel}
-          value={horasDocenteSel ?? ""}
-          onChange={(e) =>
-            form.setValue("horasDocente", e.target.value === "" ? null : Number(e.target.value), {
-              shouldValidate: true,
-            })
-          }
-          className="w-40"
-        />
+        <Label>{creadorEsAutoridad ? "Equipo del proyecto" : "Otros participantes"}</Label>
         <p className="text-xs text-muted-foreground">
-          Estas horas se precargan en tu agenda cuando el proyecto sea aprobado. Tu jefe/decano las
-          confirma o ajusta al aprobar (no pueden superar el tope del rol).
-        </p>
-      </div>
-
-      {/* Nota informativa: el revisor confirma las horas al aprobar. */}
-      <div className="rounded-md bg-muted/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-       Las horas que propongas aquí son una sugerencia. Cuando tu jefe de programa o el decano
-       apruebe el proyecto, <span className="font-medium text-foreground/80">confirmará o ajustará las horas de cada
-        participante</span> (≤ el tope del rol).
-      </div>
-
-      {/* Participantes adicionales */}
-      <div className="space-y-2">
-        <Label>Otros participantes</Label>
-        <p className="text-xs text-muted-foreground">
-          Agregá a los demás docentes del proyecto y asigná su rol. Debe haber exactamente un{" "}
-          {tipoSeleccionado === "PROYECCION_SOCIAL" ? "Coordinador" : "Investigador Principal"} en
-          total (contándote a vos).
+          {creadorEsAutoridad ? (
+            <>
+              Agrega a los docentes y asigná sus roles. Debe haber exactamente un{" "}
+              {tipoSeleccionado === "PROYECCION_SOCIAL" ? "Coordinador" : "Investigador Principal"}.
+            </>
+          ) : (
+            <>
+              Agregá a los demás docentes del proyecto. Entran como{" "}
+              {tipoSeleccionado === "PROYECCION_SOCIAL" ? "Cogestores" : "Coinvestigadores"}; el único{" "}
+              {tipoSeleccionado === "PROYECCION_SOCIAL" ? "Coordinador" : "Investigador Principal"} sos vos.
+            </>
+          )}
         </p>
         <ParticipantesSelector
           value={participantes}
           onChange={actualizarParticipantes}
           tipo={tipoSeleccionado}
           excluirIds={[creadorId]}
-          topes={TOPE_POR_ROL}
+          permitirLider={creadorEsAutoridad}
         />
       </div>
 
@@ -314,10 +289,12 @@ export function ProyectoForm({
 
       {/* Entidad / Convocatoria */}
       <div className="space-y-2">
-        <Label htmlFor="entidadConvocatoria">Entidad / Convocatoria</Label>
+        <Label htmlFor="entidadConvocatoria">
+          Entidad / Convocatoria <span className="text-destructive">*</span>
+        </Label>
         <Input
           id="entidadConvocatoria"
-          placeholder="Ej: Colciencias, USCO Interna, Sistema general de regalías, etc. (opcional)"
+          placeholder="Ej: Colciencias, USCO Interna, Sistema general de regalías, etc."
           {...form.register("entidadConvocatoria")}
         />
         {form.formState.errors.entidadConvocatoria && (
@@ -331,8 +308,8 @@ export function ProyectoForm({
       <div className="space-y-2">
         <Label>Tiempo del proyecto</Label>
         <p className="text-xs text-muted-foreground">
-          Indica desde cuándo y hasta cuándo se realizará. El sistema calcula los
-          semestres que abarca; tu jefe/decano podrá ajustarlas al aprobar.
+          Indica desde cuándo y hasta cuándo se realizará. El sistema identifica en qué
+          semestres caen esas fechas; tu jefe/decano podrá ajustarlas al aprobar.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <FechaPicker
@@ -351,13 +328,24 @@ export function ProyectoForm({
             {form.formState.errors.fechaFin.message}
           </p>
         )}
-        {semestresAbarca.length > 0 && (
-          <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            Este proyecto abarca{" "}
-            <span className="font-medium text-foreground/80">
-              {semestresAbarca.length} semestre{semestresAbarca.length !== 1 ? "s" : ""}
-            </span>
-            : {semestresAbarca.join(", ")}.
+        {diasProyecto > 0 && (
+          <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground space-y-0.5">
+            <p>
+              Duración:{" "}
+              <span className="font-medium text-foreground/80">
+                {diasProyecto} día{diasProyecto !== 1 ? "s" : ""}
+                {semanasProyecto >= 1 && ` (~${semanasProyecto} semana${semanasProyecto !== 1 ? "s" : ""})`}
+              </span>
+              .
+            </p>
+            {semestresAbarca.length > 0 && (
+              <p>
+                {semestresAbarca.length === 1
+                  ? "Las fechas caen en el semestre "
+                  : "Las fechas se reparten entre los semestres "}
+                <span className="font-medium text-foreground/80">{unirEspanol(semestresAbarca)}</span>.
+              </p>
+            )}
           </div>
         )}
       </div>

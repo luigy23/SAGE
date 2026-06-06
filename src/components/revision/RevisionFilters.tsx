@@ -36,7 +36,14 @@ interface PeriodoOption {
   estado: string
 }
 
-export function RevisionFilters({ periodos = [] }: { periodos?: PeriodoOption[] }) {
+export function RevisionFilters({
+  periodos = [],
+  cohortes = [],
+}: {
+  periodos?: PeriodoOption[]
+  /** Cohortes de consejería para el filtro (Art. 11). Si está vacío, no se muestra. */
+  cohortes?: string[]
+}) {
   const router = useRouter()
   const pathname = usePathname()
   const sp = useSearchParams()
@@ -78,6 +85,7 @@ export function RevisionFilters({ periodos = [] }: { periodos?: PeriodoOption[] 
     sp.get("modalidad") ||
     sp.get("sede") ||
     sp.get("estado") ||
+    sp.get("cohorte") ||
     sp.get("rehabilitadas")
 
   function clearAll() {
@@ -186,6 +194,28 @@ export function RevisionFilters({ periodos = [] }: { periodos?: PeriodoOption[] 
             </SelectContent>
           </Select>
         </div>
+
+        {cohortes.length > 0 && (
+          <div className="md:col-span-2">
+            <Label className="text-xs text-muted-foreground">Cohorte (consejería)</Label>
+            <Select
+              value={sp.get("cohorte") ?? ANY}
+              onValueChange={(v) => updateParam("cohorte", v)}
+            >
+              <SelectTrigger className="font-mono">
+                <SelectValue placeholder="Todas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ANY}>Todas</SelectItem>
+                {cohortes.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {hasFilters && (

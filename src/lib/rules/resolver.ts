@@ -229,6 +229,9 @@ export type ParametrosGlobales = {
   semanasPeriodoVisitante: number
   /** Semanas de clase — base del cálculo de horas de los CURSOS, independiente de las semanas del contrato. */
   semanasClases: number
+  /** Semanas de clase POR SEDE donde se dicta el curso (override del default por sede;
+   *  ej. sedes regionales con calendario distinto). Cada sede cae a `semanasClases` si no se configura. */
+  semanasClasesPorSede: Record<Sede, number>
   horasPorCredito: number
   toleranciaValidacionSemanal: number
   limiteGestionPorcentaje: number
@@ -244,6 +247,7 @@ const FALLBACK_GLOBALES: Omit<ParametrosGlobales, "fuente"> = {
   semanasPeriodoOcasional: 16,
   semanasPeriodoVisitante: 16,
   semanasClases: 16,
+  semanasClasesPorSede: { NEIVA: 16, PITALITO: 16, GARZON: 16, LA_PLATA: 16 },
   horasPorCredito: 48,
   toleranciaValidacionSemanal: 0.5,
   limiteGestionPorcentaje: 0.20,
@@ -285,12 +289,22 @@ export async function resolveGlobales(
       return v !== undefined ? parser(v) : defaultVal
     }
 
+    const semanasClasesBase = get("semanas_clases", FALLBACK_GLOBALES.semanasClases, (s) => parseInt(s, 10))
+    // Semanas de clase por sede: cada sede cae al valor base si no tiene override.
+    const semanasClasesPorSede: Record<Sede, number> = {
+      NEIVA: get("semanas_clases_neiva", semanasClasesBase, (s) => parseInt(s, 10)),
+      PITALITO: get("semanas_clases_pitalito", semanasClasesBase, (s) => parseInt(s, 10)),
+      GARZON: get("semanas_clases_garzon", semanasClasesBase, (s) => parseInt(s, 10)),
+      LA_PLATA: get("semanas_clases_la_plata", semanasClasesBase, (s) => parseInt(s, 10)),
+    }
+
     const result: ParametrosGlobales = {
       semanasPeriodo: get("semanas_periodo", semanasFromDates ?? FALLBACK_GLOBALES.semanasPeriodo, (s) => parseInt(s, 10)),
       semanasPeriodoCatedra: get("semanas_periodo_catedra", FALLBACK_GLOBALES.semanasPeriodoCatedra, (s) => parseInt(s, 10)),
       semanasPeriodoOcasional: get("semanas_periodo_ocasional", FALLBACK_GLOBALES.semanasPeriodoOcasional, (s) => parseInt(s, 10)),
       semanasPeriodoVisitante: get("semanas_periodo_visitante", FALLBACK_GLOBALES.semanasPeriodoVisitante, (s) => parseInt(s, 10)),
-      semanasClases: get("semanas_clases", FALLBACK_GLOBALES.semanasClases, (s) => parseInt(s, 10)),
+      semanasClases: semanasClasesBase,
+      semanasClasesPorSede,
       horasPorCredito: get("horas_por_credito", FALLBACK_GLOBALES.horasPorCredito, (s) => parseInt(s, 10)),
       toleranciaValidacionSemanal: get("tolerancia_validacion_semanal", FALLBACK_GLOBALES.toleranciaValidacionSemanal, parseFloat),
       limiteGestionPorcentaje: get("limite_gestion_porcentaje", FALLBACK_GLOBALES.limiteGestionPorcentaje, parseFloat),

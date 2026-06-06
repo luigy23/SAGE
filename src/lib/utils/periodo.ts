@@ -74,6 +74,21 @@ export function getMaxHoras(
 }
 
 /**
+ * semanasClasesDeSede — Semanas de clase (docencia) para la SEDE donde se dicta el
+ * curso. Si la sede no tiene override configurado, cae al valor por defecto
+ * (`semanas_clases`). Pura / client-safe: recibe el mapa ya resuelto desde DB.
+ */
+export function semanasClasesDeSede(
+  porSede: Record<string, number> | undefined | null,
+  defaultSemanas: number,
+  sede: string | null | undefined,
+): number {
+  const s = (sede ?? "").toUpperCase().trim()
+  const v = porSede?.[s]
+  return typeof v === "number" && v > 0 ? v : defaultSemanas
+}
+
+/**
  * getMinDocencia — Mínimo legal de horas de docencia para el semestre
  * (Acuerdo 048, Art. 3). Si el docente tiene proyectos activos, aplica el
  * mínimo reducido (Art. 3 Par. 1).

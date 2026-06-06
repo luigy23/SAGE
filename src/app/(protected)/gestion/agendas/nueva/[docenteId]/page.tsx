@@ -9,7 +9,7 @@ import { DEFAULT_FORM_VALUES, type AgendaWizardFormData } from "@/lib/schemas/ag
 import { resolveGlobales, resolveAgendaLimits } from "@/lib/rules/resolver"
 import { resolveFormulasCursosAction } from "@/lib/actions/formulas"
 import { getAutoridadDeSesion } from "@/lib/auth/get-autoridad"
-import { puedeGestionarFormulario, esModalidadNoPlanta } from "@/lib/auth/autoridad"
+import { puedeGestionarFormulario, getAutoridadAcademica, rangoAutoridad } from "@/lib/auth/autoridad"
 import { TerminosInvitadoForm } from "@/components/gestion/TerminosInvitadoForm"
 import { PeriodosCubiertos } from "@/components/agenda/PeriodosCubiertos"
 import { CohortesConsejeros } from "@/components/agenda/CohortesConsejeros"
@@ -44,13 +44,15 @@ export default async function GestionNuevaAgendaPage({
   const docente = await prisma.docente.findUnique({ where: { id: docenteId } })
   if (!docente) notFound()
 
-  // Autorización: scope de ámbito + modalidad No-Planta.
+  // Autorización: scope de ámbito (cualquier modalidad — planta y No-Planta).
   if (!puedeGestionarFormulario(sesion.autoridad, docente)) notFound()
-  if (!esModalidadNoPlanta(docente.modalidad)) {
+  // No se le puede armar la agenda a un docente con autoridad igual o superior
+  // (un jefe no le hace la agenda al decano ni al superadmin).
+  if (rangoAutoridad(getAutoridadAcademica(docente)) >= rangoAutoridad(sesion.autoridad)) {
     return (
       <Mensaje
-        titulo="Este docente diligencia su propia agenda"
-        detalle={`${docente.nombre} es de planta. Solo puedes crear agendas de docentes No-Planta (cátedra, ocasional, visitante, invitado).`}
+        titulo="No podés gestionar esta agenda"
+        detalle={`${docente.nombre} tiene una autoridad igual o superior a la tuya. Solo podés armar la agenda de docentes de tu ámbito sin cargo directivo por encima del tuyo.`}
       />
     )
   }
@@ -309,6 +311,7 @@ export default async function GestionNuevaAgendaPage({
         defaultValues={defaultValues}
         semanasPeriodo={semanasPeriodo}
         semanasClases={globales.semanasClases}
+        semanasClasesPorSede={globales.semanasClasesPorSede}
         semanasMaximas={agendaLimits.semanasMaximas}
         defaultSemanasAgenda={agenda?.semanasAgenda}
         formulas={formulas}

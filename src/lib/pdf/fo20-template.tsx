@@ -1,14 +1,22 @@
 import React from "react"
-import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer"
+import { Document, Page, View, Text, StyleSheet, Image } from "@react-pdf/renderer"
+import fs from "fs"
+import path from "path"
 import type { MonitoreoConRelaciones } from "@/lib/types/monitoreo"
 import { compararEjecucion } from "@/lib/types/monitoreo"
 import { Watermark } from "./shared/watermark"
 import { getSedeLabel } from "@/lib/utils/sede"
+import { getModalidadLabel } from "@/lib/utils/modalidad"
+import type { Modalidad } from "@/generated/prisma/client"
 
 const RED = "#9F1721"
-const RED_LIGHT = "#C0272F"
+// Mismo rojo que agenda (FO-19): paleta única en ambos formatos.
+const RED_LIGHT = "#9F1721"
 const BORDER = "#555"
 const MUTED = "#555555"
+// Gris claro del encabezado de tabla — igual al de agenda (FO-19).
+const HEAD_GRAY = "#e2e2e2"
+const HEAD_TEXT = "#333333"
 const MARGIN = 28
 
 // ---- Tipos ----
@@ -89,25 +97,32 @@ function buildSecciones(m: MonitoreoConRelaciones): Seccion[] {
   return [
     {
       titulo: "I. ACTIVIDADES ACADÉMICAS BÁSICAS",
-      aspectos: 'Se entiende por "Actividades Académicas Básicas" las labores desarrolladas por el docente en torno a la docencia, a la investigación, a la proyección social.',
+      aspectos:
+        'Se entiende por "Actividades Académicas Básicas" las labores desarrolladas por el docente en torno a la docencia, a la investigación, a la proyección social. Todos los docentes de la Universidad Surcolombiana: tiempo completo, medio tiempo y catedráticos, tienen como actividad primordial las inscritas en las "Actividades Académicas Básicas".\n' +
+        'Se entiende por "Actividades Académicas Básicas" – Docencia el conjunto de actividades y procesos mediante los cuales los estudiantes adquieren, generan y desarrollan, con el apoyo de los docentes, los conocimientos, habilidades, destrezas y aptitudes previstas en el Proyecto Educativo y el Plan de Estudios del respectivo programa académico.',
       rows: basicas,
       observaciones: buildObservaciones(basicas),
     },
     {
       titulo: "II. ACTIVIDADES ACADÉMICAS COMPLEMENTARIAS",
-      aspectos: 'Se entiende por "Actividades Académicas Complementarias" las labores desarrolladas por el docente para soportar las Actividades Académicas Básicas tales como: coordinación de pasantías, comités de autoevaluación, consejería académica, asesoría a estudiantes, entre otras.',
+      aspectos:
+        'Se entiende por "Actividades Académicas Complementarias" las labores desarrolladas por el docente para soportar las Actividades Académicas Básicas tales como: Coordinación de Pasantías, Coordinación de Prácticas de Vacaciones, Comité de Autoevaluación y Acreditación, Coordinación de Currículo por Facultad, Currículo por Programa, Coordinación de Investigaciones por Facultad, Coordinación de Proyección Social por Facultad, Consejería Académica, Asesoría a Estudiantes. Diseño de nuevos Programas, Diseño de Módulos, Diseño de Ayudas Educativas Institucionales, Capacitación Intersemestral, Preparación y Ofrecimiento de Conferencias, Preparación de Examen ECAES, Representaciones Universitarias, Escritura de artículos para Revistas Indexadas, Escritura de artículos para Revistas no Indexadas, otras de similar naturaleza a juicio del Programa. Se entiende por Capacitación Intersemestral la formación académica diseñada por el Consejo Académico para toda la Universidad o por los Consejos de Facultad para sus Programas o Departamentos, con el fin de habilitarse en los conocimientos pertinentes e institucionales, durante el periodo lectivo comprendido entre el final de la actividad docente de un semestre y la iniciación de la actividad docente del semestre posterior.',
       rows: complementarias,
       observaciones: buildObservaciones(complementarias),
     },
     {
       titulo: "III. ACTIVIDADES ADMINISTRATIVAS",
-      aspectos: 'Se entiende por "Actividades Administrativas" las labores desarrolladas por un docente con fines exclusivamente de dirección universitaria a favor del desarrollo académico, tales como: jefaturas de programa, coordinaciones, secretarías académicas, decanatos, etc.',
+      aspectos:
+        'Se entiende por "Actividades Administrativas" las labores desarrolladas por un docente con fines exclusivamente de dirección universitaria a favor del desarrollo académico universitario tales como: reunión de Consejo de Programa o Departamento, Coordinación de Laboratorios, Dirección de Editorial Universitaria, representación de Facultad al Comité Editorial, Secretaría de Comité de Admisiones, Representación al Consejo de Facultad, representación al Consejo Superior, representación al Consejo Académico, representación al Comité de Admisiones, representación al Comité de Evaluación y Selección Docente, representación al Comité de Asignación de Puntaje, Comité Electoral, Coordinación de Área, representación a la Junta Directiva Sindical, Coordinación de Internado y Residencia, Coordinación de la Granja, Coordinación del Herbario y Museo Geológico, Coordinación de Programas de Postgrado, Jefaturas de Programas o Dirección de Departamentos, Secretaría Académica de Facultad, Dirección General de Currículo, Dirección General de Tecnologías, Coordinación Centro de Producción Audiovisual, Consultorio Jurídico, Consultorio Contable, Asesores de Rectores y Vicerrectores, Decanos, Vicerrectores.\n' +
+        "Son funciones administrativas, las relacionadas con la planeación, organización, dirección y evaluación de una Unidad Académica, realizadas por el personal docente, al igual que otras labores como participación en reuniones, en Comités, Consejos y demás equipos de trabajo creados por la Universidad.",
       rows: administrativas,
       observaciones: buildObservaciones(administrativas),
     },
     {
       titulo: "IV. ACTIVIDADES DE DESARROLLO INSTITUCIONAL",
-      aspectos: "Se entiende por Actividades de Desarrollo Institucional, las que tienen como objetivo formular y ejecutar proyectos que contribuyan al mejoramiento de la Calidad Institucional y al cumplimiento de las metas universitarias.",
+      aspectos:
+        "Se entiende por Actividades de Desarrollo Institucional, las que tienen como objetivo formular y ejecutar proyectos que contribuyan al mejoramiento de la Calidad Institucional y al cumplimiento de las metas universitarias.\n" +
+        "La asignación de horas para actividades de Desarrollo Institucional será aprobada por el Consejo Académico, previo concepto del Consejo de Facultad.",
       rows: [],
       observaciones: "",
     },
@@ -125,36 +140,47 @@ function buildObservaciones(rows: ActividadRow[]): string {
 
 // ---- Componentes de UI ----
 
-function FO20Header({ pageNum, total }: { pageNum: number; total: number }) {
+// Las imágenes se leen como Buffer (no como path): en Windows, pasar un path
+// absoluto con letra de unidad ("D:\\...") rompe a @react-pdf porque url.parse
+// interpreta "D:" como protocolo y descarta el archivo. Un Buffer lo evita.
+const logoUsco = fs.readFileSync(path.join(process.cwd(), "public/Img/Escudo_de_la_Universidad_Surcolombiana.svg.png"))
+const logoCerts = fs.readFileSync(path.join(process.cwd(), "public/Img/iqnet.png"))
+
+function FO20Header() {
   return (
-    <View style={s.header}>
-      <View style={s.headerLogo}>
-        <Text style={s.headerLogoText}>USCO</Text>
+    <View style={s.headerContainer}>
+      <View style={s.headerTopRow}>
+        <View style={s.headerLogoLeft}>
+          <Image src={logoUsco} style={{ width: 45, height: 50, objectFit: "contain" }} />
+        </View>
+        <View style={s.headerCenterBlock}>
+          <View style={s.headerTitleRed}>
+            <Text style={s.headerUnivText}>UNIVERSIDAD SURCOLOMBIANA</Text>
+            <Text style={s.headerFormacionText}>FORMACIÓN</Text>
+          </View>
+          <View style={s.headerTitleWhite}>
+            <Text style={s.headerDocText}>MONITOREO AGENDA ACADÉMICA</Text>
+          </View>
+        </View>
+        <View style={s.headerLogoRight}>
+          <Image src={logoCerts} style={{ width: 110, height: 35, objectFit: "contain" }} />
+        </View>
       </View>
-      <View style={s.headerCenter}>
-        <Text style={s.headerUniv}>UNIVERSIDAD SURCOLOMBIANA</Text>
-        <Text style={s.headerArea}>FORMACIÓN</Text>
-        <Text style={s.headerTitle}>MONITOREO AGENDA ACADÉMICA</Text>
-      </View>
-      <View style={s.headerMeta}>
-        <Text style={s.headerMetaLine}>CÓDIGO: MI-FOR-FO-20</Text>
-        <Text style={s.headerMetaLine}>VERSIÓN: 5</Text>
-        <Text style={s.headerMetaLine}>VIGENCIA: 2015</Text>
-        <Text style={s.headerMetaLine}>PÁGINA: {pageNum} DE {total}</Text>
+      <View style={s.headerMetaRow}>
+        <View style={[s.metaCellRed, { width: 60 }]}><Text style={s.metaTextWhite}>CÓDIGO</Text></View>
+        <View style={[s.metaCellWhite, { width: 100 }]}><Text style={s.metaTextBlack}>MI-FOR-FO-20</Text></View>
+        <View style={[s.metaCellRed, { width: 60 }]}><Text style={s.metaTextWhite}>VERSIÓN</Text></View>
+        <View style={[s.metaCellWhite, { width: 60 }]}><Text style={s.metaTextBlack}>5</Text></View>
+        <View style={[s.metaCellRed, { width: 70 }]}><Text style={s.metaTextWhite}>VIGENCIA</Text></View>
+        <View style={[s.metaCellWhite, { width: 60 }]}><Text style={s.metaTextBlack}>2015</Text></View>
+        <View style={[s.metaCellRed, { width: 60 }]}><Text style={s.metaTextWhite}>PÁGINA</Text></View>
+        <View style={[s.metaCellWhite, { flex: 1 }]}>
+          <Text style={s.metaTextBlack} render={({ pageNumber, totalPages }) => `${pageNumber} de ${totalPages}`} />
+        </View>
       </View>
     </View>
   )
 }
-
-type Modalidad = "PLANTA_TC" | "PLANTA_MT" | "OCASIONAL_TC" | "OCASIONAL_MT" | "CATEDRA" | string
-
-const MOD_OPTS = [
-  { key: "PLANTA_TC", label: "TC Planta" },
-  { key: "PLANTA_MT", label: "MT Planta" },
-  { key: "OCASIONAL_TC", label: "TC Ocasional" },
-  { key: "OCASIONAL_MT", label: "MT Catedra" },
-  { key: "CATEDRA", label: "Catedrático" },
-]
 
 function DocenteInfo({ m }: { m: MonitoreoConRelaciones }) {
   const docente = m.docente
@@ -199,15 +225,8 @@ function DocenteInfo({ m }: { m: MonitoreoConRelaciones }) {
       </View>
       <View style={s.docenteRow2}>
         <View style={[s.docenteCell, { flex: 2 }]}>
-          <Text style={[s.fieldLabel, { marginRight: 6 }]}>Modalidad: </Text>
-          {MOD_OPTS.map((opt) => (
-            <View key={opt.key} style={s.checkItem}>
-              <View style={s.checkbox}>
-                {docente.modalidad === opt.key && <Text style={s.checkX}>X</Text>}
-              </View>
-              <Text style={s.checkLabel}>{opt.label}</Text>
-            </View>
-          ))}
+          <Text style={s.fieldLabel}>Modalidad: </Text>
+          <Text style={s.fieldValue}>{getModalidadLabel(docente.modalidad as Modalidad)}</Text>
         </View>
         <View style={[s.docenteCell, { flex: 1 }]}>
           <Text style={s.fieldLabel}>Fecha: </Text>
@@ -245,7 +264,7 @@ function TableHeader() {
       <View style={[s.tableHeaderCell, { flex: 3 }]}>
         <Text style={s.tableHeaderText}>ACTIVIDADES DESARROLLADAS (Incluir soportes)</Text>
       </View>
-      <View style={[s.tableHeaderCell, { flex: 1, borderLeftWidth: 1, borderLeftColor: "rgba(255,255,255,0.4)" }]}>
+      <View style={[s.tableHeaderCell, { flex: 1, borderLeftWidth: 1, borderLeftColor: "#8a8a8a" }]}>
         <Text style={s.tableHeaderText}>PERIODO DE EJECUCIÓN</Text>
       </View>
     </View>
@@ -326,14 +345,13 @@ function Footer() {
 
 export function FO20Document({ monitoreo, estado }: { monitoreo: MonitoreoConRelaciones; estado: string }) {
   const secciones = buildSecciones(monitoreo)
-  const total = secciones.length
 
   return (
     <Document>
       {secciones.map((sec, i) => (
         <Page key={i} size="LETTER" orientation="landscape" style={s.page}>
           <Watermark estado={estado} />
-          <FO20Header pageNum={i + 1} total={total} />
+          <FO20Header />
           {i === 0 && <DocenteInfo m={monitoreo} />}
           <SectionBand>{sec.titulo}</SectionBand>
           <AspectosBand text={sec.aspectos} />
@@ -343,7 +361,7 @@ export function FO20Document({ monitoreo, estado }: { monitoreo: MonitoreoConRel
           ))}
           {sec.rows.length === 0 && <EmptyRow />}
           <ObservacionesBlock text={sec.observaciones} />
-          {i === total - 1 && <FirmasBlock nombreDocente={monitoreo.docente.nombre} />}
+          {i === secciones.length - 1 && <FirmasBlock nombreDocente={monitoreo.docente.nombre} />}
           <Footer />
         </Page>
       ))}
@@ -362,62 +380,21 @@ const s = StyleSheet.create({
     backgroundColor: "white",
   },
   // Header
-  header: {
-    flexDirection: "row",
-    borderWidth: 1,
-    borderColor: "#777",
-    height: 55,
-    marginBottom: 2,
-  },
-  headerLogo: {
-    width: 60,
-    justifyContent: "center",
-    alignItems: "center",
-    borderRightWidth: 1,
-    borderRightColor: "#777",
-    backgroundColor: "white",
-  },
-  headerLogoText: {
-    fontSize: 13,
-    fontFamily: "Helvetica-Bold",
-    color: RED,
-  },
-  headerCenter: {
-    flex: 1,
-    backgroundColor: RED,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 8,
-  },
-  headerUniv: {
-    fontSize: 12,
-    fontFamily: "Helvetica-Bold",
-    color: "white",
-  },
-  headerArea: {
-    fontSize: 8,
-    color: "white",
-    marginTop: 2,
-  },
-  headerTitle: {
-    fontSize: 10,
-    fontFamily: "Helvetica-Bold",
-    color: "white",
-    marginTop: 3,
-  },
-  headerMeta: {
-    width: 155,
-    justifyContent: "center",
-    paddingHorizontal: 6,
-    borderLeftWidth: 1,
-    borderLeftColor: "#777",
-    backgroundColor: "white",
-  },
-  headerMetaLine: {
-    fontSize: 7.5,
-    color: "#333",
-    marginBottom: 2,
-  },
+  headerContainer: { borderWidth: 1, borderColor: RED, marginBottom: 0 },
+  headerTopRow: { flexDirection: "row", height: 60 },
+  headerLogoLeft: { width: 70, justifyContent: "center", alignItems: "center", borderRightWidth: 1, borderRightColor: RED, backgroundColor: "white", padding: 2 },
+  headerCenterBlock: { flex: 1, flexDirection: "column" },
+  headerTitleRed: { flex: 1, backgroundColor: RED, justifyContent: "center", alignItems: "center", borderBottomWidth: 1, borderBottomColor: RED },
+  headerUnivText: { fontSize: 12, fontFamily: "Helvetica-Bold", color: "white" },
+  headerFormacionText: { fontSize: 11, fontFamily: "Helvetica-Bold", color: "white", marginTop: 2 },
+  headerTitleWhite: { flex: 1, backgroundColor: "white", justifyContent: "center", alignItems: "center" },
+  headerDocText: { fontSize: 10, fontFamily: "Helvetica-Bold", color: "black" },
+  headerLogoRight: { width: 140, justifyContent: "center", alignItems: "center", borderLeftWidth: 1, borderLeftColor: RED, backgroundColor: "white", padding: 2 },
+  headerMetaRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: RED, height: 16 },
+  metaCellRed: { backgroundColor: RED, justifyContent: "center", alignItems: "center", borderRightWidth: 1, borderRightColor: RED },
+  metaTextWhite: { fontSize: 8, fontFamily: "Helvetica-Bold", color: "white" },
+  metaCellWhite: { backgroundColor: "white", justifyContent: "center", alignItems: "center", borderRightWidth: 1, borderRightColor: RED },
+  metaTextBlack: { fontSize: 8, fontFamily: "Helvetica-Bold", color: "black" },
   // Docente info
   docenteBlock: {
     borderWidth: 1,
@@ -452,29 +429,6 @@ const s = StyleSheet.create({
   },
   fieldValue: {
     fontSize: 8.5,
-  },
-  // Modalidad in docente block
-  checkItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 10,
-  },
-  checkbox: {
-    width: 9,
-    height: 9,
-    borderWidth: 1,
-    borderColor: "#444",
-    marginRight: 2,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  checkX: {
-    fontSize: 7,
-    fontFamily: "Helvetica-Bold",
-    lineHeight: 1,
-  },
-  checkLabel: {
-    fontSize: 7,
   },
   // Section band
   sectionBand: {
@@ -516,7 +470,7 @@ const s = StyleSheet.create({
   // Table
   tableHeader: {
     flexDirection: "row",
-    backgroundColor: RED_LIGHT,
+    backgroundColor: HEAD_GRAY,
     borderWidth: 1,
     borderTopWidth: 0,
     borderColor: BORDER,
@@ -530,7 +484,7 @@ const s = StyleSheet.create({
   tableHeaderText: {
     fontSize: 9,
     fontFamily: "Helvetica-Bold",
-    color: "white",
+    color: HEAD_TEXT,
     textAlign: "center",
   },
   // Activity rows

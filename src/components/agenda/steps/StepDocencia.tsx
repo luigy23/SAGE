@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { useFormContext, useFieldArray, useWatch } from "react-hook-form"
 import type { AgendaWizardFormData } from "@/lib/schemas/agenda-schema"
 import { EMPTY_CURSO, EMPTY_ACTIVIDAD } from "@/lib/schemas/agenda-schema"
+import { semanasClasesDeSede } from "@/lib/utils/periodo"
 import { SEDES } from "@/lib/constants"
 import {
   CursoMaestroSelector,
@@ -54,10 +55,12 @@ const FACTOR_FALLBACK: Record<string, { factorHoras: number; constanteSuma: numb
 export function SilentDedicacionCalc({
   cursoIndex,
   semanasClases,
+  semanasClasesPorSede,
   formulas,
 }: {
   cursoIndex: number
   semanasClases: number
+  semanasClasesPorSede?: Record<string, number>
   formulas: FormulasCursos
 }) {
   const { setValue } = useFormContext<AgendaWizardFormData>()
@@ -66,18 +69,21 @@ export function SilentDedicacionCalc({
   const horasPresenciales = useWatch({ name: `cursos.${cursoIndex}.horasPresenciales` as any }) as number
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tipoCurso = useWatch({ name: `cursos.${cursoIndex}.tipoCurso` as any }) as string | null | undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sedeCurso = useWatch({ name: `cursos.${cursoIndex}.sede` as any }) as string | null | undefined
 
   useEffect(() => {
     const horas = Number(horasPresenciales) || 0
     // Usa formula de DB (o fallback Acuerdo 048 Art. 3 Par. 4) según tipo de curso
     const f = formulas[tipoCurso as keyof FormulasCursos] ?? FACTOR_FALLBACK[tipoCurso ?? ""] ?? { factorHoras: 1.5, constanteSuma: 1 }
     const semanales = horas > 0 ? (horas * f.factorHoras) + f.constanteSuma : 0
-    // Las SEMANAS DE CLASE del curso son fijas: salen del parámetro semanas_clases
-    // y NO las edita el docente. Las forzamos en el form para que el cálculo y el
-    // guardado siempre usen el valor del parámetro (incluso en borradores viejos).
-    setValue(`cursos.${cursoIndex}.semanas`, semanasClases)
-    setValue(`cursos.${cursoIndex}.dedicacionPeriodo`, semanales * semanasClases, { shouldValidate: true })
-  }, [horasPresenciales, semanasClases, cursoIndex, setValue, tipoCurso, formulas])
+    // Las SEMANAS DE CLASE salen de la SEDE donde se dicta el curso (override por sede;
+    // si la sede no tiene override, cae al default `semanas_clases`). El docente no las
+    // edita: las forzamos en el form para que cálculo y guardado coincidan con el server.
+    const semanasCurso = semanasClasesDeSede(semanasClasesPorSede, semanasClases, sedeCurso)
+    setValue(`cursos.${cursoIndex}.semanas`, semanasCurso)
+    setValue(`cursos.${cursoIndex}.dedicacionPeriodo`, semanales * semanasCurso, { shouldValidate: true })
+  }, [horasPresenciales, semanasClases, semanasClasesPorSede, sedeCurso, cursoIndex, setValue, tipoCurso, formulas])
 
   // Renders nothing — purely a side-effect hook
   return null
@@ -92,6 +98,7 @@ function CursoCardRow({
   modalidad,
   sedeBase,
   semanasClases,
+  semanasClasesPorSede,
   onSelect,
   onClear,
   onRemove,
@@ -100,8 +107,10 @@ function CursoCardRow({
   cursosMaestros: CursoMaestroOption[]
   modalidad: string
   sedeBase?: string | null
-  /** Tope máximo de semanas de clase por curso (= parámetro semanas_clases). */
+  /** Semanas de clase por defecto del curso (= parámetro semanas_clases). */
   semanasClases: number
+  /** Override de semanas de clase por sede donde se dicta el curso. */
+  semanasClasesPorSede?: Record<string, number>
   onSelect: (curso: CursoMaestroOption) => void
   onClear: () => void
   onRemove: () => void
@@ -112,6 +121,9 @@ function CursoCardRow({
   const creditos = useWatch({ name: `cursos.${index}.creditos` }) as number
   const horasPresenciales = useWatch({ name: `cursos.${index}.horasPresenciales` }) as number
   const dedicacionPeriodo = useWatch({ name: `cursos.${index}.dedicacionPeriodo` }) as number
+  const sedeCurso = useWatch({ name: `cursos.${index}.sede` }) as string | null | undefined
+  // Semanas de clase efectivas según la SEDE donde se dicta el curso.
+  const semanasCurso = semanasClasesDeSede(semanasClasesPorSede, semanasClases, sedeCurso)
 
   const selected = !!numeroCurso
 
@@ -164,13 +176,13 @@ function CursoCardRow({
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Semanas de clase</p>
-              {/* Fijas desde el parámetro semanas_clases — no editable por el docente. */}
+              {/* Según la sede donde se dicta el curso (parametrizable por sede). */}
               <p
                 className="font-semibold tabular-nums"
-                title="Semanas de clase parametrizadas (semanas_clases)"
+                title="Semanas de clase según la sede donde se dicta (parametrizable)"
                 data-testid={`curso-${index}-semanas`}
               >
-                {semanasClases}
+                {semanasCurso}
               </p>
             </div>
             <div>
@@ -255,6 +267,7 @@ export function StepDocencia({
   sedeBase,
   semanasPeriodo,
   semanasClases,
+  semanasClasesPorSede,
   esJefeDePrograma = false,
   periodo,
   consejeria,
@@ -265,8 +278,10 @@ export function StepDocencia({
   sedeBase?: string | null
   /** Semanas del contrato/semestre — tope de semanas para las actividades (no para cursos). */
   semanasPeriodo: number
-  /** Semanas de clase: default y TOPE de semanas por curso (parámetro semanas_clases). */
+  /** Semanas de clase: default por curso (parámetro semanas_clases). */
   semanasClases: number
+  /** Override de semanas de clase por sede donde se dicta el curso. */
+  semanasClasesPorSede?: Record<string, number>
   esJefeDePrograma?: boolean
   periodo?: string
   consejeria?: ConsejeriaCardData
@@ -360,6 +375,7 @@ export function StepDocencia({
               modalidad={modalidad}
               sedeBase={sedeBase}
               semanasClases={semanasClases}
+              semanasClasesPorSede={semanasClasesPorSede}
               onSelect={(curso) => handleCursoMaestroSelect(index, curso)}
               onClear={() => handleCursoMaestroClear(index)}
               onRemove={() => removeCurso(index)}
